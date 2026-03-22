@@ -162,3 +162,25 @@ fn normal_command_triggers_message_polling() {
     println!("[TEST] normal_command result: {:?}", result);
     assert!(result.is_ok());
 }
+
+#[test]
+fn version_output_discloses_modified_vim_distribution() {
+    let _guard = acquire_session_test_lock();
+    let mut session =
+        VimCoreSession::new("hello").expect("セッション初期化に失敗");
+
+    let version_output = session
+        .eval_string("execute('version')")
+        .expect(":version の出力を取得できること");
+
+    assert!(
+        version_output.contains("Modified by"),
+        ":version should disclose that the embedded Vim runtime is modified: {}",
+        version_output
+    );
+    assert!(
+        version_output.contains("vim-core-rs"),
+        ":version should include the vim-core-rs contact string: {}",
+        version_output
+    );
+}

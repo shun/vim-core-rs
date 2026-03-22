@@ -166,6 +166,25 @@ The vendored Vim build is intentionally constrained.
 Because of that setup, do not assume this repository behaves like a full
 desktop Vim or like Neovim.
 
+## Vim license notice
+
+This repository vendors and modifies portions of upstream Vim in order to
+embed one headless Vim runtime behind the Rust API surface. When you
+redistribute this repository or binaries built from it, include the bundled
+license files that apply to the shipped code.
+
+The repository uses a split licensing model:
+
+- Original `vim-core-rs` code is licensed under Apache License 2.0. See
+  `LICENSE`.
+- Vendored and modified Vim sources remain subject to the Vim License. See
+  `LICENSE-vim`.
+
+The upstream Vim baseline for the current vendor snapshot is recorded in
+`upstream-metadata.json`. The repository-level notice for this modified Vim
+distribution lives in `THIRD_PARTY_NOTICES.md`, including the maintainer
+contact URL for change requests related to the embedded Vim sources.
+
 ## Next steps
 
 Read `docs/SCOPE.md` to understand design boundaries. Read

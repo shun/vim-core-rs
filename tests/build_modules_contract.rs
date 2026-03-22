@@ -857,6 +857,21 @@ fn generated_config_h_exists_in_build_output() {
 }
 
 #[test]
+fn generated_config_h_defines_modified_by_for_vim_license_notice() {
+    // Vim ライセンス II.3 では、改変版配布時に :version と intro screen で
+    // 改変者情報を表示できる状態が必要になる。configure 生成の config.h に
+    // MODIFIED_BY が入っていないと、その表示が有効化されない。
+    let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR should be set during cargo test");
+    let config_h = std::path::Path::new(&out_dir).join("vim_build/auto/config.h");
+    let content = std::fs::read_to_string(&config_h).expect("config.h should be readable");
+
+    assert!(
+        content.contains("#define MODIFIED_BY "),
+        "config.h should define MODIFIED_BY so modified Vim builds disclose the distributor"
+    );
+}
+
+#[test]
 fn generated_osdef_h_exists_in_build_output() {
     // osdef.h は osdef.sh により生成される OS 固有の定義ファイルで、
     // upstream ソースが要求する。

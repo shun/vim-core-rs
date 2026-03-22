@@ -207,6 +207,9 @@ fn prepare_generated_vim_build(
     out_dir: &Path,
     metadata: &UpstreamMetadata,
 ) -> Result<GeneratedVimBuildArtifacts, String> {
+    const VIM_MODIFIED_BY: &str =
+        "vim-core-rs maintainers https://github.com/shun/vim-core-rs/issues";
+
     let build_root = out_dir.join("vim_build");
     let auto_dir = build_root.join("auto");
     fs::create_dir_all(&auto_dir).map_err(|error| {
@@ -235,6 +238,7 @@ fn prepare_generated_vim_build(
     configure.arg("--enable-gui=no");
     configure.arg("--enable-socketserver=no");
     configure.arg("--enable-cscope=no");
+    configure.arg(format!("--with-modified-by={VIM_MODIFIED_BY}"));
     run_command(&mut configure, "generate Vim config headers")?;
     
     // xdiff 等のサブディレクトリからの ../auto/config.h 参照を解決するため、
