@@ -17,6 +17,7 @@ UPSTREAM="$REPO_ROOT/vendor/upstream/vim"
 TARGET="$REPO_ROOT/vendor/vim_src"
 PATCHES="$REPO_ROOT/patches"
 ALLOWLIST="$REPO_ROOT/vim-source-allowlist.txt"
+METADATA="$REPO_ROOT/upstream-metadata.json"
 
 # --- ユーティリティ ---
 
@@ -38,6 +39,18 @@ get_submodule_tag() {
 
 get_submodule_commit() {
   (cd "$UPSTREAM" && git rev-parse HEAD)
+}
+
+write_upstream_metadata() {
+  local tag="$1"
+  local commit="$2"
+
+  cat > "$METADATA" <<EOF
+{
+  "tag": "$tag",
+  "commit": "$commit"
+}
+EOF
 }
 
 # allowlist のグロブパターンにマッチするファイルだけをコピーする
@@ -191,6 +204,13 @@ cmd_update() {
   echo "==> upstream を $old_tag → $new_tag に更新"
 
   (cd "$UPSTREAM" && git fetch origin && git checkout "$new_tag")
+
+  local resolved_tag
+  local resolved_commit
+  resolved_tag=$(get_submodule_tag)
+  resolved_commit=$(get_submodule_commit)
+  write_upstream_metadata "$resolved_tag" "$resolved_commit"
+  echo "==> upstream metadata を更新: $resolved_tag ($resolved_commit)"
 
   echo "==> vendor/vim_src を再生成"
   rm -rf "$TARGET/src"

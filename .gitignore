@@ -6,5 +6,4 @@
 .cursor/
 tmp/
 target/
-vendor/vim_src
-vendor/upstream
+vendor/vim_src/
