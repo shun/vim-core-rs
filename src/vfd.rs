@@ -158,33 +158,33 @@ pub fn get_manager() -> std::sync::MutexGuard<'static, VfdManager> {
     MANAGER.get_or_init(|| Mutex::new(VfdManager::new())).lock().unwrap()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn vim_core_vfd_read(fd: c_int, buf: *mut c_void, count: usize) -> isize {
     let mut mgr = get_manager();
     let slice = unsafe { std::slice::from_raw_parts_mut(buf as *mut u8, count) };
     mgr.read_data(fd, slice)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn vim_core_vfd_write(_fd: c_int, _buf: *const c_void, count: usize) -> isize {
     // For now, ignore write from Vim (or we could store it to pass to host)
     count as isize 
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn vim_core_vfd_close(fd: c_int) -> c_int {
     let mut mgr = get_manager();
     mgr.close_fd(fd)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn vim_core_vfd_poll(fds: *mut pollfd, nfds: std::ffi::c_ulong, _timeout: c_int) -> c_int {
     let mgr = get_manager();
     let slice = unsafe { std::slice::from_raw_parts_mut(fds, nfds as usize) };
     mgr.poll_fds(slice)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn vim_core_job_get_status(job_id: c_int, exit_code_out: *mut c_int) -> c_int {
     let mut mgr = get_manager();
     if let Some(job) = mgr.jobs.get_mut(&job_id) {
@@ -203,7 +203,7 @@ pub extern "C" fn vim_core_job_get_status(job_id: c_int, exit_code_out: *mut c_i
     -1 // Not found
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn vim_core_job_clear(job_id: c_int) {
     let mut mgr = get_manager();
     mgr.jobs.remove(&job_id);

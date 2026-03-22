@@ -1,6 +1,6 @@
 use vim_core_rs::VimCoreSession;
 
-extern "C" {
+unsafe extern "C" {
     fn vim_bridge_get_search_pattern() -> *const std::ffi::c_char;
     fn vim_bridge_is_hlsearch_active() -> std::ffi::c_int;
     fn vim_bridge_get_search_direction() -> std::ffi::c_int;

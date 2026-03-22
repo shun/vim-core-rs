@@ -441,7 +441,7 @@ impl VimCoreSession {
             not_send_sync: PhantomData,
         };
 
-        // /* println debug removed */;
+        // /* println debug removed */
 
         Ok(session)
     }
@@ -1104,29 +1104,29 @@ impl VimCoreSession {
 
     /// メッセージイベントを受信するハンドラを登録する
     pub fn set_message_handler(&mut self, handler: MessageHandler) {
-        /* println debug removed */;
+        /* println debug removed */
         // ハンドラ登録前に蓄積されたメッセージ履歴と v:errmsg をクリアする
         let _ = self.eval_string("execute('messages clear')");
         let _ = self.eval_string("execute('let v:errmsg = \"\"')");
-        /* println debug removed */;
+        /* println debug removed */
         self.message_handler = Some(handler);
     }
 
     /// Vimscript式を評価し、結果を文字列として返す
     pub fn eval_string(&mut self, expr: &str) -> Option<String> {
-        /* println debug removed */;
+        /* println debug removed */
         let expr_c = CString::new(expr).ok()?;
         let ptr = unsafe {
             bindings::vim_bridge_eval_string(self.state.as_ptr(), expr_c.as_ptr())
         };
         if ptr.is_null() {
-            /* println debug removed */;
+            /* println debug removed */
             return None;
         }
         let len = unsafe { std::ffi::CStr::from_ptr(ptr).to_bytes().len() };
         let s = string_from_parts(ptr, len);
         unsafe { bindings::vim_bridge_free_string(ptr) };
-        /* println debug removed */;
+        /* println debug removed */
         Some(s)
     }
 
@@ -1134,7 +1134,7 @@ impl VimCoreSession {
     pub(crate) fn poll_and_dispatch_messages(&mut self) {
         // ハンドラが未登録の場合はポーリング自体をスキップする
         if self.message_handler.is_none() {
-            /* println debug removed */;
+            /* println debug removed */
             return;
         }
 
@@ -1739,7 +1739,7 @@ fn c_str_to_string(ptr: *const ::std::os::raw::c_char) -> String {
     }
 }
 
-extern "C" {
+unsafe extern "C" {
     fn free(ptr: *mut std::ffi::c_void);
 }
 
@@ -2406,7 +2406,7 @@ mod undo_conversion_tests {
             },
         ];
 
-        extern "C" {
+        unsafe extern "C" {
             fn malloc(size: usize) -> *mut std::ffi::c_void;
         }
         
