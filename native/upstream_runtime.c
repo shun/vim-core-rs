@@ -225,11 +225,11 @@ void getout(int exitval) {
  */
 int mch_inchar(char_u *buf, int maxlen, long wtime, int tb_change_cnt) {
     (void)buf; (void)maxlen; (void)tb_change_cnt;
-    printf("[DEBUG-VIM] mch_inchar called (wtime=%ld, injecting=%d)\n", wtime, upstream_runtime_is_injecting);
+    /* printf debug removed */
 
     if (upstream_runtime_is_injecting) {
         if (wtime != 0 && stuff_empty()) {
-            printf("[DEBUG-VIM] mch_inchar: injecting mode, escaping via longjmp\n");
+            /* printf debug removed */
             if (upstream_runtime_active_quit_env != NULL) {
                 longjmp(*upstream_runtime_active_quit_env, 1);
             }

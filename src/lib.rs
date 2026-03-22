@@ -441,7 +441,7 @@ impl VimCoreSession {
             not_send_sync: PhantomData,
         };
 
-        // println!("[DEBUG] VimCoreSession::new: session created (messages cleared on first poll)");
+        // /* println debug removed */;
 
         Ok(session)
     }
@@ -1104,29 +1104,29 @@ impl VimCoreSession {
 
     /// メッセージイベントを受信するハンドラを登録する
     pub fn set_message_handler(&mut self, handler: MessageHandler) {
-        println!("[DEBUG] VimCoreSession::set_message_handler: handler registered");
+        /* println debug removed */;
         // ハンドラ登録前に蓄積されたメッセージ履歴と v:errmsg をクリアする
         let _ = self.eval_string("execute('messages clear')");
         let _ = self.eval_string("execute('let v:errmsg = \"\"')");
-        println!("[DEBUG] VimCoreSession::set_message_handler: initial messages and v:errmsg cleared");
+        /* println debug removed */;
         self.message_handler = Some(handler);
     }
 
     /// Vimscript式を評価し、結果を文字列として返す
     pub fn eval_string(&mut self, expr: &str) -> Option<String> {
-        println!("[DEBUG] VimCoreSession::eval_string: expr={}", expr);
+        /* println debug removed */;
         let expr_c = CString::new(expr).ok()?;
         let ptr = unsafe {
             bindings::vim_bridge_eval_string(self.state.as_ptr(), expr_c.as_ptr())
         };
         if ptr.is_null() {
-            println!("[DEBUG] VimCoreSession::eval_string: result=None");
+            /* println debug removed */;
             return None;
         }
         let len = unsafe { std::ffi::CStr::from_ptr(ptr).to_bytes().len() };
         let s = string_from_parts(ptr, len);
         unsafe { bindings::vim_bridge_free_string(ptr) };
-        println!("[DEBUG] VimCoreSession::eval_string: result={}", s);
+        /* println debug removed */;
         Some(s)
     }
 
@@ -1134,7 +1134,7 @@ impl VimCoreSession {
     pub(crate) fn poll_and_dispatch_messages(&mut self) {
         // ハンドラが未登録の場合はポーリング自体をスキップする
         if self.message_handler.is_none() {
-            println!("[DEBUG] poll_and_dispatch_messages: no handler, skipping");
+            /* println debug removed */;
             return;
         }
 
