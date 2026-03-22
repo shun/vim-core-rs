@@ -441,7 +441,7 @@ impl VimCoreSession {
             not_send_sync: PhantomData,
         };
 
-        println!("[DEBUG] VimCoreSession::new: session created (messages cleared on first poll)");
+        // println!("[DEBUG] VimCoreSession::new: session created (messages cleared on first poll)");
 
         Ok(session)
     }

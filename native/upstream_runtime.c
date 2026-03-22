@@ -308,8 +308,7 @@ static int upstream_runtime_cb_buf_add(exarg_T *eap) {
     if (buf_id <= 0) {
         buf_id = curbuf->b_fnum;
     }
-    printf("[DEBUG] cb_buf_add: buf_id=%d (arg='%s', curbuf->b_fnum=%d)\n", buf_id,
-           eap->arg ? (const char*)eap->arg : "(null)", curbuf->b_fnum);
+    
 
     size_t tail = (upstream_runtime_active_session->queue_head + upstream_runtime_active_session->queue_len) % UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS;
     if (upstream_runtime_active_session->queue_len < UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) {
@@ -327,7 +326,7 @@ static int upstream_runtime_cb_win_new(exarg_T *eap) {
 
     /* WinNew fires in the context of the new window, so curwin->w_id is the new window */
     int win_id = curwin->w_id;
-    printf("[DEBUG] cb_win_new: win_id=%d\n", win_id);
+    
 
     size_t tail = (upstream_runtime_active_session->queue_head + upstream_runtime_active_session->queue_len) % UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS;
     if (upstream_runtime_active_session->queue_len < UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) {
@@ -343,7 +342,7 @@ static int upstream_runtime_cb_layout_changed(exarg_T *eap) {
     (void)eap;
     if (upstream_runtime_active_session == NULL) return FALSE;
 
-    printf("[DEBUG] cb_layout_changed\n");
+    
 
     size_t tail = (upstream_runtime_active_session->queue_head + upstream_runtime_active_session->queue_len) % UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS;
     if (upstream_runtime_active_session->queue_len < UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) {
@@ -549,27 +548,26 @@ upstream_runtime_session_t* upstream_runtime_session_new(const char* initial_tex
     
     /* Requirement 6.3: Reset Vim's global state for isolation */
     /* Close all windows except the current one */
-    printf("[DEBUG] session_new: closing extra windows\n");
+    
     while (firstwin != lastwin) {
         win_close(lastwin == curwin ? firstwin : lastwin, TRUE);
     }
-    printf("[DEBUG] session_new: windows reduced to 1\n");
+    
 
     /* Close all buffers except the current one */
-    printf("[DEBUG] session_new: closing extra buffers\n");
+    
     while (firstbuf != lastbuf) {
         buf_T* target = (lastbuf == curbuf) ? firstbuf : lastbuf;
         close_buffer(NULL, target, DOBUF_WIPE, FALSE, FALSE);
     }
-    printf("[DEBUG] session_new: buffers reduced to 1\n");
+    
 
     /* Re-allocate screen after closing windows to keep Vim's internal state consistent */
     if (Rows > 0 && Columns > 0) {
         screenalloc(TRUE);
         shell_new_rows();
         shell_new_columns();
-        printf("[DEBUG] session_new: screen reallocated (Rows=%ld, Columns=%ld, w_height=%d, w_width=%d)\n",
-               (long)Rows, (long)Columns, curwin->w_height, curwin->w_width);
+        
     }
 
     /* Clear current buffer content (keep at least one line) */
@@ -599,7 +597,7 @@ upstream_runtime_session_t* upstream_runtime_session_new(const char* initial_tex
 
     upstream_runtime_session_t* session = malloc(sizeof(upstream_runtime_session_t));
     memset(session, 0, sizeof(upstream_runtime_session_t));
-    printf("[DEBUG] session_new: allocated at %p\n", (void*)session);
+    
 
     if (initial_text && text_len > 0) {
         char_u* copy = (char_u*)malloc(text_len + 1);
@@ -646,7 +644,7 @@ upstream_runtime_session_t* upstream_runtime_session_new(const char* initial_tex
      * (:command!) でホストイベントコマンドを登録する。
      * autocommand が発火するとグローバルリスト g:_vcr_events に
      * イベント情報が蓄積され、コマンド実行後にポーリングで取得する。 */
-    printf("[DEBUG] session_new: registering event autocommands\n");
+    
     do_cmdline_cmd((char_u*)"let g:_vcr_events = []");
     do_cmdline_cmd((char_u*)"command! -nargs=? HostBufAdd call add(g:_vcr_events, 'BufAdd:' . <q-args>)");
     do_cmdline_cmd((char_u*)"command! -nargs=0 HostWinNew call add(g:_vcr_events, 'WinNew:' . win_getid())");
@@ -658,7 +656,7 @@ upstream_runtime_session_t* upstream_runtime_session_new(const char* initial_tex
     do_cmdline_cmd((char_u*)"autocmd WinNew * HostWinNew");
     do_cmdline_cmd((char_u*)"autocmd WinScrolled * HostLayoutChanged");
     do_cmdline_cmd((char_u*)"augroup END");
-    printf("[DEBUG] session_new: event autocommands registered\n");
+    
 
     /* Drain any actions queued during autocommand setup */
     session->queue_head = 0;
@@ -754,42 +752,42 @@ static int upstream_runtime_try_intercept_ex(
 
     /* :write, :w */
     if (upstream_runtime_cmd_matches(cmd, cmd_len, "write", 1)) {
-        printf("[DEBUG] intercept_ex: write path='%s' force=%d\n", arg, force);
+        
         upstream_runtime_dispatch_core_write(session, arg, force);
         return TRUE;
     }
 
     /* :update, :up — ホスト側で dirty 判定するため常に write としてディスパッチ */
     if (upstream_runtime_cmd_matches(cmd, cmd_len, "update", 2)) {
-        printf("[DEBUG] intercept_ex: update path='%s' force=%d\n", arg, force);
+        
         upstream_runtime_dispatch_core_write(session, arg, force);
         return TRUE;
     }
 
     /* :quit, :q */
     if (upstream_runtime_cmd_matches(cmd, cmd_len, "quit", 1)) {
-        printf("[DEBUG] intercept_ex: quit force=%d\n", force);
+        
         upstream_runtime_dispatch_core_quit(session, force);
         return TRUE;
     }
 
     /* :exit, :exi */
     if (upstream_runtime_cmd_matches(cmd, cmd_len, "exit", 3)) {
-        printf("[DEBUG] intercept_ex: exit force=%d\n", force);
+        
         upstream_runtime_dispatch_core_quit(session, force);
         return TRUE;
     }
 
     /* :xit, :x */
     if (upstream_runtime_cmd_matches(cmd, cmd_len, "xit", 1)) {
-        printf("[DEBUG] intercept_ex: xit force=%d\n", force);
+        
         upstream_runtime_dispatch_core_quit(session, force);
         return TRUE;
     }
 
     /* :wq */
     if (upstream_runtime_cmd_matches(cmd, cmd_len, "wq", 2)) {
-        printf("[DEBUG] intercept_ex: wq force=%d\n", force);
+        
         upstream_runtime_dispatch_core_quit(session, force);
         return TRUE;
     }
@@ -797,7 +795,7 @@ static int upstream_runtime_try_intercept_ex(
     /* :quitall, :qa, :qall */
     if (upstream_runtime_cmd_matches(cmd, cmd_len, "quitall", 2)
         || upstream_runtime_cmd_matches(cmd, cmd_len, "qall", 2)) {
-        printf("[DEBUG] intercept_ex: quitall force=%d\n", force);
+        
         upstream_runtime_dispatch_core_quit(session, force);
         return TRUE;
     }
@@ -805,7 +803,7 @@ static int upstream_runtime_try_intercept_ex(
     /* :wqall, :wqa, :xall, :xa */
     if (upstream_runtime_cmd_matches(cmd, cmd_len, "wqall", 3)
         || upstream_runtime_cmd_matches(cmd, cmd_len, "xall", 2)) {
-        printf("[DEBUG] intercept_ex: wqall/xall force=%d\n", force);
+        
         upstream_runtime_dispatch_core_quit(session, force);
         return TRUE;
     }
@@ -817,7 +815,7 @@ static int upstream_runtime_try_intercept_ex(
             session->queue[tail].action.kind = VIM_HOST_ACTION_REDRAW;
             session->queue[tail].action.redraw_force = (force != 0);
             session->queue_len++;
-            printf("[DEBUG] intercept_ex: redraw force=%d\n", force);
+            
         }
         return TRUE;
     }
@@ -829,7 +827,7 @@ static int upstream_runtime_try_intercept_ex(
         const char* reg_name = upstream_runtime_custom_commands[i].name;
         size_t reg_len = strlen(reg_name);
         if (cmd_len <= reg_len && strncmp(cmd, reg_name, cmd_len) == 0) { /* AUDIT-ALLOW: callback table dispatch (zero-patch design) */
-            printf("[DEBUG] intercept_ex: custom command '%s' arg='%s' force=%d\n", reg_name, arg, force);
+            
             /* コールバックに渡す exarg_T を構築 */
             exarg_T eap;
             CLEAR_FIELD(eap);
@@ -879,7 +877,7 @@ vim_core_command_result_t upstream_runtime_apply_ex_command(
         if (session->queue_len < UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) {
             session->queue[tail].action.kind = VIM_HOST_ACTION_LAYOUT_CHANGED;
             session->queue_len++;
-            printf("[DEBUG] apply_ex_command: queued LayoutChanged action\n");
+            
         }
         /* Update tracked geometry to current state */
         upstream_runtime_capture_window_geometry(session);
@@ -915,11 +913,11 @@ vim_core_command_result_t upstream_runtime_apply_normal_command(
      * compl_started=TRUE が残り、edit()再入時にE565エラーになるため、
      * 新しいコマンド開始前にクリアする。 */
     if (textlock != 0) {
-        printf("[DEBUG] apply_normal_command: resetting textlock from %d to 0\n", textlock);
+        
         textlock = 0;
     }
     if (ins_compl_active()) {
-        printf("[DEBUG] apply_normal_command: clearing stale completion state before execution\n");
+        
         ins_compl_clear();
     }
 
@@ -930,7 +928,7 @@ vim_core_command_result_t upstream_runtime_apply_normal_command(
         /* Requirement 4.1, 4.4: Safe initialization of oparg_T */
         clear_oparg(&session->oa);
 
-        printf("[DEBUG] apply_normal_command: mode-aware path command='%s'\n", cmd_copy);
+        
 
         /* Set timeouts to 0 to prevent hanging on partial mappings/ESC */
         long old_p_ttm = p_ttm;
@@ -964,7 +962,7 @@ vim_core_command_result_t upstream_runtime_apply_normal_command(
         p_ttm = old_p_ttm;
         p_tm = old_p_tm;
     } else {
-        printf("[DEBUG] apply_normal_command: escaped via longjmp\n");
+        
     }
 
     /* Reset Vim's internal flags that might have been left set by longjmp */
@@ -979,7 +977,7 @@ vim_core_command_result_t upstream_runtime_apply_normal_command(
         if (session->queue_len < UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) {
             session->queue[tail].action.kind = VIM_HOST_ACTION_LAYOUT_CHANGED;
             session->queue_len++;
-            printf("[DEBUG] apply_normal_command: queued LayoutChanged action\n");
+            
         }
         upstream_runtime_capture_window_geometry(session);
     }
@@ -1050,8 +1048,7 @@ vim_core_pending_input_t upstream_runtime_get_pending_input(
         return VIM_CORE_PENDING_INPUT_NONE;
     }
 
-    printf("[DEBUG] get_pending_input: pending_input=%d state=%d\n",
-           (int)session->pending_input, get_real_state());
+    
     return session->pending_input;
 }
 
@@ -1069,7 +1066,7 @@ static void upstream_runtime_refresh_pending_input(
 
     session->pending_input = VIM_CORE_PENDING_INPUT_NONE;
     if (command == NULL || command_len == 0) {
-        printf("[DEBUG] refresh_pending_input: empty command -> none\n");
+        
         return;
     }
 
@@ -1089,9 +1086,7 @@ static void upstream_runtime_refresh_pending_input(
         session->pending_input = VIM_CORE_PENDING_INPUT_REGISTER;
     }
 
-    printf("[DEBUG] refresh_pending_input: command='%.*s' len=%lu state=%d pending=%d\n",
-           (int)command_len, command, (unsigned long)command_len, state,
-           (int)session->pending_input);
+    
 }
 
 bool upstream_runtime_get_mark(
@@ -1105,15 +1100,14 @@ bool upstream_runtime_get_mark(
 
     memset(out_mark, 0, sizeof(*out_mark));
     if (session == NULL || curbuf == NULL) {
-        printf("[DEBUG] get_mark: session or current buffer is null\n");
+        
         return false;
     }
 
     int mark_buf_id = curbuf->b_fnum;
     pos_T* pos = getmark_buf_fnum(curbuf, (int)(unsigned char)mark_name, FALSE, &mark_buf_id);
     if (pos == NULL || pos->lnum <= 0) {
-        printf("[DEBUG] get_mark: mark='%c' is unset or unavailable (lnum=%ld)\n",
-               mark_name, pos != NULL ? (long)pos->lnum : -1L);
+        
         return false;
     }
 
@@ -1121,9 +1115,7 @@ bool upstream_runtime_get_mark(
     out_mark->buf_id = mark_buf_id;
     out_mark->row = (uintptr_t)pos->lnum - 1;
     out_mark->col = (uintptr_t)pos->col;
-    printf("[DEBUG] get_mark: mark='%c' buf_id=%d row=%lu col=%lu\n",
-           mark_name, out_mark->buf_id, (unsigned long)out_mark->row,
-           (unsigned long)out_mark->col);
+    
     return true;
 }
 
@@ -1139,21 +1131,20 @@ vim_core_status_t upstream_runtime_set_mark(
     int result;
 
     if (session == NULL) {
-        printf("[DEBUG] set_mark: session is null\n");
+        
         return VIM_CORE_STATUS_SESSION_ERROR;
     }
 
-    printf("[DEBUG] set_mark: mark='%c' buf_id=%d row=%lu col=%lu\n",
-           mark_name, buf_id, (unsigned long)row, (unsigned long)col);
+    
 
     if (!upstream_runtime_can_set_mark(mark_name)) {
-        printf("[DEBUG] set_mark: mark='%c' is not assignable\n", mark_name);
+        
         return VIM_CORE_STATUS_COMMAND_ERROR;
     }
 
     buf = buflist_findnr(buf_id);
     if (buf == NULL) {
-        printf("[DEBUG] set_mark: buf_id=%d not found\n", buf_id);
+        
         return VIM_CORE_STATUS_COMMAND_ERROR;
     }
 
@@ -1162,20 +1153,17 @@ vim_core_status_t upstream_runtime_set_mark(
     pos.coladd = 0;
 
     if (!upstream_runtime_mark_position_is_valid(buf, pos)) {
-        printf("[DEBUG] set_mark: invalid position for mark='%c' buf_id=%d row=%lu col=%lu\n",
-               mark_name, buf_id, (unsigned long)row, (unsigned long)col);
+        
         return VIM_CORE_STATUS_COMMAND_ERROR;
     }
 
     result = setmark_pos((int)(unsigned char)mark_name, &pos, buf_id);
     if (result != OK) {
-        printf("[DEBUG] set_mark: setmark_pos failed for mark='%c' buf_id=%d\n",
-               mark_name, buf_id);
+        
         return VIM_CORE_STATUS_COMMAND_ERROR;
     }
 
-    printf("[DEBUG] set_mark: mark='%c' stored in buf_id=%d row=%lu col=%lu\n",
-           mark_name, buf_id, (unsigned long)row, (unsigned long)col);
+    
     return VIM_CORE_STATUS_OK;
 }
 
@@ -1186,7 +1174,7 @@ vim_core_jumplist_t upstream_runtime_get_jumplist(
     memset(&jumplist, 0, sizeof(jumplist));
 
     if (session == NULL || curwin == NULL) {
-        printf("[DEBUG] get_jumplist: session or current window is null\n");
+        
         return jumplist;
     }
 
@@ -1220,7 +1208,7 @@ vim_core_jumplist_t upstream_runtime_get_jumplist(
     );
     if (jumplist.entries == NULL) {
         jumplist.entry_count = 0;
-        printf("[DEBUG] get_jumplist: entry allocation failed\n");
+        
         return jumplist;
     }
 
@@ -1295,7 +1283,7 @@ static void upstream_runtime_populate_buffers(vim_core_snapshot_t* snapshot) {
     for (buf = firstbuf; buf != NULL; buf = buf->b_next) {
         count++;
     }
-    printf("[DEBUG] populate_buffers: found %lu buffers\n", (unsigned long)count);
+    
 
     if (count == 0) {
         snapshot->buffers = NULL;
@@ -1331,10 +1319,7 @@ static void upstream_runtime_populate_buffers(vim_core_snapshot_t* snapshot) {
         infos[idx].deferred_close = false;
         infos[idx].last_vfs_error_ptr = NULL;
         infos[idx].last_vfs_error_len = 0;
-        printf("[DEBUG] buffer[%lu]: id=%d name=%s dirty=%d active=%d\n",
-               (unsigned long)idx, infos[idx].id,
-               infos[idx].name_ptr ? infos[idx].name_ptr : "(null)",
-               infos[idx].dirty, infos[idx].is_active);
+        
     }
 
     snapshot->buffers = infos;
@@ -1348,7 +1333,7 @@ static void upstream_runtime_populate_windows(vim_core_snapshot_t* snapshot) {
     for (wp = firstwin; wp != NULL; wp = wp->w_next) {
         count++;
     }
-    printf("[DEBUG] populate_windows: found %lu windows\n", (unsigned long)count);
+    
 
     if (count == 0) {
         snapshot->windows = NULL;
@@ -1376,13 +1361,7 @@ static void upstream_runtime_populate_windows(vim_core_snapshot_t* snapshot) {
         infos[idx].leftcol = (uintptr_t)wp->w_leftcol;
         infos[idx].skipcol = (uintptr_t)wp->w_skipcol;
         infos[idx].is_active = (wp == curwin) ? true : false;
-        printf("[DEBUG] window[%lu]: id=%d buf_id=%d row=%lu col=%lu w=%lu h=%lu topline=%lu botline=%lu leftcol=%lu skipcol=%lu active=%d\n",
-               (unsigned long)idx, infos[idx].id, infos[idx].buf_id,
-               (unsigned long)infos[idx].row, (unsigned long)infos[idx].col,
-               (unsigned long)infos[idx].width, (unsigned long)infos[idx].height,
-               (unsigned long)infos[idx].topline, (unsigned long)infos[idx].botline,
-               (unsigned long)infos[idx].leftcol, (unsigned long)infos[idx].skipcol,
-               infos[idx].is_active);
+        
     }
 
     snapshot->windows = infos;
@@ -1398,11 +1377,11 @@ static void upstream_runtime_populate_windows(vim_core_snapshot_t* snapshot) {
 static vim_core_pum_info_t* upstream_runtime_extract_pum_info(void) {
     /* インサートモードでない場合は補完状態を確認する必要がない */
     if (!(State & MODE_INSERT)) {
-        printf("[DEBUG] upstream_runtime_extract_pum_info: not in insert mode (State=%d)\n", State);
+        
         return NULL;
     }
 
-    printf("[DEBUG] upstream_runtime_extract_pum_info: in insert mode, textlock=%d, checking completion state\n", textlock);
+    
     fflush(stdout);
 
     /* --- complete_info(['items', 'selected', 'mode']) で補完状態を確認 --- */
@@ -1410,7 +1389,7 @@ static vim_core_pum_info_t* upstream_runtime_extract_pum_info(void) {
     char complete_info_expr[] = "complete_info(['items', 'selected', 'mode'])";
     typval_T* tv_info = eval_expr((char_u*)complete_info_expr, NULL);
     if (tv_info == NULL || tv_info->v_type != VAR_DICT || tv_info->vval.v_dict == NULL) {
-        printf("[DEBUG] upstream_runtime_extract_pum_info: complete_info() eval failed or not dict\n");
+        
         if (tv_info != NULL) free_tv(tv_info);
         return NULL;
     }
@@ -1420,29 +1399,27 @@ static vim_core_pum_info_t* upstream_runtime_extract_pum_info(void) {
     /* mode が空文字列なら補完モードではない */
     char_u* mode_str = dict_get_string(info_dict, "mode", FALSE);
     if (mode_str == NULL || mode_str[0] == '\0') {
-        printf("[DEBUG] upstream_runtime_extract_pum_info: not in completion mode (mode='%s')\n",
-               mode_str ? (const char*)mode_str : "(null)");
+        
         free_tv(tv_info);
         return NULL;
     }
 
-    printf("[DEBUG] upstream_runtime_extract_pum_info: completion active, mode='%s'\n",
-           (const char*)mode_str);
+    
 
     int selected_index = (int)dict_get_number_def(info_dict, "selected", -1);
-    printf("[DEBUG] upstream_runtime_extract_pum_info: selected_index=%d\n", selected_index);
+    
 
     /* items リストを取得 */
     dictitem_T* di_items = dict_find(info_dict, (char_u*)"items", -1);
     if (di_items == NULL || di_items->di_tv.v_type != VAR_LIST || di_items->di_tv.vval.v_list == NULL) {
-        printf("[DEBUG] upstream_runtime_extract_pum_info: items list not found or invalid type\n");
+        
         free_tv(tv_info);
         return NULL;
     }
 
     list_T* items_list = di_items->di_tv.vval.v_list;
     int item_count = items_list->lv_len;
-    printf("[DEBUG] upstream_runtime_extract_pum_info: item_count=%d\n", item_count);
+    
 
     /* 座標情報: pum_visible() が true の場合のみ pum_getpos() を使用 */
     int pum_row = 0, pum_col = 0, pum_width = 0, pum_height = 0;
@@ -1457,10 +1434,9 @@ static vim_core_pum_info_t* upstream_runtime_extract_pum_info(void) {
             pum_height = (int)dict_get_number(pos_dict, "height");
         }
         if (tv_pos != NULL) free_tv(tv_pos);
-        printf("[DEBUG] upstream_runtime_extract_pum_info: pum_getpos row=%d col=%d width=%d height=%d\n",
-               pum_row, pum_col, pum_width, pum_height);
+        
     } else {
-        printf("[DEBUG] upstream_runtime_extract_pum_info: pum not visible, using default coords\n");
+        
         /* ヘッドレスモードではPUMが画面描画されないため、
          * カーソル位置から推定した座標情報を提供する */
         pum_row = (int)curwin->w_wrow + W_WINROW(curwin) + 1;
@@ -1483,7 +1459,7 @@ static vim_core_pum_info_t* upstream_runtime_extract_pum_info(void) {
     /* pum_info 構造体を確保 */
     vim_core_pum_info_t* pum = (vim_core_pum_info_t*)calloc(1, sizeof(vim_core_pum_info_t));
     if (pum == NULL) {
-        printf("[DEBUG] upstream_runtime_extract_pum_info: calloc for pum_info failed\n");
+        
         free_tv(tv_info);
         return NULL;
     }
@@ -1498,7 +1474,7 @@ static vim_core_pum_info_t* upstream_runtime_extract_pum_info(void) {
     if (item_count > 0) {
         pum->items = (vim_core_pum_item_t*)calloc((size_t)item_count, sizeof(vim_core_pum_item_t));
         if (pum->items == NULL) {
-            printf("[DEBUG] upstream_runtime_extract_pum_info: calloc for items failed\n");
+            
             free(pum);
             free_tv(tv_info);
             return NULL;
@@ -1507,7 +1483,7 @@ static vim_core_pum_info_t* upstream_runtime_extract_pum_info(void) {
         listitem_T* li = items_list->lv_first;
         for (int i = 0; i < item_count && li != NULL; i++, li = li->li_next) {
             if (li->li_tv.v_type != VAR_DICT || li->li_tv.vval.v_dict == NULL) {
-                printf("[DEBUG] upstream_runtime_extract_pum_info: item[%d] is not a dict, skipping\n", i);
+                
                 continue;
             }
 
@@ -1531,15 +1507,13 @@ static vim_core_pum_info_t* upstream_runtime_extract_pum_info(void) {
             w = dict_get_string(item_dict, "info", FALSE);
             pum->items[i].info = w ? strdup((const char*)w) : strdup("");
 
-            printf("[DEBUG] upstream_runtime_extract_pum_info: item[%d] word='%s'\n",
-                   i, pum->items[i].word);
+            
         }
     }
 
     free_tv(tv_info);
 
-    printf("[DEBUG] upstream_runtime_extract_pum_info: extraction complete, %zu items, textlock=%d\n",
-           pum->item_count, textlock);
+    
     fflush(stdout);
     return pum;
 }
@@ -1572,9 +1546,7 @@ vim_core_snapshot_t upstream_runtime_snapshot(const upstream_runtime_session_t* 
     varnumber_T current_tick = CHANGEDTICK(curbuf);
     if (current_tick != s->last_changedtick) {
         s->revision++;
-        printf("[DEBUG] revision incremented for %p: %llu -> %llu (tick: %lld -> %lld)\n",
-               (void*)s, (unsigned long long)s->revision - 1, (unsigned long long)s->revision,
-               (long long)s->last_changedtick, (long long)current_tick);
+        
         s->last_changedtick = current_tick;
     }
 
@@ -1598,7 +1570,7 @@ vim_core_snapshot_t upstream_runtime_snapshot(const upstream_runtime_session_t* 
     snapshot.pum = upstream_runtime_extract_pum_info();
     /* eval_expr + complete_info() の副作用でtextlockが残る場合があるため、リセット */
     if (textlock != 0) {
-        printf("[DEBUG] upstream_runtime_snapshot: resetting textlock from %d to 0\n", textlock);
+        
         fflush(stdout);
         textlock = 0;
     }
@@ -1654,8 +1626,7 @@ static int upstream_runtime_detect_layout_change(upstream_runtime_session_t* ses
 
     /* Window count changed → layout changed */
     if (current_count != session->tracked_window_count) {
-        printf("[DEBUG] detect_layout_change: window count changed %lu -> %lu\n",
-               (unsigned long)session->tracked_window_count, (unsigned long)current_count);
+        
         return TRUE;
     }
 
@@ -1667,7 +1638,7 @@ static int upstream_runtime_detect_layout_change(upstream_runtime_session_t* ses
             wp->w_wincol != session->tracked_windows[idx].col ||
             wp->w_width != session->tracked_windows[idx].width ||
             wp->w_height != session->tracked_windows[idx].height) {
-            printf("[DEBUG] detect_layout_change: window %d geometry changed\n", wp->w_id);
+            
             return TRUE;
         }
     }
@@ -1884,13 +1855,11 @@ vim_core_option_get_result_t upstream_runtime_get_option(
     getoption_T option_kind;
 
     if (session == NULL || name == NULL) {
-        printf("[DEBUG] get_option: invalid session=%p name=%s\n",
-               (const void*)session, name != NULL ? name : "(null)");
+        
         return upstream_runtime_option_get_result_with_status(VIM_CORE_STATUS_SESSION_ERROR);
     }
 
-    printf("[DEBUG] get_option: name='%s' scope=%d vim_scope=%d\n",
-           name, (int)scope, vim_scope);
+    
 
     result = upstream_runtime_option_get_result_with_status(VIM_CORE_STATUS_OK);
     if (scope == VIM_CORE_OPTION_SCOPE_LOCAL
@@ -1923,7 +1892,7 @@ vim_core_option_get_result_t upstream_runtime_get_option(
             if (string_value != NULL) {
                 char* copied = strdup((const char*)string_value);
                 if (copied == NULL) {
-                    printf("[DEBUG] get_option: strdup failed for name='%s'\n", name);
+                    
                     vim_free(string_value);
                     return upstream_runtime_option_get_result_with_status(
                         VIM_CORE_STATUS_SESSION_ERROR
@@ -1976,19 +1945,17 @@ vim_core_option_set_result_t upstream_runtime_set_option_number(
     char* error_message;
 
     if (session == NULL || name == NULL) {
-        printf("[DEBUG] set_option_number: invalid session=%p name=%s\n",
-               (void*)session, name != NULL ? name : "(null)");
+        
         return upstream_runtime_option_set_result_with_error(
             VIM_CORE_STATUS_SESSION_ERROR,
             NULL
         );
     }
 
-    printf("[DEBUG] set_option_number: name='%s' value=%lld scope=%d vim_scope=%d\n",
-           name, (long long)value, (int)scope, vim_scope);
+    
 
     if (findoption((char_u*)name) < 0) {
-        printf("[DEBUG] set_option_number: unknown option name='%s'\n", name);
+        
         return upstream_runtime_option_set_result_with_error(
             VIM_CORE_STATUS_COMMAND_ERROR,
             "Unknown option"
@@ -1997,8 +1964,7 @@ vim_core_option_set_result_t upstream_runtime_set_option_number(
 
     error_message = set_option_value((char_u*)name, (long)value, NULL, vim_scope);
     if (error_message != NULL) {
-        printf("[DEBUG] set_option_number: failed name='%s' error='%s'\n",
-               name, error_message);
+        
         return upstream_runtime_option_set_result_with_error(
             VIM_CORE_STATUS_COMMAND_ERROR,
             error_message
@@ -2018,21 +1984,17 @@ vim_core_option_set_result_t upstream_runtime_set_option_string(
     char* error_message;
 
     if (session == NULL || name == NULL || value == NULL) {
-        printf("[DEBUG] set_option_string: invalid session=%p name=%s value=%s\n",
-               (void*)session,
-               name != NULL ? name : "(null)",
-               value != NULL ? value : "(null)");
+        
         return upstream_runtime_option_set_result_with_error(
             VIM_CORE_STATUS_SESSION_ERROR,
             NULL
         );
     }
 
-    printf("[DEBUG] set_option_string: name='%s' value='%s' scope=%d vim_scope=%d\n",
-           name, value, (int)scope, vim_scope);
+    
 
     if (findoption((char_u*)name) < 0) {
-        printf("[DEBUG] set_option_string: unknown option name='%s'\n", name);
+        
         return upstream_runtime_option_set_result_with_error(
             VIM_CORE_STATUS_COMMAND_ERROR,
             "Unknown option"
@@ -2041,8 +2003,7 @@ vim_core_option_set_result_t upstream_runtime_set_option_string(
 
     error_message = set_option_value((char_u*)name, 0L, (char_u*)value, vim_scope);
     if (error_message != NULL) {
-        printf("[DEBUG] set_option_string: failed name='%s' error='%s'\n",
-               name, error_message);
+        
         return upstream_runtime_option_set_result_with_error(
             VIM_CORE_STATUS_COMMAND_ERROR,
             error_message
@@ -2053,15 +2014,13 @@ vim_core_option_set_result_t upstream_runtime_set_option_string(
 }
 
 void upstream_runtime_set_screen_size(upstream_runtime_session_t* session, int rows, int cols) {
-    printf("[DEBUG] set_screen_size: rows=%d cols=%d (before: Rows=%ld, Columns=%ld)\n",
-           rows, cols, (long)Rows, (long)Columns);
+    
     Rows = rows;
     Columns = cols;
     screenalloc(TRUE);
     shell_new_rows();
     shell_new_columns();
-    printf("[DEBUG] set_screen_size: done (Rows=%ld, Columns=%ld, curwin->w_height=%d, curwin->w_width=%d)\n",
-           (long)Rows, (long)Columns, curwin->w_height, curwin->w_width);
+    
 
     /* Task 3.2: Notify layout change after screen resize */
     if (session != NULL) {
@@ -2069,50 +2028,48 @@ void upstream_runtime_set_screen_size(upstream_runtime_session_t* session, int r
         if (session->queue_len < UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) {
             session->queue[tail].action.kind = VIM_HOST_ACTION_LAYOUT_CHANGED;
             session->queue_len++;
-            printf("[DEBUG] set_screen_size: queued LayoutChanged action\n");
+            
         }
     }
 }
 
 vim_core_status_t upstream_runtime_switch_to_buffer(upstream_runtime_session_t* session, int buf_id) {
     (void)session;
-    printf("[DEBUG] switch_to_buffer: buf_id=%d\n", buf_id);
+    
 
     buf_T* buf = buflist_findnr(buf_id);
     if (buf == NULL) {
-        printf("[DEBUG] switch_to_buffer: buf_id=%d not found\n", buf_id);
+        
         return VIM_CORE_STATUS_COMMAND_ERROR;
     }
 
     set_curbuf(buf, DOBUF_GOTO);
-    printf("[DEBUG] switch_to_buffer: switched to buf_id=%d (curbuf->b_fnum=%d)\n",
-           buf_id, curbuf->b_fnum);
+    
     return VIM_CORE_STATUS_OK;
 }
 
 vim_core_status_t upstream_runtime_switch_to_window(upstream_runtime_session_t* session, int win_id) {
     (void)session;
-    printf("[DEBUG] switch_to_window: win_id=%d\n", win_id);
+    
 
     win_T* wp = win_id2wp(win_id);
     if (wp == NULL) {
-        printf("[DEBUG] switch_to_window: win_id=%d not found\n", win_id);
+        
         return VIM_CORE_STATUS_COMMAND_ERROR;
     }
 
     win_goto(wp);
-    printf("[DEBUG] switch_to_window: switched to win_id=%d (curwin->w_id=%d)\n",
-           win_id, curwin->w_id);
+    
     return VIM_CORE_STATUS_OK;
 }
 
 char* upstream_runtime_get_buffer_text(const upstream_runtime_session_t* session, int buf_id) {
     (void)session;
-    printf("[DEBUG] get_buffer_text: buf_id=%d\n", buf_id);
+    
 
     buf_T* buf = buflist_findnr(buf_id);
     if (buf == NULL) {
-        printf("[DEBUG] get_buffer_text: buf_id=%d not found\n", buf_id);
+        
         return NULL;
     }
 
@@ -2138,7 +2095,7 @@ char* upstream_runtime_get_buffer_text(const upstream_runtime_session_t* session
     }
     *p = '\0';
 
-    printf("[DEBUG] get_buffer_text: buf_id=%d text_len=%lu\n", buf_id, (unsigned long)(p - result));
+    
     return result;
 }
 
@@ -2149,11 +2106,11 @@ vim_core_status_t upstream_runtime_set_buffer_text(
     uintptr_t text_len
 ) {
     (void)session;
-    printf("[DEBUG] set_buffer_text: buf_id=%d text_len=%lu\n", buf_id, (unsigned long)text_len);
+    
 
     buf_T* buf = buflist_findnr(buf_id);
     if (buf == NULL) {
-        printf("[DEBUG] set_buffer_text: buf_id=%d not found\n", buf_id);
+        
         return VIM_CORE_STATUS_COMMAND_ERROR;
     }
 
@@ -2218,7 +2175,7 @@ vim_core_status_t upstream_runtime_set_buffer_name(
     uintptr_t name_len
 ) {
     (void)session;
-    printf("[DEBUG] set_buffer_name: buf_id=%d name_len=%lu\n", buf_id, (unsigned long)name_len);
+    
 
     if (name == NULL) {
         return VIM_CORE_STATUS_COMMAND_ERROR;
@@ -2240,11 +2197,11 @@ vim_core_status_t upstream_runtime_set_buffer_dirty(
     bool dirty
 ) {
     (void)session;
-    printf("[DEBUG] set_buffer_dirty: buf_id=%d dirty=%d\n", buf_id, dirty ? 1 : 0);
+    
 
     buf_T* buf = buflist_findnr(buf_id);
     if (buf == NULL) {
-        printf("[DEBUG] set_buffer_dirty: buf_id=%d not found\n", buf_id);
+        
         return VIM_CORE_STATUS_COMMAND_ERROR;
     }
 
@@ -2257,16 +2214,11 @@ vim_core_status_t upstream_runtime_apply_buffer_commit(
     const vim_core_buffer_commit_t* commit
 ) {
     if (commit == NULL) {
-        printf("[DEBUG] apply_buffer_commit: commit is NULL\n");
+        
         return VIM_CORE_STATUS_SESSION_ERROR;
     }
 
-    printf("[DEBUG] apply_buffer_commit: buf_id=%d replace_text=%d text_len=%zu display_name_len=%zu clear_dirty=%d\n",
-           commit->target_buf_id,
-           commit->replace_text ? 1 : 0,
-           commit->text_len,
-           commit->display_name_len,
-           commit->clear_dirty ? 1 : 0);
+    
 
     vim_core_status_t status;
 
@@ -2276,8 +2228,7 @@ vim_core_status_t upstream_runtime_apply_buffer_commit(
             commit->text_ptr, commit->text_len
         );
         if (status != VIM_CORE_STATUS_OK) {
-            printf("[DEBUG] apply_buffer_commit: set_buffer_text failed for buf_id=%d\n",
-                   commit->target_buf_id);
+            
             return status;
         }
     }
@@ -2288,8 +2239,7 @@ vim_core_status_t upstream_runtime_apply_buffer_commit(
             commit->display_name_ptr, commit->display_name_len
         );
         if (status != VIM_CORE_STATUS_OK) {
-            printf("[DEBUG] apply_buffer_commit: set_buffer_name failed for buf_id=%d\n",
-                   commit->target_buf_id);
+            
             return status;
         }
     }
@@ -2299,13 +2249,12 @@ vim_core_status_t upstream_runtime_apply_buffer_commit(
             session, commit->target_buf_id, false
         );
         if (status != VIM_CORE_STATUS_OK) {
-            printf("[DEBUG] apply_buffer_commit: set_buffer_dirty failed for buf_id=%d\n",
-                   commit->target_buf_id);
+            
             return status;
         }
     }
 
-    printf("[DEBUG] apply_buffer_commit: success buf_id=%d\n", commit->target_buf_id);
+    
     return VIM_CORE_STATUS_OK;
 }
 
@@ -2432,12 +2381,10 @@ const char* upstream_runtime_get_syntax_name(int syn_id) {
 }
 
 char* upstream_runtime_eval_string(upstream_runtime_session_t* session, const char* expr) {
-    printf("[DEBUG] upstream_runtime_eval_string: session=%p expr=%s is_executing=%d\n",
-           (void*)session, expr != NULL ? expr : "(null)",
-           session != NULL ? session->is_executing : -1);
+    
 
     if (session == NULL || expr == NULL) {
-        printf("[DEBUG] upstream_runtime_eval_string: NULL argument, returning NULL\n");
+        
         return NULL;
     }
 
@@ -2452,7 +2399,7 @@ char* upstream_runtime_eval_string(upstream_runtime_session_t* session, const ch
     upstream_runtime_active_session = prev_active;
 
     if (result == NULL) {
-        printf("[DEBUG] upstream_runtime_eval_string: eval_to_string returned NULL\n");
+        
         return NULL;
     }
 
@@ -2462,13 +2409,13 @@ char* upstream_runtime_eval_string(upstream_runtime_session_t* session, const ch
     char* out = (char*)malloc(len + 1);
     if (out == NULL) {
         vim_free(result);
-        printf("[DEBUG] upstream_runtime_eval_string: malloc failed\n");
+        
         return NULL;
     }
     memcpy(out, result, len + 1);
     vim_free(result);
 
-    printf("[DEBUG] upstream_runtime_eval_string: result=%s\n", out);
+    
     return out;
 }
 
@@ -2486,7 +2433,7 @@ static void upstream_runtime_drain_vcr_events(upstream_runtime_session_t* sessio
     list_T* events = di->di_tv.vval.v_list;
     if (events == NULL || events->lv_len == 0) return;
 
-    printf("[DEBUG] drain_vcr_events: %d events\n", (int)events->lv_len);
+    
 
     /* リストの各要素を処理 */
     listitem_T* li;
@@ -2502,7 +2449,7 @@ static void upstream_runtime_drain_vcr_events(upstream_runtime_session_t* sessio
                 session->queue[tail].action.kind = VIM_HOST_ACTION_BUF_ADD;
                 session->queue[tail].action.event_buf_id = buf_id;
                 session->queue_len++;
-                printf("[DEBUG] drain_vcr_events: queued BufAdd buf_id=%d\n", buf_id);
+                
             }
         } else if (strncmp(event, "WinNew:", 7) == 0) { /* AUDIT-ALLOW: event type dispatch (zero-patch design) */
             int win_id = atoi(event + 7);
@@ -2511,14 +2458,14 @@ static void upstream_runtime_drain_vcr_events(upstream_runtime_session_t* sessio
                 session->queue[tail].action.kind = VIM_HOST_ACTION_WIN_NEW;
                 session->queue[tail].action.event_win_id = win_id;
                 session->queue_len++;
-                printf("[DEBUG] drain_vcr_events: queued WinNew win_id=%d\n", win_id);
+                
             }
         } else if (strncmp(event, "LayoutChanged", 13) == 0) { /* AUDIT-ALLOW: event type dispatch (zero-patch design) */
             size_t tail = (session->queue_head + session->queue_len) % UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS;
             if (session->queue_len < UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) {
                 session->queue[tail].action.kind = VIM_HOST_ACTION_LAYOUT_CHANGED;
                 session->queue_len++;
-                printf("[DEBUG] drain_vcr_events: queued LayoutChanged\n");
+                
             }
         }
     }

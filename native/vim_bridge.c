@@ -96,10 +96,7 @@ vim_core_option_get_result_t vim_bridge_get_option(
     const char* name,
     vim_core_option_scope_t scope
 ) {
-    printf("[DEBUG] vim_bridge_get_option: state=%p name=%s scope=%d\n",
-           (const void*)state,
-           name != NULL ? name : "(null)",
-           (int)scope);
+    
     if (state == NULL) {
         return upstream_runtime_get_option(NULL, name, scope);
     }
@@ -113,11 +110,7 @@ vim_core_option_set_result_t vim_bridge_set_option_number(
     int64_t value,
     vim_core_option_scope_t scope
 ) {
-    printf("[DEBUG] vim_bridge_set_option_number: state=%p name=%s value=%lld scope=%d\n",
-           (void*)state,
-           name != NULL ? name : "(null)",
-           (long long)value,
-           (int)scope);
+    
     if (state == NULL) {
         return upstream_runtime_set_option_number(NULL, name, value, scope);
     }
@@ -131,11 +124,7 @@ vim_core_option_set_result_t vim_bridge_set_option_string(
     const char* value,
     vim_core_option_scope_t scope
 ) {
-    printf("[DEBUG] vim_bridge_set_option_string: state=%p name=%s value=%s scope=%d\n",
-           (void*)state,
-           name != NULL ? name : "(null)",
-           value != NULL ? value : "(null)",
-           (int)scope);
+    
     if (state == NULL) {
         return upstream_runtime_set_option_string(NULL, name, value, scope);
     }
@@ -265,8 +254,7 @@ char* vim_bridge_eval_string(vim_bridge_state_t* state, const char* expr) {
 void vim_bridge_free_pum_info(vim_core_pum_info_t* pum) {
     if (pum == NULL) return;
 
-    printf("[DEBUG] vim_bridge_free_pum_info: freeing pum=%p item_count=%zu\n",
-           (void*)pum, pum->item_count);
+    
 
     for (size_t i = 0; i < pum->item_count; i++) {
         /* 各候補の文字列フィールドを個別に解放（NULLチェック付き） */
