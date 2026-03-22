@@ -1,0 +1,171 @@
+---
+name: vim-core-rs
+description: Comprehensive operating guide for the vim-core-rs crate and repository. Use this skill when Codex must implement or fix vim-core-rs features, write or review tests, integrate a host application with VimCoreSession, work on VFS/VFD or job control, inspect search or syntax or completion behavior, understand repository architecture or scope boundaries, or update the vendored upstream Vim integration and build pipeline.
+---
+
+# vim-core-rs development guide
+
+Use this skill to work on the crate as both a library user and a repository
+maintainer. `vim-core-rs` is not a generic editor toolkit. It is a Rust-facing
+host integration layer over an embedded upstream Vim runtime, with strict
+session, host-action, and repository-contract constraints.
+
+## Start here
+
+Read only the materials needed for the current task.
+
+- Start with the bundled references in this skill. They must remain sufficient
+  even when the skill is copied out of the repository and used standalone.
+- For the standalone canonical API set bundled with this skill, start with
+  [references/api-index.md](references/api-index.md).
+- For repository purpose, hard invariants, host obligations, and dangerous
+  assumptions, read [references/readme-summary.md](references/readme-summary.md).
+- For current implementation gaps and exposed-but-incomplete APIs, read
+  [references/known-limitations.md](references/known-limitations.md) before
+  relying on a method just because it exists.
+- For exhaustive public symbols and callable surface area, read
+  [references/public-api-reference.md](references/public-api-reference.md).
+- For private helpers, coordination layers, and implementation-only APIs, read
+  [references/internal-api-reference.md](references/internal-api-reference.md).
+- For sequencing rules and invariants such as VFS save flow, message polling,
+  and host-action obligations, read
+  [references/api-contracts.md](references/api-contracts.md).
+- If you are working inside the original `vim-core-rs` repository and a `docs/`
+  directory exists, treat these repository docs as deeper companion material:
+  `README.md`, `docs/SCOPE.md`, `docs/known-limitations.md`,
+  `docs/api-index.md`, `docs/public-api-reference.md`,
+  `docs/internal-api-reference.md`, and `docs/api-contracts.md`.
+- When you need those repository docs, discover them from the repository root
+  instead of relying on links embedded in this skill. For example, use
+  `rg --files docs` or open the files directly after confirming they exist.
+- For public API usage and session methods, read
+  [references/api.md](references/api.md) as a shorter task-oriented summary.
+- For enums, snapshots, errors, host actions, search matches, and PUM data,
+  read [references/types.md](references/types.md).
+- For VFS, VFD, job control, deferred quit, and host obligations, read
+  [references/vfs-vfd.md](references/vfs-vfd.md).
+- For architecture boundaries, non-goals, build pipeline, and upstream vendor
+  maintenance, read [references/architecture.md](references/architecture.md).
+- For task-to-test mapping and verification strategy, read
+  [references/testing.md](references/testing.md).
+- For end-to-end usage patterns, read
+  [references/examples.md](references/examples.md).
+
+## Keep these repository truths in mind
+
+`vim-core-rs` has a few constraints that dominate implementation decisions.
+
+- Maintain the single-session contract. Only one live `VimCoreSession` may
+  exist per process. The crate enforces this with a global `AtomicBool`.
+- Treat host actions as part of the public contract. `Write`, `Quit`,
+  `Redraw`, `RequestInput`, `VfsRequest`, `JobStart`, and `JobStop` are not
+  incidental side effects.
+- Keep host responsibilities outside the core. VFS responses, process spawning,
+  screen sizing, message handling, and redraw behavior belong to the host.
+- Respect the documented project non-goals. In the repository, they live in
+  `docs/SCOPE.md`. Do not extend the crate toward full Vimscript embedding,
+  rich terminal emulation, or modern semantic highlighting that should stay in
+  Rust-side systems.
+- Use contract tests as the source of truth for behavior. If API docs and tests
+  disagree, assume the tests reflect the intended repository contract until the
+  code proves otherwise.
+- Prefer repository `docs/api-*.md` files when they are available and you need
+  exhaustive coverage. Prefer `skill/vim-core-rs/references/` when you need a
+  faster execution path or when the skill is being used standalone. The
+  bundled `references/api-*.md` set is the standalone canonical source.
+
+## Pick the right workflow
+
+Choose the workflow that matches the user task instead of reading everything.
+
+### Implement or fix a public API behavior
+
+1. Inspect the relevant method and nearby types in `src/lib.rs`.
+2. Read the matching section in `references/api.md` and
+   `references/types.md`.
+3. Open the most specific contract test from `references/testing.md`.
+4. Change code in the Rust layer first. Touch `native/` only when behavior
+   truly crosses the FFI boundary.
+5. Run the narrowest relevant test before broader test suites.
+
+### Add or debug host integration behavior
+
+1. Identify which `CoreHostAction` variant is the source of truth.
+2. Read [references/vfs-vfd.md](references/vfs-vfd.md) and the matching tests.
+3. Verify both the command result and the queued host-action sequence.
+4. Preserve ordering. Many repository tests assert observable sequencing, not
+   only final state.
+
+### Add or debug editing semantics
+
+1. Start with the highest-level contract test covering the feature area.
+2. Confirm whether the behavior belongs to Normal commands, Ex commands,
+   snapshot extraction, or host-action emission.
+3. Prefer existing public methods and snapshots over adding one-off probes.
+4. Verify mode transitions, pending input, revision updates, and dirty state,
+   not only buffer text.
+
+### Update vendored Vim or build pipeline behavior
+
+1. Read [references/architecture.md](references/architecture.md) first.
+2. Inspect `build.rs`, the `build_*.rs` audit helpers, and
+   `scripts/vendor-sync.sh`.
+3. Run targeted quality-gate tests before broad feature suites.
+4. Preserve allowlist and traceability artifacts. The repository treats them as
+   required evidence, not optional metadata.
+
+## Testing rules that matter
+
+Apply these rules whenever you write or modify tests.
+
+- Serialize tests that create `VimCoreSession`. The repository commonly uses a
+  `Mutex` plus `OnceLock` helper because concurrent session creation is invalid.
+- Prefer contract-style tests that assert externally visible behavior:
+  snapshots, host actions, errors, logs, and public return values.
+- When changing VFS behavior, verify request ledger or transaction log entries
+  in addition to buffer state.
+- When changing job or VFD behavior, verify both injected data and job-status
+  completion paths.
+- When changing UI-derived state such as search matches, syntax, or PUM,
+  validate the extracted Rust structs instead of assuming screen rendering.
+- If the change touches repository maintenance or native build inputs, include
+  the relevant quality-gate test.
+
+## Implementation heuristics
+
+- Prefer `apply_normal_command` for modal editing semantics and
+  `apply_ex_command` for command-line behaviors.
+- Inspect `CoreCommandOutcome` before assuming a command changed text. Some
+  commands only move the cursor, switch modes, or queue host work.
+- Use `snapshot()` when the task needs a coherent state capture; use focused
+  getters when tests only need one property.
+- For VFS-backed buffers, expect multi-step flows: resolve, load, edit, save,
+  deferred close, and possible resume or denial.
+- For jobs, treat `JobStart` as a request for the host to spawn a real process
+  and bridge stdio via VFD ids. The core does not own that process.
+- For message capture, register `set_message_handler` before the command that
+  emits messages.
+
+## Validation checklist
+
+Before finishing, check the smallest relevant set below.
+
+- Public API or session semantics:
+  `cargo test --test public_api_contract`
+- Ex and Normal behavior:
+  `cargo test --test integration_contract`
+- VFS flows:
+  `cargo test --test vfs_contract`
+- Jobs and VFD:
+  `cargo test --test job_api_contract`
+- Messages and Vim expression evaluation:
+  `cargo test --test message_log_contract`
+- Search, syntax, or completion:
+  `cargo test --test search_highlight_contract`
+  `cargo test --test syntax_contract`
+  `cargo test --test pum_contract`
+- Native build and vendor integrity:
+  `cargo test --test quality_gate_contract`
+
+Run broader `cargo test` only after the narrow task-specific suite passes or
+when the user explicitly wants full verification.
