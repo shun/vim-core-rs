@@ -113,7 +113,9 @@ pub enum CoreRequestStatus {
     Failed(CoreVfsError),
     Cancelled,
     TimedOut,
-    Stale { reason: String },
+    Stale {
+        reason: String,
+    },
     ProtocolMismatch {
         expected: CoreVfsOperationKind,
         actual: CoreVfsOperationKind,
@@ -260,7 +262,7 @@ impl DocumentCoordinator {
     }
 
     fn emit_log(&mut self, entry: VfsLogEntry) {
-        println!(
+        debug_log!(
             "[VFS] event={:?} op={:?} req_id={:?} buf={:?} doc_id={:?} loc={:?} base_rev={:?} cur_rev={:?} detail={:?}",
             entry.event,
             entry.operation_kind,
@@ -275,17 +277,15 @@ impl DocumentCoordinator {
         self.transaction_log.push(entry);
     }
 
-    fn log_binding_event(
-        &mut self,
-        buf_id: i32,
-        event: VfsLogEvent,
-        detail: Option<String>,
-    ) {
+    fn log_binding_event(&mut self, buf_id: i32, event: VfsLogEvent, detail: Option<String>) {
         let (operation_kind, request_id, document_id, locator, base_revision, current_revision) =
             if let Some(state) = self.bindings.get(&buf_id) {
                 (
                     state.binding.pending_operation.map(|pending| pending.kind),
-                    state.binding.pending_operation.map(|pending| pending.request_id),
+                    state
+                        .binding
+                        .pending_operation
+                        .map(|pending| pending.request_id),
                     state.binding.document_id.clone(),
                     state.binding.locator.clone(),
                     Some(state.binding.committed_revision),
@@ -310,7 +310,8 @@ impl DocumentCoordinator {
 
     pub(crate) fn sync_buffers(&mut self, buffers: &[(i32, String)]) {
         let active_ids: BTreeSet<i32> = buffers.iter().map(|(buf_id, _)| *buf_id).collect();
-        self.bindings.retain(|buf_id, _| active_ids.contains(buf_id));
+        self.bindings
+            .retain(|buf_id, _| active_ids.contains(buf_id));
 
         for (buf_id, display_name) in buffers {
             let state = self
@@ -395,11 +396,7 @@ impl DocumentCoordinator {
         state.current_revision = revision;
     }
 
-    pub(crate) fn issue_resolve(
-        &mut self,
-        target_buf_id: i32,
-        locator: String,
-    ) -> CoreVfsRequest {
+    pub(crate) fn issue_resolve(&mut self, target_buf_id: i32, locator: String) -> CoreVfsRequest {
         let (request_id, issued_order) = self.allocate_request_identity();
         let state = self
             .bindings
@@ -474,14 +471,13 @@ impl DocumentCoordinator {
             detail: None,
         });
 
-        CoreVfsRequest::Exists { request_id, locator }
+        CoreVfsRequest::Exists {
+            request_id,
+            locator,
+        }
     }
 
-    pub(crate) fn issue_load(
-        &mut self,
-        target_buf_id: i32,
-        document_id: String,
-    ) -> CoreVfsRequest {
+    pub(crate) fn issue_load(&mut self, target_buf_id: i32, document_id: String) -> CoreVfsRequest {
         let (request_id, issued_order) = self.allocate_request_identity();
         let state = self
             .bindings
@@ -555,7 +551,9 @@ impl DocumentCoordinator {
         }
         let base_revision = state.current_revision;
 
-        let save_locator = target_locator.clone().or_else(|| state.binding.locator.clone());
+        let save_locator = target_locator
+            .clone()
+            .or_else(|| state.binding.locator.clone());
 
         self.requests.insert(
             request_id,
@@ -580,7 +578,11 @@ impl DocumentCoordinator {
             locator: save_locator,
             base_revision: Some(base_revision),
             current_revision: Some(base_revision),
-            detail: if force { Some("force=true".to_string()) } else { None },
+            detail: if force {
+                Some("force=true".to_string())
+            } else {
+                None
+            },
         });
 
         CoreVfsRequest::Save {
@@ -594,10 +596,7 @@ impl DocumentCoordinator {
         }
     }
 
-    pub(crate) fn apply_response(
-        &mut self,
-        response: CoreVfsResponse,
-    ) -> CoreResponseApplyOutcome {
+    pub(crate) fn apply_response(&mut self, response: CoreVfsResponse) -> CoreResponseApplyOutcome {
         let request_id = response.request_id();
         let Some(entry) = self.requests.get(&request_id).cloned() else {
             self.emit_log(VfsLogEntry {
@@ -614,12 +613,17 @@ impl DocumentCoordinator {
             return CoreResponseApplyOutcome::UnknownRequest;
         };
         let target_buf_id = entry.target_buf_id;
-        let current_revision = self.bindings.get(&target_buf_id).map(|s| s.current_revision);
+        let current_revision = self
+            .bindings
+            .get(&target_buf_id)
+            .map(|s| s.current_revision);
 
         let actual_kind = response.operation_kind();
         if entry.operation_kind != actual_kind {
-            self.requests.get_mut(&request_id).expect("request should exist").status =
-                CoreRequestStatus::ProtocolMismatch {
+            self.requests
+                .get_mut(&request_id)
+                .expect("request should exist")
+                .status = CoreRequestStatus::ProtocolMismatch {
                 expected: entry.operation_kind,
                 actual: actual_kind,
             };
@@ -658,10 +662,18 @@ impl DocumentCoordinator {
                 ..
             } => {
                 let locator = entry.locator;
-                self.requests.get_mut(&request_id).expect("request should exist").status =
-                    CoreRequestStatus::Succeeded;
+                self.requests
+                    .get_mut(&request_id)
+                    .expect("request should exist")
+                    .status = CoreRequestStatus::Succeeded;
                 self.clear_pending_if_matches(target_buf_id, request_id);
-                self.bind_virtual_document(target_buf_id, locator.clone(), document_id.clone(), display_name, 0);
+                self.bind_virtual_document(
+                    target_buf_id,
+                    locator.clone(),
+                    document_id.clone(),
+                    display_name,
+                    0,
+                );
                 self.emit_log(VfsLogEntry {
                     event: VfsLogEvent::ResponseApplied,
                     operation_kind: Some(CoreVfsOperationKind::Resolve),
@@ -676,8 +688,10 @@ impl DocumentCoordinator {
                 CoreResponseApplyOutcome::Applied
             }
             CoreVfsResponse::ResolvedLocalFallback { locator, .. } => {
-                self.requests.get_mut(&request_id).expect("request should exist").status =
-                    CoreRequestStatus::Succeeded;
+                self.requests
+                    .get_mut(&request_id)
+                    .expect("request should exist")
+                    .status = CoreRequestStatus::Succeeded;
                 self.clear_pending_if_matches(target_buf_id, request_id);
                 self.bind_local_buffer(target_buf_id, Some(locator.clone()), locator.clone(), 0);
                 self.emit_log(VfsLogEntry {
@@ -698,8 +712,10 @@ impl DocumentCoordinator {
                     kind: CoreVfsErrorKind::NotFound,
                     message: Some(format!("missing locator: {}", locator)),
                 };
-                self.requests.get_mut(&request_id).expect("request should exist").status =
-                    CoreRequestStatus::Failed(error.clone());
+                self.requests
+                    .get_mut(&request_id)
+                    .expect("request should exist")
+                    .status = CoreRequestStatus::Failed(error.clone());
                 self.clear_pending_if_matches(target_buf_id, request_id);
                 self.record_buffer_error(target_buf_id, error);
                 self.emit_log(VfsLogEntry {
@@ -716,15 +732,17 @@ impl DocumentCoordinator {
                 CoreResponseApplyOutcome::Applied
             }
             CoreVfsResponse::ExistsResult { exists, .. } => {
-                self.requests.get_mut(&request_id).expect("request should exist").status =
-                    if exists {
-                        CoreRequestStatus::Succeeded
-                    } else {
-                        CoreRequestStatus::Failed(CoreVfsError {
-                            kind: CoreVfsErrorKind::NotFound,
-                            message: Some("resolved path does not exist".to_string()),
-                        })
-                    };
+                self.requests
+                    .get_mut(&request_id)
+                    .expect("request should exist")
+                    .status = if exists {
+                    CoreRequestStatus::Succeeded
+                } else {
+                    CoreRequestStatus::Failed(CoreVfsError {
+                        kind: CoreVfsErrorKind::NotFound,
+                        message: Some("resolved path does not exist".to_string()),
+                    })
+                };
                 self.emit_log(VfsLogEntry {
                     event: VfsLogEvent::ResponseApplied,
                     operation_kind: Some(CoreVfsOperationKind::Exists),
@@ -745,10 +763,18 @@ impl DocumentCoordinator {
                     .get(&target_buf_id)
                     .map(|state| state.binding.display_name.clone())
                     .unwrap_or_else(|| document_id.clone());
-                self.requests.get_mut(&request_id).expect("request should exist").status =
-                    CoreRequestStatus::Succeeded;
+                self.requests
+                    .get_mut(&request_id)
+                    .expect("request should exist")
+                    .status = CoreRequestStatus::Succeeded;
                 self.clear_pending_if_matches(target_buf_id, request_id);
-                self.bind_virtual_document(target_buf_id, locator.clone(), document_id.clone(), display_name, 0);
+                self.bind_virtual_document(
+                    target_buf_id,
+                    locator.clone(),
+                    document_id.clone(),
+                    display_name,
+                    0,
+                );
                 self.emit_log(VfsLogEntry {
                     event: VfsLogEvent::ResponseApplied,
                     operation_kind: Some(CoreVfsOperationKind::Load),
@@ -764,8 +790,10 @@ impl DocumentCoordinator {
             }
             CoreVfsResponse::Saved { document_id, .. } => {
                 let Some(base_revision) = entry.base_revision else {
-                    self.requests.get_mut(&request_id).expect("request should exist").status =
-                        CoreRequestStatus::ProtocolMismatch {
+                    self.requests
+                        .get_mut(&request_id)
+                        .expect("request should exist")
+                        .status = CoreRequestStatus::ProtocolMismatch {
                         expected: CoreVfsOperationKind::Save,
                         actual: CoreVfsOperationKind::Save,
                     };
@@ -792,13 +820,15 @@ impl DocumentCoordinator {
                 };
 
                 let Some(state) = self.bindings.get_mut(&target_buf_id) else {
-                    self.requests.get_mut(&request_id).expect("request should exist").status =
-                        CoreRequestStatus::Failed(CoreVfsError {
-                            kind: CoreVfsErrorKind::HostUnavailable,
-                            message: Some(
-                                "target buffer disappeared before save completed".to_string(),
-                            ),
-                        });
+                    self.requests
+                        .get_mut(&request_id)
+                        .expect("request should exist")
+                        .status = CoreRequestStatus::Failed(CoreVfsError {
+                        kind: CoreVfsErrorKind::HostUnavailable,
+                        message: Some(
+                            "target buffer disappeared before save completed".to_string(),
+                        ),
+                    });
                     self.emit_log(VfsLogEntry {
                         event: VfsLogEvent::ResponseApplied,
                         operation_kind: Some(CoreVfsOperationKind::Save),
@@ -815,11 +845,13 @@ impl DocumentCoordinator {
 
                 if state.binding.document_id.as_deref() != Some(document_id.as_str()) {
                     let cur_rev = state.current_revision;
-                    self.requests.get_mut(&request_id).expect("request should exist").status =
-                        CoreRequestStatus::Failed(CoreVfsError {
-                            kind: CoreVfsErrorKind::InvalidResponse,
-                            message: Some("save response document_id mismatch".to_string()),
-                        });
+                    self.requests
+                        .get_mut(&request_id)
+                        .expect("request should exist")
+                        .status = CoreRequestStatus::Failed(CoreVfsError {
+                        kind: CoreVfsErrorKind::InvalidResponse,
+                        message: Some("save response document_id mismatch".to_string()),
+                    });
                     self.clear_pending_if_matches(target_buf_id, request_id);
                     self.record_buffer_error(
                         target_buf_id,
@@ -848,10 +880,12 @@ impl DocumentCoordinator {
                         "save response for revision {} arrived after revision {}",
                         base_revision, cur_rev
                     );
-                    self.requests.get_mut(&request_id).expect("request should exist").status =
-                        CoreRequestStatus::Stale {
-                            reason: reason.clone(),
-                        };
+                    self.requests
+                        .get_mut(&request_id)
+                        .expect("request should exist")
+                        .status = CoreRequestStatus::Stale {
+                        reason: reason.clone(),
+                    };
                     self.clear_pending_if_matches(target_buf_id, request_id);
                     self.record_buffer_error(
                         target_buf_id,
@@ -877,8 +911,10 @@ impl DocumentCoordinator {
                     return CoreResponseApplyOutcome::StaleRejected;
                 }
 
-                self.requests.get_mut(&request_id).expect("request should exist").status =
-                    CoreRequestStatus::Succeeded;
+                self.requests
+                    .get_mut(&request_id)
+                    .expect("request should exist")
+                    .status = CoreRequestStatus::Succeeded;
                 state.binding.committed_revision = base_revision;
                 state.binding.last_saved_revision = Some(base_revision);
                 state.binding.last_vfs_error = None;
@@ -897,8 +933,10 @@ impl DocumentCoordinator {
                 CoreResponseApplyOutcome::Applied
             }
             CoreVfsResponse::Failed { error, .. } => {
-                self.requests.get_mut(&request_id).expect("request should exist").status =
-                    CoreRequestStatus::Failed(error.clone());
+                self.requests
+                    .get_mut(&request_id)
+                    .expect("request should exist")
+                    .status = CoreRequestStatus::Failed(error.clone());
                 self.clear_pending_if_matches(target_buf_id, request_id);
                 self.record_buffer_error(target_buf_id, error.clone());
                 self.emit_log(VfsLogEntry {
@@ -915,8 +953,10 @@ impl DocumentCoordinator {
                 CoreResponseApplyOutcome::Applied
             }
             CoreVfsResponse::Cancelled { .. } => {
-                self.requests.get_mut(&request_id).expect("request should exist").status =
-                    CoreRequestStatus::Cancelled;
+                self.requests
+                    .get_mut(&request_id)
+                    .expect("request should exist")
+                    .status = CoreRequestStatus::Cancelled;
                 self.clear_pending_if_matches(target_buf_id, request_id);
                 self.record_buffer_error(
                     target_buf_id,
@@ -939,8 +979,10 @@ impl DocumentCoordinator {
                 CoreResponseApplyOutcome::Applied
             }
             CoreVfsResponse::TimedOut { .. } => {
-                self.requests.get_mut(&request_id).expect("request should exist").status =
-                    CoreRequestStatus::TimedOut;
+                self.requests
+                    .get_mut(&request_id)
+                    .expect("request should exist")
+                    .status = CoreRequestStatus::TimedOut;
                 self.clear_pending_if_matches(target_buf_id, request_id);
                 self.record_buffer_error(
                     target_buf_id,
@@ -996,9 +1038,10 @@ impl DocumentCoordinator {
 
     pub(crate) fn set_deferred_close(&mut self, buf_id: i32, close: CoreDeferredClose) {
         if let Some(state) = self.bindings.get_mut(&buf_id) {
-            println!(
+            debug_log!(
                 "[DEBUG] DocumentCoordinator::set_deferred_close: buf_id={} close={:?}",
-                buf_id, close
+                buf_id,
+                close
             );
             state.binding.deferred_close = Some(close);
         }
@@ -1011,25 +1054,17 @@ impl DocumentCoordinator {
 
     pub(crate) fn clear_deferred_close(&mut self, buf_id: i32, reason: &str) {
         if let Some(state) = self.bindings.get_mut(&buf_id) {
-            println!(
+            debug_log!(
                 "[DEBUG] DocumentCoordinator::clear_deferred_close: buf_id={}",
                 buf_id
             );
             state.binding.deferred_close = None;
         }
-        self.log_binding_event(
-            buf_id,
-            VfsLogEvent::QuitResumed,
-            Some(reason.to_string()),
-        );
+        self.log_binding_event(buf_id, VfsLogEvent::QuitResumed, Some(reason.to_string()));
     }
 
     pub(crate) fn log_quit_denied(&mut self, buf_id: i32, reason: &str) {
-        self.log_binding_event(
-            buf_id,
-            VfsLogEvent::QuitDenied,
-            Some(reason.to_string()),
-        );
+        self.log_binding_event(buf_id, VfsLogEvent::QuitDenied, Some(reason.to_string()));
     }
 
     pub(crate) fn buffer_text_snapshot(&self, buf_id: i32) -> Option<(String, u64)> {
@@ -1084,9 +1119,7 @@ impl CoreVfsResponse {
         match self {
             CoreVfsResponse::Resolved { .. }
             | CoreVfsResponse::ResolvedLocalFallback { .. }
-            | CoreVfsResponse::ResolvedMissing { .. } => {
-                CoreVfsOperationKind::Resolve
-            }
+            | CoreVfsResponse::ResolvedMissing { .. } => CoreVfsOperationKind::Resolve,
             CoreVfsResponse::ExistsResult { .. } => CoreVfsOperationKind::Exists,
             CoreVfsResponse::Loaded { .. } => CoreVfsOperationKind::Load,
             CoreVfsResponse::Saved { .. } => CoreVfsOperationKind::Save,
@@ -1133,10 +1166,7 @@ mod tests {
         ));
         assert!(matches!(
             second,
-            CoreVfsRequest::Exists {
-                request_id: 2,
-                ..
-            }
+            CoreVfsRequest::Exists { request_id: 2, .. }
         ));
         assert_eq!(coordinator.ledger_entries().len(), 2);
     }
@@ -1551,10 +1581,7 @@ mod tests {
     #[test]
     fn is_vfs_buffer_returns_true_for_virtual_false_for_local() {
         let mut coordinator = DocumentCoordinator::new();
-        coordinator.sync_buffers(&[
-            (30, "local".to_string()),
-            (31, "virtual".to_string()),
-        ]);
+        coordinator.sync_buffers(&[(30, "local".to_string()), (31, "virtual".to_string())]);
         coordinator.bind_virtual_document(
             31,
             Some("mem://virtual".to_string()),

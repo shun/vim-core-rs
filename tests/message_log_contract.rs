@@ -18,8 +18,7 @@ fn acquire_session_test_lock() -> std::sync::MutexGuard<'static, ()> {
 #[test]
 fn eval_string_evaluates_simple_arithmetic() {
     let _guard = acquire_session_test_lock();
-    let mut session =
-        VimCoreSession::new("hello").expect("セッション初期化に失敗");
+    let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
 
     // "1 + 1" の評価結果が "2" であることを確認
     let result = session.eval_string("1 + 1");
@@ -31,8 +30,7 @@ fn eval_string_evaluates_simple_arithmetic() {
 #[test]
 fn eval_string_evaluates_string_expression() {
     let _guard = acquire_session_test_lock();
-    let mut session =
-        VimCoreSession::new("hello").expect("セッション初期化に失敗");
+    let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
 
     let result = session.eval_string("'hello' . ' world'");
     println!("[TEST] eval_string('hello' . ' world') = {:?}", result);
@@ -43,8 +41,7 @@ fn eval_string_evaluates_string_expression() {
 #[test]
 fn eval_string_returns_none_for_invalid_expression() {
     let _guard = acquire_session_test_lock();
-    let mut session =
-        VimCoreSession::new("hello").expect("セッション初期化に失敗");
+    let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
 
     // 無効な式はNoneを返す（クラッシュしない）
     let result = session.eval_string("invalid_nonexistent_function_xyz()");
@@ -59,14 +56,16 @@ fn eval_string_returns_none_for_invalid_expression() {
 #[test]
 fn error_message_dispatched_to_handler() {
     let _guard = acquire_session_test_lock();
-    let mut session =
-        VimCoreSession::new("hello").expect("セッション初期化に失敗");
+    let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
 
     let messages: Arc<Mutex<Vec<CoreMessageEvent>>> = Arc::new(Mutex::new(Vec::new()));
     let messages_clone = messages.clone();
 
     session.set_message_handler(Box::new(move |event: CoreMessageEvent| {
-        println!("[TEST] handler received: kind={:?} content={}", event.kind, event.content);
+        println!(
+            "[TEST] handler received: kind={:?} content={}",
+            event.kind, event.content
+        );
         messages_clone.lock().unwrap().push(event);
     }));
 
@@ -80,9 +79,9 @@ fn error_message_dispatched_to_handler() {
     }
 
     // エラーメッセージが届いていることを確認
-    let has_error = msgs.iter().any(|m| {
-        m.kind == CoreMessageKind::Error && m.content.contains("test error message")
-    });
+    let has_error = msgs
+        .iter()
+        .any(|m| m.kind == CoreMessageKind::Error && m.content.contains("test error message"));
     assert!(
         has_error,
         "echoerr で発生したエラーメッセージがハンドラに届いていない。受信メッセージ: {:?}",
@@ -94,14 +93,16 @@ fn error_message_dispatched_to_handler() {
 #[test]
 fn normal_message_dispatched_to_handler() {
     let _guard = acquire_session_test_lock();
-    let mut session =
-        VimCoreSession::new("hello").expect("セッション初期化に失敗");
+    let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
 
     let messages: Arc<Mutex<Vec<CoreMessageEvent>>> = Arc::new(Mutex::new(Vec::new()));
     let messages_clone = messages.clone();
 
     session.set_message_handler(Box::new(move |event: CoreMessageEvent| {
-        println!("[TEST] handler received: kind={:?} content={}", event.kind, event.content);
+        println!(
+            "[TEST] handler received: kind={:?} content={}",
+            event.kind, event.content
+        );
         messages_clone.lock().unwrap().push(event);
     }));
 
@@ -115,9 +116,9 @@ fn normal_message_dispatched_to_handler() {
     }
 
     // 通常メッセージが届いていることを確認
-    let has_normal = msgs.iter().any(|m| {
-        m.kind == CoreMessageKind::Normal && m.content.contains("hello from vim")
-    });
+    let has_normal = msgs
+        .iter()
+        .any(|m| m.kind == CoreMessageKind::Normal && m.content.contains("hello from vim"));
     assert!(
         has_normal,
         "echo で発生した通常メッセージがハンドラに届いていない。受信メッセージ: {:?}",
@@ -129,13 +130,15 @@ fn normal_message_dispatched_to_handler() {
 #[test]
 fn no_handler_does_not_crash() {
     let _guard = acquire_session_test_lock();
-    let mut session =
-        VimCoreSession::new("hello").expect("セッション初期化に失敗");
+    let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
 
     // ハンドラ未登録のままコマンドを実行してもクラッシュしないことを確認
     let result = session.apply_ex_command("echo 'no handler test'");
     println!("[TEST] no_handler result: {:?}", result);
-    assert!(result.is_ok(), "ハンドラ未登録でもコマンド実行が成功すること");
+    assert!(
+        result.is_ok(),
+        "ハンドラ未登録でもコマンド実行が成功すること"
+    );
 
     let result = session.apply_ex_command("echoerr 'no handler error test'");
     println!("[TEST] no_handler error result: {:?}", result);
@@ -146,14 +149,16 @@ fn no_handler_does_not_crash() {
 #[test]
 fn normal_command_triggers_message_polling() {
     let _guard = acquire_session_test_lock();
-    let mut session =
-        VimCoreSession::new("hello\nworld\n").expect("セッション初期化に失敗");
+    let mut session = VimCoreSession::new("hello\nworld\n").expect("セッション初期化に失敗");
 
     let messages: Arc<Mutex<Vec<CoreMessageEvent>>> = Arc::new(Mutex::new(Vec::new()));
     let messages_clone = messages.clone();
 
     session.set_message_handler(Box::new(move |event: CoreMessageEvent| {
-        println!("[TEST] handler received: kind={:?} content={}", event.kind, event.content);
+        println!(
+            "[TEST] handler received: kind={:?} content={}",
+            event.kind, event.content
+        );
         messages_clone.lock().unwrap().push(event);
     }));
 
@@ -166,8 +171,7 @@ fn normal_command_triggers_message_polling() {
 #[test]
 fn version_output_discloses_modified_vim_distribution() {
     let _guard = acquire_session_test_lock();
-    let mut session =
-        VimCoreSession::new("hello").expect("セッション初期化に失敗");
+    let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
 
     let version_output = session
         .eval_string("execute('version')")

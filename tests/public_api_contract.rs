@@ -1,7 +1,8 @@
+use std::fs;
 use std::sync::{Mutex, OnceLock};
 use vim_core_rs::{
     CoreHostAction, CoreInputRequestKind, CoreMode, CoreOptionError, CoreOptionScope,
-    CoreOptionType, CoreSessionError, VimCoreSession,
+    CoreOptionType, CoreSessionError, CoreSessionOptions, VimCoreSession,
 };
 
 fn session_test_lock() -> &'static Mutex<()> {
@@ -22,7 +23,10 @@ fn session_exposes_initial_snapshot_contract() {
         VimCoreSession::new("first line\nsecond line").expect("session should initialize");
     let snapshot = session.snapshot();
 
-    assert_eq!(snapshot.text.trim_end_matches('\n'), "first line\nsecond line");
+    assert_eq!(
+        snapshot.text.trim_end_matches('\n'),
+        "first line\nsecond line"
+    );
     assert_eq!(snapshot.revision, 0);
     assert!(!snapshot.dirty);
     assert_eq!(snapshot.mode, CoreMode::Normal);
@@ -44,6 +48,29 @@ fn second_session_is_rejected_while_first_is_alive() {
 
     let third = VimCoreSession::new("gamma").expect("session should initialize after drop");
     assert_eq!(third.snapshot().text.trim_end_matches('\n'), "gamma");
+}
+
+#[test]
+fn session_options_route_debug_log_output_to_file() {
+    let _guard = acquire_session_test_lock();
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let log_path = tempdir.path().join("vim-core-rs-debug.log");
+    let options = CoreSessionOptions {
+        debug_log_path: Some(log_path.clone()),
+    };
+    let mut session = VimCoreSession::new_with_options("buffer", options)
+        .expect("session should initialize with debug log path");
+
+    session
+        .apply_ex_command(":write output.txt")
+        .expect("write command should succeed");
+
+    let log_output = fs::read_to_string(&log_path).expect("debug log file should be readable");
+    assert!(
+        log_output.contains("[DEBUG] apply_write_intent: local write buf_id=1 path=output.txt"),
+        "debug log should be written to the configured file: {}",
+        log_output
+    );
 }
 
 #[test]
@@ -496,7 +523,10 @@ fn normal_delete_command_mutates_buffer_via_vim_runtime() {
     ));
 
     let snapshot = session.snapshot();
-    assert_eq!(snapshot.text.trim_end_matches('\n'), "second line\nthird line");
+    assert_eq!(
+        snapshot.text.trim_end_matches('\n'),
+        "second line\nthird line"
+    );
     assert_eq!(snapshot.revision, 1);
     assert!(snapshot.dirty);
     assert_eq!(snapshot.mode, CoreMode::Normal);

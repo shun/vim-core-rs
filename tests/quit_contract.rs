@@ -1,7 +1,5 @@
 use std::sync::{Mutex, OnceLock};
-use vim_core_rs::{
-    VimCoreSession, CoreCommandOutcome, CoreHostAction,
-};
+use vim_core_rs::{CoreCommandOutcome, CoreHostAction, VimCoreSession};
 
 fn session_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -21,10 +19,14 @@ fn quit_should_not_exit_process() {
     let mut session = VimCoreSession::new("test\n").expect("Failed to create session");
 
     // This should currently exit the process if it's not trapped.
-    let outcome = session.apply_ex_command(":quit").expect("Failed to apply :quit");
+    let outcome = session
+        .apply_ex_command(":quit")
+        .expect("Failed to apply :quit");
 
     assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
-    let action = session.take_pending_host_action().expect("Expected host action");
+    let action = session
+        .take_pending_host_action()
+        .expect("Expected host action");
     assert!(matches!(action, CoreHostAction::Quit { .. }));
 }
 
@@ -35,11 +37,17 @@ fn quit_bang_should_not_exit_process() {
     let mut session = VimCoreSession::new("test\n").expect("Failed to create session");
 
     // Make the buffer dirty to ensure :quit! is different from :quit
-    session.apply_normal_command("Aadded text\x1b").expect("Failed to edit");
+    session
+        .apply_normal_command("Aadded text\x1b")
+        .expect("Failed to edit");
 
-    let outcome = session.apply_ex_command(":quit!").expect("Failed to apply :quit!");
+    let outcome = session
+        .apply_ex_command(":quit!")
+        .expect("Failed to apply :quit!");
 
     assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
-    let action = session.take_pending_host_action().expect("Expected host action");
+    let action = session
+        .take_pending_host_action()
+        .expect("Expected host action");
     assert!(matches!(action, CoreHostAction::Quit { force: true, .. }));
 }

@@ -46,17 +46,26 @@ fn test_pum_extraction_contract() {
             .expect("trigger completion with C-n");
 
         let snapshot = session.snapshot();
-        println!("[TEST 2] mode={:?}, text='{}'", snapshot.mode, snapshot.text);
+        println!(
+            "[TEST 2] mode={:?}, text='{}'",
+            snapshot.mode, snapshot.text
+        );
         println!("[TEST 2] pum={:?}", snapshot.pum);
 
         // 補完がトリガーされた場合、PUM情報が存在するはず
-        let pum = snapshot.pum.as_ref().expect(
-            "PUM should be Some when completion is triggered"
-        );
+        let pum = snapshot
+            .pum
+            .as_ref()
+            .expect("PUM should be Some when completion is triggered");
 
         println!(
             "[TEST 2] pum.row={}, pum.col={}, pum.width={}, pum.height={}, pum.selected_index={:?}, items.len={}",
-            pum.row, pum.col, pum.width, pum.height, pum.selected_index, pum.items.len()
+            pum.row,
+            pum.col,
+            pum.width,
+            pum.height,
+            pum.selected_index,
+            pum.items.len()
         );
 
         // 候補が存在するはず
@@ -71,10 +80,7 @@ fn test_pum_extraction_contract() {
                 "[TEST 2] item[{}]: word='{}', abbr='{}', menu='{}', kind='{}', info='{}'",
                 i, item.word, item.abbr, item.menu, item.kind, item.info
             );
-            assert!(
-                !item.word.is_empty(),
-                "PUM item word should not be empty"
-            );
+            assert!(!item.word.is_empty(), "PUM item word should not be empty");
         }
 
         // 座標が妥当な範囲であること
@@ -97,16 +103,15 @@ fn test_pum_extraction_contract() {
         // テスト2の状態（補完アクティブ）からの selected_index=None を確認
         // （テスト2で既に検証済みだが、テスト2.5として明示的に再確認）
         let snapshot_nosel = session.snapshot();
-        let pum_nosel = snapshot_nosel.pum.as_ref().expect(
-            "PUM should still be Some (test 2 state)"
-        );
+        let pum_nosel = snapshot_nosel
+            .pum
+            .as_ref()
+            .expect("PUM should still be Some (test 2 state)");
         assert_eq!(
             pum_nosel.selected_index, None,
             "Req 3.2: selected_index should be None with noselect (unselected state)"
         );
-        println!(
-            "[TEST 2.5A] Verified Req 3.2: selected_index=None with noselect"
-        );
+        println!("[TEST 2.5A] Verified Req 3.2: selected_index=None with noselect");
 
         // noselect なしでの選択状態検証のため、新しい補完セッションを開始
         session
@@ -138,7 +143,8 @@ fn test_pum_extraction_contract() {
         if let Some(ref pum_sel) = snapshot_sel.pum {
             println!(
                 "[TEST 2.5B] selected_index={:?}, items.len={}",
-                pum_sel.selected_index, pum_sel.items.len()
+                pum_sel.selected_index,
+                pum_sel.items.len()
             );
 
             if pum_sel.selected_index.is_some() {
@@ -187,7 +193,10 @@ fn test_pum_extraction_contract() {
     // ================================================
     {
         let snapshot = session.snapshot();
-        println!("[TEST 3] after escape: mode={:?}, pum={:?}", snapshot.mode, snapshot.pum);
+        println!(
+            "[TEST 3] after escape: mode={:?}, pum={:?}",
+            snapshot.mode, snapshot.pum
+        );
         assert!(
             snapshot.pum.is_none(),
             "PUM should be None after returning to normal mode"
@@ -200,9 +209,7 @@ fn test_pum_extraction_contract() {
     {
         // テスト2.5でバッファ内容が変わっている可能性があるため、
         // 候補テキストを再準備する
-        session
-            .apply_ex_command(":%d")
-            .expect("clear buffer");
+        session.apply_ex_command(":%d").expect("clear buffer");
         session
             .apply_normal_command("ihello\nhello_world\nhello_rust\n\x1b")
             .expect("re-insert completion candidates");

@@ -15,8 +15,7 @@ fn acquire_session_test_lock() -> MutexGuard<'static, ()> {
 #[test]
 fn jumplist_api_returns_empty_list_after_clearjumps() {
     let _guard = acquire_session_test_lock();
-    let mut session =
-        VimCoreSession::new("one\ntwo\nthree\n").expect("session should initialize");
+    let mut session = VimCoreSession::new("one\ntwo\nthree\n").expect("session should initialize");
 
     session
         .apply_ex_command(":clearjumps")
@@ -96,7 +95,10 @@ fn jumplist_current_index_tracks_ctrl_o_and_ctrl_i_navigation() {
         .expect("gg should succeed");
 
     let before_jump_back = session.jumplist();
-    assert_eq!(before_jump_back.current_index, before_jump_back.entries.len());
+    assert_eq!(
+        before_jump_back.current_index,
+        before_jump_back.entries.len()
+    );
 
     session
         .apply_normal_command("\u{f}")

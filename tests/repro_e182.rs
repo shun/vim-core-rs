@@ -1,7 +1,5 @@
 use std::sync::{Mutex, OnceLock};
-use vim_core_rs::{
-    CoreCommandOutcome, VimCoreSession,
-};
+use vim_core_rs::{CoreCommandOutcome, VimCoreSession};
 
 fn session_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -20,26 +18,48 @@ fn e182_repro_multiple_sessions_should_all_have_custom_commands() {
 
     // First session
     {
-        let mut session1 = VimCoreSession::new("session 1").expect("first session should initialize");
-        
-        let direct_outcome = session1.apply_ex_command(":CoreInternalWrite direct.txt").expect("direct internal command should work in session 1");
-        assert!(matches!(direct_outcome, CoreCommandOutcome::HostActionQueued), "Session 1 should have internal command");
+        let mut session1 =
+            VimCoreSession::new("session 1").expect("first session should initialize");
 
-        let outcome = session1.apply_ex_command(":write test1.txt").expect("write should work in session 1");
+        let direct_outcome = session1
+            .apply_ex_command(":CoreInternalWrite direct.txt")
+            .expect("direct internal command should work in session 1");
+        assert!(
+            matches!(direct_outcome, CoreCommandOutcome::HostActionQueued),
+            "Session 1 should have internal command"
+        );
+
+        let outcome = session1
+            .apply_ex_command(":write test1.txt")
+            .expect("write should work in session 1");
         println!("Outcome 1: {:?}", outcome);
-        assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued), "Session 1 should intercept write");
+        assert!(
+            matches!(outcome, CoreCommandOutcome::HostActionQueued),
+            "Session 1 should intercept write"
+        );
     }
 
     // Second session
     {
-        let mut session2 = VimCoreSession::new("session 2").expect("second session should initialize");
-        
-        // Check direct internal command first
-        let direct_outcome = session2.apply_ex_command(":CoreInternalWrite direct.txt").expect("direct internal command should work in session 2");
-        assert!(matches!(direct_outcome, CoreCommandOutcome::HostActionQueued), "Session 2 should still have internal command");
+        let mut session2 =
+            VimCoreSession::new("session 2").expect("second session should initialize");
 
-        let outcome = session2.apply_ex_command(":write test2.txt").expect("write should work in session 2");
+        // Check direct internal command first
+        let direct_outcome = session2
+            .apply_ex_command(":CoreInternalWrite direct.txt")
+            .expect("direct internal command should work in session 2");
+        assert!(
+            matches!(direct_outcome, CoreCommandOutcome::HostActionQueued),
+            "Session 2 should still have internal command"
+        );
+
+        let outcome = session2
+            .apply_ex_command(":write test2.txt")
+            .expect("write should work in session 2");
         println!("Outcome 2: {:?}", outcome);
-        assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued), "Session 2 should also intercept write");
+        assert!(
+            matches!(outcome, CoreCommandOutcome::HostActionQueued),
+            "Session 2 should also intercept write"
+        );
     }
 }

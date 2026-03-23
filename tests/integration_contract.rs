@@ -1,7 +1,5 @@
 use std::sync::{Mutex, OnceLock};
-use vim_core_rs::{
-    CoreCommandOutcome, CoreHostAction, CoreMode, CorePendingInput, VimCoreSession,
-};
+use vim_core_rs::{CoreCommandOutcome, CoreHostAction, CoreMode, CorePendingInput, VimCoreSession};
 
 fn session_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -18,23 +16,29 @@ fn assert_host_action<F>(session: &mut VimCoreSession, command: &str, predicate:
 where
     F: FnOnce(&CoreHostAction),
 {
-    let outcome = session.apply_ex_command(command)
+    let outcome = session
+        .apply_ex_command(command)
         .expect(&format!("Failed to apply command: {}", command));
-    
+
     match outcome {
         CoreCommandOutcome::HostActionQueued => {
-            let action = session.take_pending_host_action()
+            let action = session
+                .take_pending_host_action()
                 .expect(&format!("Expected host action for command: {}", command));
             predicate(&action);
         }
-        _ => panic!("Expected HostActionQueued for command: {}, got {:?}", command, outcome),
+        _ => panic!(
+            "Expected HostActionQueued for command: {}, got {:?}",
+            command, outcome
+        ),
     }
 }
 
 fn assert_write_action(session: &mut VimCoreSession, command: &str, force: bool) {
     assert_host_action(session, command, |action| {
         if let CoreHostAction::Write {
-            force: actual_force, ..
+            force: actual_force,
+            ..
         } = action
         {
             assert_eq!(
@@ -50,7 +54,8 @@ fn assert_write_action(session: &mut VimCoreSession, command: &str, force: bool)
 fn assert_quit_action(session: &mut VimCoreSession, command: &str, force: bool) {
     assert_host_action(session, command, |action| {
         if let CoreHostAction::Quit {
-            force: actual_force, ..
+            force: actual_force,
+            ..
         } = action
         {
             assert_eq!(
@@ -67,8 +72,7 @@ fn assert_quit_action(session: &mut VimCoreSession, command: &str, force: bool) 
 fn side_effect_convergence_matrix() {
     let _guard = acquire_session_test_lock();
 
-    let mut session = VimCoreSession::new("Original text")
-        .expect("Failed to initialize session");
+    let mut session = VimCoreSession::new("Original text").expect("Failed to initialize session");
 
     for command in ["write", "write!", "update", "up!"] {
         assert_write_action(&mut session, command, command.ends_with('!'));
@@ -83,7 +87,10 @@ fn side_effect_convergence_matrix() {
     }
 
     assert_host_action(&mut session, "redraw", |action| {
-        if let CoreHostAction::Redraw { clear_before_draw, .. } = action {
+        if let CoreHostAction::Redraw {
+            clear_before_draw, ..
+        } = action
+        {
             assert!(!clear_before_draw);
         } else {
             panic!("Expected Redraw action, got {:?}", action);
@@ -91,7 +98,10 @@ fn side_effect_convergence_matrix() {
     });
 
     assert_host_action(&mut session, "redraw!", |action| {
-        if let CoreHostAction::Redraw { clear_before_draw, .. } = action {
+        if let CoreHostAction::Redraw {
+            clear_before_draw, ..
+        } = action
+        {
             assert!(clear_before_draw);
         } else {
             panic!("Expected Redraw action, got {:?}", action);
@@ -115,18 +125,19 @@ fn side_effect_convergence_matrix() {
 fn normal_mode_side_effects() {
     let _guard = acquire_session_test_lock();
 
-    let mut session = VimCoreSession::new("Line 1\nLine 2")
-        .expect("Failed to initialize session");
+    let mut session = VimCoreSession::new("Line 1\nLine 2").expect("Failed to initialize session");
 
     // ZZ is a normal command that saves and exits
-    let outcome = session.apply_normal_command("ZZ")
+    let outcome = session
+        .apply_normal_command("ZZ")
         .expect("Failed to apply ZZ");
-    
+
     assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
     let action = session.take_pending_host_action().expect("Expected action");
     assert!(matches!(action, CoreHostAction::Quit { .. }));
 
-    let outcome = session.apply_normal_command("ZQ")
+    let outcome = session
+        .apply_normal_command("ZQ")
         .expect("Failed to apply ZQ");
     assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
     let action = session.take_pending_host_action().expect("Expected action");
@@ -188,7 +199,10 @@ fn snapshot_and_session_state_apis_stay_consistent_within_one_session() {
     assert_eq!(session.mode(), CoreMode::Visual);
     assert_eq!(visual_snapshot.pending_input, CorePendingInput::None);
     assert_eq!(session.pending_input(), CorePendingInput::None);
-    assert_eq!(session.mark('a').expect("mark should stay available").row, 3);
+    assert_eq!(
+        session.mark('a').expect("mark should stay available").row,
+        3
+    );
 
     session
         .apply_normal_command("\x1bR")
@@ -203,6 +217,12 @@ fn snapshot_and_session_state_apis_stay_consistent_within_one_session() {
     assert_eq!(session.mode(), CoreMode::Normal);
     assert_eq!(session.pending_input(), CorePendingInput::Char);
     assert_eq!(session.snapshot().pending_input, CorePendingInput::Char);
-    assert_eq!(session.mark('a').expect("mark should survive pending state").row, 3);
+    assert_eq!(
+        session
+            .mark('a')
+            .expect("mark should survive pending state")
+            .row,
+        3
+    );
     assert_eq!(session.jumplist(), jumplist_after_jump);
 }

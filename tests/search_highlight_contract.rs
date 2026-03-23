@@ -16,63 +16,77 @@ fn acquire_session_test_lock() -> std::sync::MutexGuard<'static, ()> {
 fn test_search_pattern_and_hlsearch_state() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("").unwrap();
-    
+
     // Clear search
     session.apply_ex_command("let @/ = ''").unwrap();
     session.apply_ex_command("set nohlsearch").unwrap();
-    
+
     assert_eq!(session.get_search_pattern(), None);
     assert_eq!(session.is_hlsearch_active(), false);
-    
+
     // Set search
     session.apply_ex_command("let @/ = 'test_pattern'").unwrap();
     session.apply_ex_command("set hlsearch").unwrap();
-    
-    assert_eq!(session.get_search_pattern(), Some("test_pattern".to_string()));
+
+    assert_eq!(
+        session.get_search_pattern(),
+        Some("test_pattern".to_string())
+    );
     assert_eq!(session.is_hlsearch_active(), true);
-    
+
     // Disable highlight temporarily
     session.apply_ex_command("nohlsearch").unwrap();
     assert_eq!(session.is_hlsearch_active(), false);
-    assert_eq!(session.get_search_pattern(), Some("test_pattern".to_string()));
+    assert_eq!(
+        session.get_search_pattern(),
+        Some("test_pattern".to_string())
+    );
 }
 
 #[test]
 fn test_search_direction() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("").unwrap();
-    
+
     // Default or forward
     session.apply_ex_command("let @/ = 'test'").unwrap();
     session.apply_ex_command("let v:searchforward = 1").unwrap();
-    assert!(matches!(session.get_search_direction(), CoreSearchDirection::Forward));
-    
+    assert!(matches!(
+        session.get_search_direction(),
+        CoreSearchDirection::Forward
+    ));
+
     session.apply_ex_command("let v:searchforward = 0").unwrap();
-    assert!(matches!(session.get_search_direction(), CoreSearchDirection::Backward));
+    assert!(matches!(
+        session.get_search_direction(),
+        CoreSearchDirection::Backward
+    ));
 }
 
 #[test]
 fn test_search_highlights() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("").unwrap();
-    
+
     session.apply_ex_command("enew!").unwrap();
-    session.apply_ex_command("call setline(1, 'hello world hello')").unwrap();
+    session
+        .apply_ex_command("call setline(1, 'hello world hello')")
+        .unwrap();
     session.apply_ex_command("let @/ = 'hello'").unwrap();
     session.apply_ex_command("set hlsearch").unwrap();
-    
+
     let win_id = session.snapshot().windows[0].id as i32;
     // Fetch highlights for line 1 (window_id, row=1)
     let highlights = session.get_search_highlights(win_id, 1, 1);
-    
+
     // Should have 2 matches
     assert_eq!(highlights.len(), 2);
-    
+
     assert_eq!(highlights[0].start_row, 1);
     assert_eq!(highlights[0].start_col, 0);
     assert_eq!(highlights[0].end_row, 1);
     assert_eq!(highlights[0].end_col, 5);
-    
+
     assert_eq!(highlights[1].start_row, 1);
     assert_eq!(highlights[1].start_col, 12);
     assert_eq!(highlights[1].end_row, 1);
@@ -83,12 +97,14 @@ fn test_search_highlights() {
 fn test_cursor_match_info() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("").unwrap();
-    
+
     session.apply_ex_command("enew!").unwrap();
-    session.apply_ex_command("call setline(1, 'hello world hello')").unwrap();
+    session
+        .apply_ex_command("call setline(1, 'hello world hello')")
+        .unwrap();
     session.apply_ex_command("let @/ = 'hello'").unwrap();
     session.apply_ex_command("set hlsearch").unwrap();
-    
+
     let win_id = session.snapshot().windows[0].id as i32;
     // Cursor on first 'hello'
     let info = session.get_cursor_match_info(win_id, 1, 0, 100, 100);
@@ -99,7 +115,7 @@ fn test_cursor_match_info() {
     } else {
         panic!("Expected Calculated(2)");
     }
-    
+
     // Cursor not on match
     let info_none = session.get_cursor_match_info(win_id, 1, 6, 100, 100);
     assert!(!info_none.is_on_match);

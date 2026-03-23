@@ -15,17 +15,18 @@ fn acquire_session_test_lock() -> MutexGuard<'static, ()> {
 #[test]
 fn test_automatic_mode_transition_via_key_injection() {
     let _guard = acquire_session_test_lock();
-    let mut session = VimCoreSession::new("line 1\n")
-        .expect("session should initialize");
+    let mut session = VimCoreSession::new("line 1\n").expect("session should initialize");
 
     assert_eq!(session.snapshot().mode, CoreMode::Normal);
 
-    // Inject 'i' to enter Insert mode. 
+    // Inject 'i' to enter Insert mode.
     session.apply_normal_command("i").expect("i command");
     assert_eq!(session.snapshot().mode, CoreMode::Insert);
 
     // Inject text and Escape to return to Normal mode.
-    session.apply_normal_command("hello\x1b").expect("hello<Esc> command");
+    session
+        .apply_normal_command("hello\x1b")
+        .expect("hello<Esc> command");
     assert_eq!(session.snapshot().mode, CoreMode::Normal);
     assert_eq!(session.snapshot().text, "helloline 1\n");
 }
@@ -33,13 +34,12 @@ fn test_automatic_mode_transition_via_key_injection() {
 #[test]
 fn test_append_command_transitions_to_insert_mode() {
     let _guard = acquire_session_test_lock();
-    let mut session = VimCoreSession::new("A")
-        .expect("session should initialize");
+    let mut session = VimCoreSession::new("A").expect("session should initialize");
 
     // 'A' should move to end of line and enter Insert mode
     session.apply_normal_command("A").expect("A command");
     assert_eq!(session.snapshot().mode, CoreMode::Insert);
-    
+
     session.apply_normal_command("BC\x1b").expect("BC<Esc>");
     assert_eq!(session.snapshot().mode, CoreMode::Normal);
     assert_eq!(session.snapshot().text, "ABC\n");
@@ -50,7 +50,9 @@ fn visual_mode_variants_are_reported_in_snapshot() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("one\ntwo\nthree\n").expect("session should initialize");
 
-    session.apply_normal_command("v").expect("v should enter visual mode");
+    session
+        .apply_normal_command("v")
+        .expect("v should enter visual mode");
     assert_eq!(session.snapshot().mode, CoreMode::Visual);
     assert_eq!(session.mode(), CoreMode::Visual);
 
@@ -96,7 +98,9 @@ fn replace_mode_is_reported_in_snapshot() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("sample text\n").expect("session should initialize");
 
-    session.apply_normal_command("R").expect("R should enter replace mode");
+    session
+        .apply_normal_command("R")
+        .expect("R should enter replace mode");
     assert_eq!(session.snapshot().mode, CoreMode::Replace);
     assert_eq!(session.mode(), CoreMode::Replace);
 }

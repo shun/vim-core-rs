@@ -67,7 +67,9 @@ fn replace_mark_and_register_commands_report_specialized_pending_kinds() {
         .expect("mark name should succeed");
     assert_eq!(session.pending_input(), CorePendingInput::None);
 
-    session.apply_normal_command("\"").expect("\" should succeed");
+    session
+        .apply_normal_command("\"")
+        .expect("\" should succeed");
     assert_eq!(session.pending_input(), CorePendingInput::Register);
     session
         .apply_normal_command("a")

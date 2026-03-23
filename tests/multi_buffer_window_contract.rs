@@ -1,5 +1,7 @@
 use std::sync::{Mutex, OnceLock};
-use vim_core_rs::{CoreBufferInfo, CoreCommandError, CoreHostAction, CoreWindowInfo, VimCoreSession};
+use vim_core_rs::{
+    CoreBufferInfo, CoreCommandError, CoreHostAction, CoreWindowInfo, VimCoreSession,
+};
 
 fn session_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -124,8 +126,16 @@ fn window_info_contains_geometry() {
     // ヘッドレス環境では小さいかもしれないが、0以上であること
     // width/height は usize なので常に >= 0。
     // ヘッドレス環境でも値が取得できていることだけ確認する。
-    assert!(win.width > 0, "ウィンドウ幅は正であること: got {}", win.width);
-    assert!(win.height > 0, "ウィンドウ高さは正であること: got {}", win.height);
+    assert!(
+        win.width > 0,
+        "ウィンドウ幅は正であること: got {}",
+        win.width
+    );
+    assert!(
+        win.height > 0,
+        "ウィンドウ高さは正であること: got {}",
+        win.height
+    );
 }
 
 // =============================================================================
@@ -264,8 +274,7 @@ fn switch_to_invalid_window_returns_error() {
 #[test]
 fn buffer_text_returns_content_of_specific_buffer() {
     let _guard = acquire_session_test_lock();
-    let session =
-        VimCoreSession::new("original buffer text").expect("session should initialize");
+    let session = VimCoreSession::new("original buffer text").expect("session should initialize");
 
     // バッファIDを取得
     let snapshot = session.snapshot();
@@ -295,10 +304,7 @@ fn buffer_text_returns_none_for_invalid_buffer() {
     let session = VimCoreSession::new("buffer").expect("session should initialize");
 
     let text = session.buffer_text(99999);
-    assert!(
-        text.is_none(),
-        "存在しないバッファIDに対してNoneを返すこと"
-    );
+    assert!(text.is_none(), "存在しないバッファIDに対してNoneを返すこと");
 }
 
 #[test]
@@ -365,7 +371,10 @@ fn core_buffer_info_has_required_fields() {
     );
 
     // id は Vim の b_fnum（1-based の正の値）
-    assert!(buf.id > 0, "バッファIDはVimのb_fnumに由来する正の値であること");
+    assert!(
+        buf.id > 0,
+        "バッファIDはVimのb_fnumに由来する正の値であること"
+    );
     // name は String 型（空文字列も許容、無名バッファの場合）
     // dirty は bool 型
     assert!(!buf.dirty, "初期状態のバッファは未変更であること");
@@ -388,11 +397,25 @@ fn core_window_info_has_required_fields() {
         win.id, win.buf_id, win.row, win.col, win.width, win.height, win.is_active
     );
 
-    assert!(win.id > 0, "ウィンドウIDはVimのw_idに由来する正の値であること");
-    assert!(win.buf_id > 0, "ウィンドウが表示するバッファIDは正の値であること");
+    assert!(
+        win.id > 0,
+        "ウィンドウIDはVimのw_idに由来する正の値であること"
+    );
+    assert!(
+        win.buf_id > 0,
+        "ウィンドウが表示するバッファIDは正の値であること"
+    );
     // スクリーンサイズ設定後は幾何情報が正しく取得できること
-    assert!(win.width > 0, "スクリーン設定後のウィンドウ幅は正の値であること: got {}", win.width);
-    assert!(win.height > 0, "スクリーン設定後のウィンドウ高さは正の値であること: got {}", win.height);
+    assert!(
+        win.width > 0,
+        "スクリーン設定後のウィンドウ幅は正の値であること: got {}",
+        win.width
+    );
+    assert!(
+        win.height > 0,
+        "スクリーン設定後のウィンドウ高さは正の値であること: got {}",
+        win.height
+    );
     assert!(win.is_active, "初期ウィンドウはアクティブであること");
 }
 
@@ -428,25 +451,32 @@ fn buffer_ids_use_vim_fnum_which_is_positive() {
     let mut session = VimCoreSession::new("id test").expect("session should initialize");
 
     // 複数バッファ作成後もIDは常に正の値（Vimのb_fnum由来）
-    session.apply_ex_command(":enew").expect("enew should succeed");
-    session.apply_ex_command(":enew").expect("enew should succeed");
+    session
+        .apply_ex_command(":enew")
+        .expect("enew should succeed");
+    session
+        .apply_ex_command(":enew")
+        .expect("enew should succeed");
 
     let buffers = session.buffers();
-    eprintln!("[Task 2.1] バッファID一覧: {:?}", buffers.iter().map(|b| b.id).collect::<Vec<_>>());
+    eprintln!(
+        "[Task 2.1] バッファID一覧: {:?}",
+        buffers.iter().map(|b| b.id).collect::<Vec<_>>()
+    );
 
     for buf in &buffers {
-        assert!(buf.id > 0, "すべてのバッファIDは正の値であること: got {}", buf.id);
+        assert!(
+            buf.id > 0,
+            "すべてのバッファIDは正の値であること: got {}",
+            buf.id
+        );
     }
 
     // IDはユニークであること
     let mut ids: Vec<i32> = buffers.iter().map(|b| b.id).collect();
     ids.sort();
     ids.dedup();
-    assert_eq!(
-        ids.len(),
-        buffers.len(),
-        "バッファIDはユニークであること"
-    );
+    assert_eq!(ids.len(), buffers.len(), "バッファIDはユニークであること");
 }
 
 #[test]
@@ -455,25 +485,32 @@ fn window_ids_use_vim_wid_which_is_positive() {
     let mut session = VimCoreSession::new("win id test").expect("session should initialize");
     session.set_screen_size(24, 80);
 
-    session.apply_ex_command(":split").expect("split should succeed");
-    session.apply_ex_command(":vsplit").expect("vsplit should succeed");
+    session
+        .apply_ex_command(":split")
+        .expect("split should succeed");
+    session
+        .apply_ex_command(":vsplit")
+        .expect("vsplit should succeed");
 
     let windows = session.windows();
-    eprintln!("[Task 2.1] ウィンドウID一覧: {:?}", windows.iter().map(|w| w.id).collect::<Vec<_>>());
+    eprintln!(
+        "[Task 2.1] ウィンドウID一覧: {:?}",
+        windows.iter().map(|w| w.id).collect::<Vec<_>>()
+    );
 
     for win in &windows {
-        assert!(win.id > 0, "すべてのウィンドウIDは正の値であること: got {}", win.id);
+        assert!(
+            win.id > 0,
+            "すべてのウィンドウIDは正の値であること: got {}",
+            win.id
+        );
     }
 
     // IDはユニークであること
     let mut ids: Vec<i32> = windows.iter().map(|w| w.id).collect();
     ids.sort();
     ids.dedup();
-    assert_eq!(
-        ids.len(),
-        windows.len(),
-        "ウィンドウIDはユニークであること"
-    );
+    assert_eq!(ids.len(), windows.len(), "ウィンドウIDはユニークであること");
 }
 
 // =============================================================================
@@ -489,22 +526,41 @@ fn buffers_method_returns_all_buffers() {
     // 初期状態: 1バッファ
     let initial_buffers = session.buffers();
     eprintln!("[Task 2.2] 初期バッファ数: {}", initial_buffers.len());
-    assert_eq!(initial_buffers.len(), 1, "初期状態では1つのバッファが存在すること");
+    assert_eq!(
+        initial_buffers.len(),
+        1,
+        "初期状態では1つのバッファが存在すること"
+    );
 
     // バッファ追加後: 2バッファ
-    session.apply_ex_command(":enew").expect("enew should succeed");
+    session
+        .apply_ex_command(":enew")
+        .expect("enew should succeed");
     let after_buffers = session.buffers();
     eprintln!("[Task 2.2] enew後バッファ数: {}", after_buffers.len());
-    assert_eq!(after_buffers.len(), 2, ":enew後に2つのバッファが存在すること");
+    assert_eq!(
+        after_buffers.len(),
+        2,
+        ":enew後に2つのバッファが存在すること"
+    );
 
     // 現在のバッファを変更してからさらに追加（Vim は未変更の無名バッファで :enew するとバッファを再利用する）
     session
         .apply_ex_command(":call setline(1, 'some content')")
         .expect("setline should succeed");
-    session.apply_ex_command(":enew!").expect("enew should succeed");
+    session
+        .apply_ex_command(":enew!")
+        .expect("enew should succeed");
     let final_buffers = session.buffers();
-    eprintln!("[Task 2.2] 変更後enew!のバッファ数: {}", final_buffers.len());
-    assert_eq!(final_buffers.len(), 3, "変更後:enew!で3つのバッファが存在すること");
+    eprintln!(
+        "[Task 2.2] 変更後enew!のバッファ数: {}",
+        final_buffers.len()
+    );
+    assert_eq!(
+        final_buffers.len(),
+        3,
+        "変更後:enew!で3つのバッファが存在すること"
+    );
 }
 
 #[test]
@@ -516,13 +572,23 @@ fn windows_method_returns_all_windows() {
     // 初期状態: 1ウィンドウ
     let initial_windows = session.windows();
     eprintln!("[Task 2.2] 初期ウィンドウ数: {}", initial_windows.len());
-    assert_eq!(initial_windows.len(), 1, "初期状態では1つのウィンドウが存在すること");
+    assert_eq!(
+        initial_windows.len(),
+        1,
+        "初期状態では1つのウィンドウが存在すること"
+    );
 
     // split後: 2ウィンドウ
-    session.apply_ex_command(":split").expect("split should succeed");
+    session
+        .apply_ex_command(":split")
+        .expect("split should succeed");
     let after_windows = session.windows();
     eprintln!("[Task 2.2] split後ウィンドウ数: {}", after_windows.len());
-    assert_eq!(after_windows.len(), 2, ":split後に2つのウィンドウが存在すること");
+    assert_eq!(
+        after_windows.len(),
+        2,
+        ":split後に2つのウィンドウが存在すること"
+    );
 }
 
 #[test]
@@ -531,8 +597,12 @@ fn exactly_one_active_buffer_exists() {
     let mut session = VimCoreSession::new("active buf test").expect("session should initialize");
 
     // 複数バッファ作成後もアクティブバッファは常に1つ
-    session.apply_ex_command(":enew").expect("enew should succeed");
-    session.apply_ex_command(":enew").expect("enew should succeed");
+    session
+        .apply_ex_command(":enew")
+        .expect("enew should succeed");
+    session
+        .apply_ex_command(":enew")
+        .expect("enew should succeed");
 
     let buffers = session.buffers();
     let active_count = buffers.iter().filter(|b| b.is_active).count();
@@ -555,8 +625,12 @@ fn exactly_one_active_window_exists() {
     session.set_screen_size(24, 80);
 
     // 複数ウィンドウ作成後もアクティブウィンドウは常に1つ
-    session.apply_ex_command(":split").expect("split should succeed");
-    session.apply_ex_command(":vsplit").expect("vsplit should succeed");
+    session
+        .apply_ex_command(":split")
+        .expect("split should succeed");
+    session
+        .apply_ex_command(":vsplit")
+        .expect("vsplit should succeed");
 
     let windows = session.windows();
     let active_count = windows.iter().filter(|w| w.is_active).count();
@@ -584,13 +658,16 @@ fn active_buffer_matches_snapshot_text() {
     // 注: snapshot.text は Vim が最終行に付加する改行を含む場合がある。
     //     buffer_text() は getline() ベースのため末尾改行を含まない。
     //     両者の内容が実質的に同じであることを検証する。
-    let buf_text = session.buffer_text(active_buf.id).expect("アクティブバッファのテキスト取得");
+    let buf_text = session
+        .buffer_text(active_buf.id)
+        .expect("アクティブバッファのテキスト取得");
     eprintln!(
         "[Task 2.2] snapshot.text='{:?}', buffer_text='{:?}'",
         snapshot.text, buf_text
     );
     assert_eq!(
-        snapshot.text.trim_end_matches('\n'), buf_text.trim_end_matches('\n'),
+        snapshot.text.trim_end_matches('\n'),
+        buf_text.trim_end_matches('\n'),
         "アクティブバッファのテキストがスナップショットのテキストと実質的に一致すること"
     );
 }
@@ -619,7 +696,9 @@ fn buffers_and_windows_consistent_with_snapshot() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("consistency test").expect("session should initialize");
     session.set_screen_size(24, 80);
-    session.apply_ex_command(":split").expect("split should succeed");
+    session
+        .apply_ex_command(":split")
+        .expect("split should succeed");
 
     // buffers() と windows() が snapshot() と同一の結果を返すこと
     let snapshot = session.snapshot();
@@ -655,7 +734,9 @@ fn switch_to_buffer_returns_ok_for_valid_id() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("switch buf ok").expect("session should initialize");
 
-    session.apply_ex_command(":enew").expect("enew should succeed");
+    session
+        .apply_ex_command(":enew")
+        .expect("enew should succeed");
 
     let first_buf_id = session.buffers().iter().find(|b| !b.is_active).unwrap().id;
     eprintln!("[Task 2.3] 切り替え先バッファID: {}", first_buf_id);
@@ -683,13 +764,18 @@ fn switch_to_window_returns_ok_for_valid_id() {
     let mut session = VimCoreSession::new("switch win ok").expect("session should initialize");
     session.set_screen_size(24, 80);
 
-    session.apply_ex_command(":split").expect("split should succeed");
+    session
+        .apply_ex_command(":split")
+        .expect("split should succeed");
 
     let inactive_win_id = session.windows().iter().find(|w| !w.is_active).unwrap().id;
     eprintln!("[Task 2.3] 切り替え先ウィンドウID: {}", inactive_win_id);
 
     let result: Result<(), CoreCommandError> = session.switch_to_window(inactive_win_id);
-    assert!(result.is_ok(), "有効なウィンドウIDへの切り替えはOkを返すこと");
+    assert!(
+        result.is_ok(),
+        "有効なウィンドウIDへの切り替えはOkを返すこと"
+    );
 }
 
 #[test]
@@ -728,7 +814,10 @@ fn buffer_text_for_inactive_buffer_returns_correct_content() {
     let buffers = session.buffers();
     eprintln!(
         "[Task 2.3] バッファ一覧: {:?}",
-        buffers.iter().map(|b| (b.id, b.is_active)).collect::<Vec<_>>()
+        buffers
+            .iter()
+            .map(|b| (b.id, b.is_active))
+            .collect::<Vec<_>>()
     );
 
     // 非アクティブバッファ（最初のバッファ）のテキストを取得
@@ -755,17 +844,13 @@ fn buffer_text_returns_none_for_nonexistent_buffer() {
 
     let text = session.buffer_text(99999);
     eprintln!("[Task 2.3] 存在しないバッファのテキスト: {:?}", text);
-    assert!(
-        text.is_none(),
-        "存在しないバッファIDに対してNoneを返すこと"
-    );
+    assert!(text.is_none(), "存在しないバッファIDに対してNoneを返すこと");
 }
 
 #[test]
 fn switch_buffer_and_verify_text_round_trip() {
     let _guard = acquire_session_test_lock();
-    let mut session =
-        VimCoreSession::new("buffer A content").expect("session should initialize");
+    let mut session = VimCoreSession::new("buffer A content").expect("session should initialize");
     session.set_screen_size(24, 80);
 
     let buf_a_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
@@ -812,7 +897,8 @@ fn switch_buffer_and_verify_text_round_trip() {
     let snapshot = session.snapshot();
     // snapshot.text には末尾改行が含まれる場合がある
     assert_eq!(
-        snapshot.text.trim_end_matches('\n'), "buffer A content",
+        snapshot.text.trim_end_matches('\n'),
+        "buffer A content",
         "バッファA切り替え後のスナップショットテキストが正しいこと"
     );
 
@@ -828,8 +914,7 @@ fn switch_buffer_and_verify_text_round_trip() {
 #[test]
 fn switch_window_preserves_buffer_association() {
     let _guard = acquire_session_test_lock();
-    let mut session =
-        VimCoreSession::new("window buf assoc").expect("session should initialize");
+    let mut session = VimCoreSession::new("window buf assoc").expect("session should initialize");
     session.set_screen_size(24, 80);
 
     // ウィンドウ分割
@@ -1144,7 +1229,8 @@ fn screen_size_change_triggers_layout_changed_action() {
 #[test]
 fn split_triggers_both_win_new_and_layout_changed() {
     let _guard = acquire_session_test_lock();
-    let mut session = VimCoreSession::new("combined event test").expect("session should initialize");
+    let mut session =
+        VimCoreSession::new("combined event test").expect("session should initialize");
     session.set_screen_size(24, 80);
 
     // :split はウィンドウ生成とレイアウト変更の両方を発火すること

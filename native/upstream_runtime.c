@@ -1,5 +1,6 @@
 #include "upstream_runtime.h"
 #include "vim_bridge.h"
+#include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -77,6 +78,51 @@ static int upstream_runtime_bootstrapped = FALSE;
 static upstream_runtime_session_t* upstream_runtime_active_session = NULL;
 int upstream_runtime_is_injecting = FALSE;
 jmp_buf* upstream_runtime_active_quit_env = NULL;
+static FILE* upstream_runtime_debug_log_file = NULL;
+static int upstream_runtime_debug_log_to_stderr = TRUE;
+
+static void upstream_runtime_debug_vprintf(const char* format, va_list args) {
+    FILE* stream = upstream_runtime_debug_log_file != NULL
+        ? upstream_runtime_debug_log_file
+        : (upstream_runtime_debug_log_to_stderr ? stderr : NULL);
+    if (stream == NULL) {
+        return;
+    }
+    vfprintf(stream, format, args);
+    fflush(stream);
+}
+
+static void upstream_runtime_debug_printf(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    upstream_runtime_debug_vprintf(format, args);
+    va_end(args);
+}
+
+void upstream_runtime_set_debug_log_path(const char* path, uintptr_t path_len) {
+    if (upstream_runtime_debug_log_file != NULL) {
+        fclose(upstream_runtime_debug_log_file);
+        upstream_runtime_debug_log_file = NULL;
+    }
+
+    if (path == NULL || path_len == 0) {
+        upstream_runtime_debug_log_to_stderr = TRUE;
+        return;
+    }
+
+    char* owned_path = (char*)malloc((size_t)path_len + 1U);
+    if (owned_path == NULL) {
+        upstream_runtime_debug_log_to_stderr = FALSE;
+        return;
+    }
+
+    memcpy(owned_path, path, (size_t)path_len);
+    owned_path[path_len] = '\0';
+
+    upstream_runtime_debug_log_file = fopen(owned_path, "a");
+    upstream_runtime_debug_log_to_stderr = FALSE;
+    free(owned_path);
+}
 
 /* Stubs for Input Method functions to fix link errors on some platforms */
 char *did_set_imactivatefunc(optset_T *args) { (void)args; return NULL; }
@@ -1191,7 +1237,7 @@ vim_core_jumplist_t upstream_runtime_get_jumplist(
     jumplist.has_current_index = true;
     jumplist.entry_count = (uintptr_t)valid_count;
 
-    printf(
+    upstream_runtime_debug_printf(
         "[DEBUG] get_jumplist: raw_len=%d raw_index=%d valid_count=%d\n",
         curwin->w_jumplistlen,
         curwin->w_jumplistidx,
@@ -1222,7 +1268,7 @@ vim_core_jumplist_t upstream_runtime_get_jumplist(
         jumplist.entries[out_index].buf_id = mark.fmark.fnum;
         jumplist.entries[out_index].row = (uintptr_t)mark.fmark.mark.lnum - 1;
         jumplist.entries[out_index].col = (uintptr_t)mark.fmark.mark.col;
-        printf(
+        upstream_runtime_debug_printf(
             "[DEBUG] get_jumplist: entry[%d] buf_id=%d row=%lu col=%lu\n",
             out_index,
             jumplist.entries[out_index].buf_id,
@@ -1866,7 +1912,7 @@ vim_core_option_get_result_t upstream_runtime_get_option(
         && upstream_runtime_option_rejects_local_scope(name, &option_flags)) {
         result.status = VIM_CORE_STATUS_COMMAND_ERROR;
         result.option_type = upstream_runtime_option_type_from_flags(option_flags);
-        printf(
+        upstream_runtime_debug_printf(
             "[DEBUG] get_option: local scope unsupported for name='%s' flags=%d\n",
             name,
             option_flags
@@ -1922,7 +1968,7 @@ vim_core_option_get_result_t upstream_runtime_get_option(
             break;
     }
 
-    printf(
+    upstream_runtime_debug_printf(
         "[DEBUG] get_option: name='%s' kind=%d status=%d type=%d number=%lld string_len=%lu\n",
         name,
         (int)option_kind,

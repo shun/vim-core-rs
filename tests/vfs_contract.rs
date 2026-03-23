@@ -1,7 +1,7 @@
 use std::sync::{Mutex, OnceLock};
 use vim_core_rs::{
-    CoreBufferSourceKind, CoreDeferredClose, CorePendingVfsOperation, CoreRequestEntry,
-    CoreHostAction, CoreRequestStatus, CoreVfsError, CoreVfsErrorKind, CoreVfsOperationKind,
+    CoreBufferSourceKind, CoreDeferredClose, CoreHostAction, CorePendingVfsOperation,
+    CoreRequestEntry, CoreRequestStatus, CoreVfsError, CoreVfsErrorKind, CoreVfsOperationKind,
     CoreVfsRequest, CoreVfsResponse, VfsLogEvent, VimCoreSession,
 };
 
@@ -189,7 +189,9 @@ fn vfs_transaction_log_records_quit_deferred_resumed_and_denied_events() {
         })
         .expect("load should apply");
 
-    session.apply_normal_command("A!").expect("edit should succeed");
+    session
+        .apply_normal_command("A!")
+        .expect("edit should succeed");
     session
         .apply_ex_command(":wq")
         .expect("wq should queue save on VFS buffer");
@@ -213,15 +215,18 @@ fn vfs_transaction_log_records_quit_deferred_resumed_and_denied_events() {
 
     let log = session.vfs_transaction_log();
     assert!(
-        log.iter().any(|entry| entry.event == VfsLogEvent::QuitDeferred),
+        log.iter()
+            .any(|entry| entry.event == VfsLogEvent::QuitDeferred),
         "deferred close should be logged: {log:?}"
     );
     assert!(
-        log.iter().any(|entry| entry.event == VfsLogEvent::QuitDenied),
+        log.iter()
+            .any(|entry| entry.event == VfsLogEvent::QuitDenied),
         "quit denial should be logged: {log:?}"
     );
     assert!(
-        log.iter().any(|entry| entry.event == VfsLogEvent::QuitResumed),
+        log.iter()
+            .any(|entry| entry.event == VfsLogEvent::QuitResumed),
         "deferred close resume should be logged: {log:?}"
     );
 }
@@ -279,7 +284,10 @@ fn edit_command_queues_resolve_request_for_vfs_locator() {
         .apply_ex_command(":edit mem://notes/alpha")
         .expect("edit should queue resolve request");
 
-    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::HostActionQueued));
+    assert!(matches!(
+        outcome,
+        vim_core_rs::CoreCommandOutcome::HostActionQueued
+    ));
     assert!(matches!(
         take_next_vfs_request(&mut session),
         CoreVfsRequest::Resolve {
@@ -319,7 +327,10 @@ fn resolved_vfs_response_queues_follow_up_load_request() {
         })
         .expect("resolved response should queue load");
 
-    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::HostActionQueued));
+    assert!(matches!(
+        outcome,
+        vim_core_rs::CoreCommandOutcome::HostActionQueued
+    ));
     assert!(matches!(
         take_next_vfs_request(&mut session),
         CoreVfsRequest::Load {
@@ -335,7 +346,9 @@ fn loaded_vfs_response_commits_text_to_target_buffer_only() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
-    session.apply_ex_command(":vnew").expect("vnew should succeed");
+    session
+        .apply_ex_command(":vnew")
+        .expect("vnew should succeed");
     let buffers = session.buffers();
     let original_buf_id = buffers
         .iter()
@@ -376,8 +389,14 @@ fn loaded_vfs_response_commits_text_to_target_buffer_only() {
         })
         .expect("loaded response should commit target buffer");
 
-    assert_eq!(session.buffer_text(target_buf_id).as_deref(), Some("virtual text"));
-    assert_eq!(session.buffer_text(original_buf_id).as_deref(), Some("hello"));
+    assert_eq!(
+        session.buffer_text(target_buf_id).as_deref(),
+        Some("virtual text")
+    );
+    assert_eq!(
+        session.buffer_text(original_buf_id).as_deref(),
+        Some("hello")
+    );
 
     let binding = session
         .buffer_binding(target_buf_id)
@@ -427,7 +446,10 @@ fn write_command_on_vfs_buffer_queues_save_request_to_host() {
     let outcome = session
         .apply_ex_command(":write")
         .expect("write should queue save request");
-    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::HostActionQueued));
+    assert!(matches!(
+        outcome,
+        vim_core_rs::CoreCommandOutcome::HostActionQueued
+    ));
 
     let save_request = take_next_vfs_request(&mut session);
     match save_request {
@@ -481,7 +503,10 @@ fn write_with_target_on_vfs_buffer_passes_target_locator_to_host() {
     let outcome = session
         .apply_ex_command(":write mem://backup/beta")
         .expect("write with target should queue save request");
-    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::HostActionQueued));
+    assert!(matches!(
+        outcome,
+        vim_core_rs::CoreCommandOutcome::HostActionQueued
+    ));
 
     let save_request = take_next_vfs_request(&mut session);
     match save_request {
@@ -545,7 +570,10 @@ fn write_on_local_buffer_does_not_use_vfs_save_flow() {
     let outcome = session
         .apply_ex_command(":write /tmp/test-local.txt")
         .expect("write on local buffer should succeed");
-    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::HostActionQueued));
+    assert!(matches!(
+        outcome,
+        vim_core_rs::CoreCommandOutcome::HostActionQueued
+    ));
 
     // VfsRequest ではなく Write action が出る
     match session.take_pending_host_action() {
@@ -592,7 +620,10 @@ fn save_success_response_clears_dirty_flag_on_vfs_buffer() {
     session
         .apply_ex_command(":s/delta/DELTA/")
         .expect("substitute should succeed");
-    assert!(session.snapshot().dirty, "buffer should be dirty after edit");
+    assert!(
+        session.snapshot().dirty,
+        "buffer should be dirty after edit"
+    );
 
     // :write
     session
@@ -611,7 +642,10 @@ fn save_success_response_clears_dirty_flag_on_vfs_buffer() {
         })
         .expect("saved response should succeed");
 
-    assert!(!session.snapshot().dirty, "buffer should be clean after save success");
+    assert!(
+        !session.snapshot().dirty,
+        "buffer should be clean after save success"
+    );
 }
 
 #[test]
@@ -671,9 +705,20 @@ fn save_failure_response_keeps_buffer_dirty() {
         })
         .expect("failed response should be handled");
 
-    assert!(session.snapshot().dirty, "buffer should remain dirty after save failure");
+    assert!(
+        session.snapshot().dirty,
+        "buffer should remain dirty after save failure"
+    );
     let binding = session
-        .buffer_binding(session.snapshot().buffers.iter().find(|b| b.is_active).unwrap().id)
+        .buffer_binding(
+            session
+                .snapshot()
+                .buffers
+                .iter()
+                .find(|b| b.is_active)
+                .unwrap()
+                .id,
+        )
         .expect("binding should exist");
     assert!(matches!(
         binding.last_vfs_error,
@@ -727,7 +772,10 @@ fn wq_on_vfs_buffer_queues_save_then_closes_on_success() {
     let outcome = session
         .apply_ex_command(":wq")
         .expect("wq should queue save request");
-    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::HostActionQueued));
+    assert!(matches!(
+        outcome,
+        vim_core_rs::CoreCommandOutcome::HostActionQueued
+    ));
 
     let save_id = match take_next_vfs_request(&mut session) {
         CoreVfsRequest::Save { request_id, .. } => request_id,
@@ -742,7 +790,10 @@ fn wq_on_vfs_buffer_queues_save_then_closes_on_success() {
         .find(|b| b.is_active)
         .expect("active buffer should exist")
         .clone();
-    assert_eq!(active_buf.deferred_close, Some(CoreDeferredClose::SaveAndClose));
+    assert_eq!(
+        active_buf.deferred_close,
+        Some(CoreDeferredClose::SaveAndClose)
+    );
 
     // save success -> quit action が発行される
     session
@@ -760,7 +811,10 @@ fn wq_on_vfs_buffer_queues_save_then_closes_on_success() {
             break;
         }
     }
-    assert!(found_quit, "Quit action should be queued after save success on :wq");
+    assert!(
+        found_quit,
+        "Quit action should be queued after save success on :wq"
+    );
 }
 
 #[test]
@@ -860,7 +914,10 @@ fn quit_force_on_vfs_buffer_with_pending_save_is_allowed() {
     let outcome = session
         .apply_ex_command(":quit!")
         .expect("quit! should be allowed even with pending save");
-    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::HostActionQueued));
+    assert!(matches!(
+        outcome,
+        vim_core_rs::CoreCommandOutcome::HostActionQueued
+    ));
 
     let mut found_quit = false;
     while let Some(action) = session.take_pending_host_action() {
@@ -936,7 +993,10 @@ fn wq_save_failure_blocks_close_and_reports_error() {
             found_quit = true;
         }
     }
-    assert!(!found_quit, "quit should not be queued after save failure on :wq");
+    assert!(
+        !found_quit,
+        "quit should not be queued after save failure on :wq"
+    );
 
     // deferred close がクリアされ、エラーが観測できる
     let active_buf = session
@@ -946,7 +1006,10 @@ fn wq_save_failure_blocks_close_and_reports_error() {
         .find(|b| b.is_active)
         .expect("active buffer")
         .clone();
-    assert!(active_buf.deferred_close.is_none(), "deferred close should be cleared after save failure");
+    assert!(
+        active_buf.deferred_close.is_none(),
+        "deferred close should be cleared after save failure"
+    );
     assert!(
         matches!(
             active_buf.last_vfs_error,
@@ -990,7 +1053,10 @@ fn resolved_local_fallback_runs_existing_edit_flow() {
         })
         .expect("local fallback should reuse native edit flow");
 
-    assert_eq!(session.snapshot().text.trim_end_matches('\n'), "fallback text");
+    assert_eq!(
+        session.snapshot().text.trim_end_matches('\n'),
+        "fallback text"
+    );
     let active_buffer = session
         .snapshot()
         .buffers
@@ -1048,8 +1114,14 @@ fn buffer_commit_applies_text_and_name_to_target_buffer_via_bridge() {
         Some("commit test content"),
         "buffer text should be committed via bridge"
     );
-    assert_eq!(active_buf.name, "notes/commit_test", "buffer name should be updated via bridge");
-    assert!(!active_buf.dirty, "buffer should not be dirty after load commit");
+    assert_eq!(
+        active_buf.name, "notes/commit_test",
+        "buffer name should be updated via bridge"
+    );
+    assert!(
+        !active_buf.dirty,
+        "buffer should not be dirty after load commit"
+    );
 }
 
 #[test]
@@ -1088,7 +1160,10 @@ fn buffer_commit_clears_dirty_on_save_success_via_bridge() {
     session
         .apply_ex_command(":s/original/modified/")
         .expect("substitute should succeed");
-    assert!(session.snapshot().dirty, "buffer should be dirty after edit");
+    assert!(
+        session.snapshot().dirty,
+        "buffer should be dirty after edit"
+    );
 
     // save 発行
     session
@@ -1157,8 +1232,14 @@ fn snapshot_buffer_info_projects_vfs_source_kind_after_load() {
 
     // snapshot から VFS metadata が投影されている
     assert_eq!(active_buf.source_kind, CoreBufferSourceKind::Virtual);
-    assert_eq!(active_buf.document_id.as_deref(), Some("doc://notes/source_kind_test"));
-    assert!(active_buf.pending_vfs_operation.is_none(), "no pending operation after load");
+    assert_eq!(
+        active_buf.document_id.as_deref(),
+        Some("doc://notes/source_kind_test")
+    );
+    assert!(
+        active_buf.pending_vfs_operation.is_none(),
+        "no pending operation after load"
+    );
     assert!(active_buf.deferred_close.is_none(), "no deferred close");
     assert!(active_buf.last_vfs_error.is_none(), "no VFS error");
 }
@@ -1365,7 +1446,10 @@ fn snapshot_projects_pending_vfs_requests_count() {
         .iter()
         .filter(|e| matches!(e.status, CoreRequestStatus::Pending))
         .count();
-    assert_eq!(pending_count, 1, "one pending VFS request after resolve issued");
+    assert_eq!(
+        pending_count, 1,
+        "one pending VFS request after resolve issued"
+    );
 }
 
 #[test]
@@ -1417,8 +1501,14 @@ fn bridge_buffer_info_exposes_vfs_metadata_fields() {
         last_vfs_error_len: 0,
     };
     assert_eq!(buf_info.id, 5);
-    assert_eq!(buf_info.source_kind, vim_core_rs::ffi::VIM_CORE_BUFFER_SOURCE_VFS);
-    assert_eq!(buf_info.pending_vfs_operation, vim_core_rs::ffi::VIM_CORE_VFS_OPERATION_LOAD);
+    assert_eq!(
+        buf_info.source_kind,
+        vim_core_rs::ffi::VIM_CORE_BUFFER_SOURCE_VFS
+    );
+    assert_eq!(
+        buf_info.pending_vfs_operation,
+        vim_core_rs::ffi::VIM_CORE_VFS_OPERATION_LOAD
+    );
     assert!(buf_info.is_active);
 }
 
@@ -1522,7 +1612,10 @@ fn bridge_buffer_commit_preserves_text_name_dirty_atomically() {
         Some("atomic content"),
         "text should be committed"
     );
-    assert_eq!(active_buf.name, "notes/atomic_test", "display name should be committed");
+    assert_eq!(
+        active_buf.name, "notes/atomic_test",
+        "display name should be committed"
+    );
     assert!(!active_buf.dirty, "dirty should be cleared after commit");
 
     // binding も一致する
@@ -1530,6 +1623,9 @@ fn bridge_buffer_commit_preserves_text_name_dirty_atomically() {
         .buffer_binding(active_buf.id)
         .expect("binding should exist");
     assert_eq!(binding.source_kind, CoreBufferSourceKind::Virtual);
-    assert_eq!(binding.document_id.as_deref(), Some("doc://notes/atomic_test"));
+    assert_eq!(
+        binding.document_id.as_deref(),
+        Some("doc://notes/atomic_test")
+    );
     assert_eq!(binding.display_name, "notes/atomic_test");
 }

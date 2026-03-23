@@ -2,12 +2,20 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::ffi::CString;
 use std::marker::PhantomData;
+use std::path::PathBuf;
 use std::ptr::NonNull;
 use std::rc::Rc;
 use std::slice;
 use std::str;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+macro_rules! debug_log {
+    ($($arg:tt)*) => {
+        crate::debug_log::emit(format_args!($($arg)*))
+    };
+}
+
+mod debug_log;
 #[allow(
     non_camel_case_types,
     non_snake_case,
@@ -19,8 +27,8 @@ mod bindings {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
-mod vfs;
 mod vfd;
+mod vfs;
 
 /// FFI 境界の POD 型を公開するモジュール。
 /// bindgen で生成された型のうち、VFS POD 契約に必要なものを re-export する。
@@ -48,12 +56,12 @@ pub mod ffi {
         crate::bindings::vim_core_buffer_source_kind_VIM_CORE_BUFFER_SOURCE_VFS;
 }
 
+use vfs::DocumentCoordinator;
 pub use vfs::{
     CoreBufferBinding, CoreBufferSourceKind, CoreDeferredClose, CorePendingVfsOperation,
-    CoreRequestEntry, CoreRequestStatus, CoreVfsError, CoreVfsErrorKind,
-    CoreVfsOperationKind, CoreVfsRequest, CoreVfsResponse, VfsLogEntry, VfsLogEvent,
+    CoreRequestEntry, CoreRequestStatus, CoreVfsError, CoreVfsErrorKind, CoreVfsOperationKind,
+    CoreVfsRequest, CoreVfsResponse, VfsLogEntry, VfsLogEvent,
 };
-use vfs::DocumentCoordinator;
 
 static ACTIVE_SESSION: AtomicBool = AtomicBool::new(false);
 
@@ -392,6 +400,11 @@ pub enum CoreSessionError {
     CommandFailed(CoreCommandError),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CoreSessionOptions {
+    pub debug_log_path: Option<PathBuf>,
+}
+
 pub struct VimCoreSession {
     state: NonNull<bindings::vim_bridge_state_t>,
     document_coordinator: RefCell<DocumentCoordinator>,
@@ -412,6 +425,13 @@ enum ParsedExIntent {
 
 impl VimCoreSession {
     pub fn new(initial_text: &str) -> Result<Self, CoreSessionError> {
+        Self::new_with_options(initial_text, CoreSessionOptions::default())
+    }
+
+    pub fn new_with_options(
+        initial_text: &str,
+        options: CoreSessionOptions,
+    ) -> Result<Self, CoreSessionError> {
         if ACTIVE_SESSION
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .is_err()
@@ -419,11 +439,28 @@ impl VimCoreSession {
             return Err(CoreSessionError::SessionAlreadyActive);
         }
 
+        let log_config = debug_log::DebugLogConfig {
+            path: options.debug_log_path,
+        };
+        if debug_log::configure(&log_config).is_err() {
+            ACTIVE_SESSION.store(false, Ordering::Release);
+            return Err(CoreSessionError::InitializationFailed {
+                reason_code: "debug_log_init_failed",
+            });
+        }
+        let native_log_path = log_config
+            .path
+            .as_ref()
+            .map(|path| path.to_string_lossy().into_owned());
+        match native_log_path.as_deref() {
+            Some(path) => unsafe {
+                bindings::vim_bridge_set_debug_log_path(path.as_ptr().cast(), path.len())
+            },
+            None => unsafe { bindings::vim_bridge_set_debug_log_path(std::ptr::null(), 0) },
+        }
+
         let state_ptr = unsafe {
-            bindings::vim_bridge_state_new(
-                initial_text.as_ptr().cast(),
-                initial_text.len(),
-            )
+            bindings::vim_bridge_state_new(initial_text.as_ptr().cast(), initial_text.len())
         };
 
         let Some(state) = NonNull::new(state_ptr) else {
@@ -442,7 +479,6 @@ impl VimCoreSession {
         };
 
         // /* println debug removed */
-
         Ok(session)
     }
 
@@ -477,17 +513,15 @@ impl VimCoreSession {
     }
 
     pub fn pending_input(&self) -> CorePendingInput {
-        let pending_input =
-            unsafe { bindings::vim_bridge_get_pending_input(self.state.as_ptr()) };
+        let pending_input = unsafe { bindings::vim_bridge_get_pending_input(self.state.as_ptr()) };
         convert_pending_input(pending_input)
     }
 
     pub fn mark(&self, mark_name: char) -> Option<CoreMarkPosition> {
         let mark_name_c = mark_name as std::os::raw::c_char;
         let mut mark = unsafe { std::mem::zeroed::<bindings::vim_core_mark_position_t>() };
-        let is_set = unsafe {
-            bindings::vim_bridge_get_mark(self.state.as_ptr(), mark_name_c, &mut mark)
-        };
+        let is_set =
+            unsafe { bindings::vim_bridge_get_mark(self.state.as_ptr(), mark_name_c, &mut mark) };
         if !is_set || !mark.is_set {
             return None;
         }
@@ -504,13 +538,7 @@ impl VimCoreSession {
     ) -> Result<(), CoreCommandError> {
         let mark_name_c = mark_name as std::os::raw::c_char;
         let status = unsafe {
-            bindings::vim_bridge_set_mark(
-                self.state.as_ptr(),
-                mark_name_c,
-                buf_id,
-                row,
-                col,
-            )
+            bindings::vim_bridge_set_mark(self.state.as_ptr(), mark_name_c, buf_id, row, col)
         };
         convert_status(status)
     }
@@ -529,7 +557,12 @@ impl VimCoreSession {
         }
     }
 
-    pub fn notify_job_status(&mut self, job_id: i32, status: JobStatus, exit_code: i32) -> Result<(), CoreCommandError> {
+    pub fn notify_job_status(
+        &mut self,
+        job_id: i32,
+        status: JobStatus,
+        exit_code: i32,
+    ) -> Result<(), CoreCommandError> {
         let mut mgr = crate::vfd::get_manager();
         if mgr.update_job_status(job_id, status as i32, exit_code) {
             Ok(())
@@ -572,16 +605,20 @@ impl VimCoreSession {
         let request_id = response.request_id();
         let mut coordinator = self.document_coordinator.borrow_mut();
         let Some(entry) = coordinator.request_entry(request_id) else {
-            println!(
+            debug_log!(
                 "[DEBUG] submit_vfs_response: unknown request_id={} response={:?}",
-                request_id, response
+                request_id,
+                response
             );
             return Err(CoreCommandError::InvalidInput);
         };
 
-        println!(
+        debug_log!(
             "[DEBUG] submit_vfs_response: request_id={} buf_id={} operation={:?} response={:?}",
-            request_id, entry.target_buf_id, entry.operation_kind, response
+            request_id,
+            entry.target_buf_id,
+            entry.operation_kind,
+            response
         );
 
         match response.clone() {
@@ -621,9 +658,7 @@ impl VimCoreSession {
                 Ok(outcome)
             }
             CoreVfsResponse::Loaded {
-                document_id,
-                text,
-                ..
+                document_id, text, ..
             } => {
                 let apply_outcome = coordinator.apply_response(response.clone());
                 if !matches!(apply_outcome, vfs::CoreResponseApplyOutcome::Applied) {
@@ -652,9 +687,10 @@ impl VimCoreSession {
 
                 match apply_outcome {
                     vfs::CoreResponseApplyOutcome::Applied => {
-                        println!(
+                        debug_log!(
                             "[DEBUG] submit_vfs_response: save success applied buf_id={} document_id={}",
-                            target_buf_id, document_id
+                            target_buf_id,
+                            document_id
                         );
                         // dirty フラグをクリア
                         drop(coordinator);
@@ -673,37 +709,37 @@ impl VimCoreSession {
                             .borrow()
                             .deferred_close(target_buf_id);
                         if let Some(close_kind) = deferred {
-                            println!(
+                            debug_log!(
                                 "[DEBUG] submit_vfs_response: deferred close triggered buf_id={} kind={:?}",
-                                target_buf_id, close_kind
+                                target_buf_id,
+                                close_kind
                             );
                             self.document_coordinator
                                 .borrow_mut()
                                 .clear_deferred_close(target_buf_id, "save applied");
                             let snapshot = self.snapshot();
-                            self.pending_host_actions
-                                .borrow_mut()
-                                .push_back(CoreHostAction::Quit {
+                            self.pending_host_actions.borrow_mut().push_back(
+                                CoreHostAction::Quit {
                                     force: false,
                                     issued_after_revision: snapshot.revision,
-                                });
+                                },
+                            );
                         }
 
                         Ok(CoreCommandOutcome::NoChange)
                     }
                     vfs::CoreResponseApplyOutcome::StaleRejected => {
-                        println!(
+                        debug_log!(
                             "[DEBUG] submit_vfs_response: save stale rejected buf_id={} document_id={}",
-                            target_buf_id, document_id
+                            target_buf_id,
+                            document_id
                         );
                         // revision mismatch の場合、deferred close もクリアして拒否
                         let deferred = coordinator.deferred_close(target_buf_id);
                         if deferred.is_some() {
-                            coordinator.clear_deferred_close(
-                                target_buf_id,
-                                "save rejected as stale",
-                            );
-                            println!(
+                            coordinator
+                                .clear_deferred_close(target_buf_id, "save rejected as stale");
+                            debug_log!(
                                 "[DEBUG] submit_vfs_response: deferred close cleared due to stale save buf_id={}",
                                 target_buf_id
                             );
@@ -726,11 +762,8 @@ impl VimCoreSession {
                 // save failure, cancel, timeout の場合は deferred close をクリア
                 let deferred = coordinator.deferred_close(target_buf_id);
                 if deferred.is_some() {
-                    coordinator.clear_deferred_close(
-                        target_buf_id,
-                        "save failed or interrupted",
-                    );
-                    println!(
+                    coordinator.clear_deferred_close(target_buf_id, "save failed or interrupted");
+                    debug_log!(
                         "[DEBUG] submit_vfs_response: deferred close cleared due to save failure/cancel/timeout buf_id={}",
                         target_buf_id
                     );
@@ -791,9 +824,7 @@ impl VimCoreSession {
                     .push_back(CoreHostAction::VfsRequest(request));
                 Ok(CoreCommandOutcome::HostActionQueued)
             }
-            ParsedExIntent::Write { path, force } => {
-                self.apply_write_intent(path, force, None)
-            }
+            ParsedExIntent::Write { path, force } => self.apply_write_intent(path, force, None),
             ParsedExIntent::Update { path, force } => {
                 let snapshot = self.snapshot();
                 let active_buf = snapshot
@@ -807,7 +838,7 @@ impl VimCoreSession {
 
                 // VFS buffer の場合: :update は dirty な場合のみ save
                 if is_vfs && !snapshot.dirty {
-                    println!(
+                    debug_log!(
                         "[DEBUG] apply_intent: :update on clean VFS buffer buf_id={}, skipping save",
                         buf_id
                     );
@@ -827,7 +858,7 @@ impl VimCoreSession {
 
                 let is_vfs = self.document_coordinator.borrow().is_vfs_buffer(buf_id);
                 if is_vfs {
-                    println!(
+                    debug_log!(
                         "[DEBUG] apply_intent: :wq on VFS buffer buf_id={}, initiating save-and-close",
                         buf_id
                     );
@@ -858,7 +889,7 @@ impl VimCoreSession {
 
                 let is_vfs = self.document_coordinator.borrow().is_vfs_buffer(buf_id);
                 if is_vfs && snapshot.dirty {
-                    println!(
+                    debug_log!(
                         "[DEBUG] apply_intent: :xit on dirty VFS buffer buf_id={}, initiating save-if-dirty-and-close",
                         buf_id
                     );
@@ -912,7 +943,7 @@ impl VimCoreSession {
                 // pending save がある VFS buffer では :quit を拒否
                 let coordinator = self.document_coordinator.borrow();
                 if coordinator.has_pending_save(buf_id) {
-                    println!(
+                    debug_log!(
                         "[DEBUG] apply_intent: :quit rejected on VFS buffer buf_id={} with pending save",
                         buf_id
                     );
@@ -961,9 +992,7 @@ impl VimCoreSession {
             drop(coordinator);
 
             // バッファテキストを取得
-            let text = self
-                .buffer_text(buf_id)
-                .unwrap_or_default();
+            let text = self.buffer_text(buf_id).unwrap_or_default();
 
             let target_locator = if path.is_empty() { None } else { Some(path) };
 
@@ -980,9 +1009,10 @@ impl VimCoreSession {
                 force,
             );
 
-            println!(
+            debug_log!(
                 "[DEBUG] apply_write_intent: VFS save queued buf_id={} request={:?}",
-                buf_id, request
+                buf_id,
+                request
             );
 
             self.pending_host_actions
@@ -992,9 +1022,12 @@ impl VimCoreSession {
         } else {
             // local buffer: 既存フロー
             let revision = snapshot.revision;
-            println!(
+            debug_log!(
                 "[DEBUG] apply_write_intent: local write buf_id={} path={} force={} revision={}",
-                buf_id, path, force, revision
+                buf_id,
+                path,
+                force,
+                revision
             );
             self.pending_host_actions
                 .borrow_mut()
@@ -1014,17 +1047,28 @@ impl VimCoreSession {
 
     pub fn get_undo_tree(&self, buf_id: i32) -> Result<CoreUndoTree, CoreCommandError> {
         let mut tree = unsafe { std::mem::zeroed() };
-        let result = unsafe { bindings::vim_bridge_get_undo_tree(self.state.as_ptr(), buf_id, &mut tree) };
+        let result =
+            unsafe { bindings::vim_bridge_get_undo_tree(self.state.as_ptr(), buf_id, &mut tree) };
         if result != 0 {
-            return Err(CoreCommandError::OperationFailed { reason_code: result as u32 });
+            return Err(CoreCommandError::OperationFailed {
+                reason_code: result as u32,
+            });
         }
         Ok(convert_undo_tree(tree))
     }
 
     pub fn undo_jump(&mut self, buf_id: i32, seq: i32) -> Result<(), CoreCommandError> {
-        let result = unsafe { bindings::vim_bridge_undo_jump(self.state.as_ptr(), buf_id, seq as ::std::os::raw::c_long) };
+        let result = unsafe {
+            bindings::vim_bridge_undo_jump(
+                self.state.as_ptr(),
+                buf_id,
+                seq as ::std::os::raw::c_long,
+            )
+        };
         if result != 0 {
-            return Err(CoreCommandError::OperationFailed { reason_code: result as u32 });
+            return Err(CoreCommandError::OperationFailed {
+                reason_code: result as u32,
+            });
         }
         Ok(())
     }
@@ -1055,7 +1099,11 @@ impl VimCoreSession {
         if s.is_empty() { None } else { Some(s) }
     }
 
-    pub fn get_line_syntax(&self, win_id: i32, lnum: i64) -> Result<Vec<CoreSyntaxChunk>, CoreCommandError> {
+    pub fn get_line_syntax(
+        &self,
+        win_id: i32,
+        lnum: i64,
+    ) -> Result<Vec<CoreSyntaxChunk>, CoreCommandError> {
         let mut out_ids = vec![0i32; 1024]; // allocate enough space for a line
         let cols = unsafe {
             bindings::vim_bridge_get_line_syntax(
@@ -1068,7 +1116,9 @@ impl VimCoreSession {
         };
 
         if cols < 0 {
-            return Err(CoreCommandError::OperationFailed { reason_code: cols as u32 });
+            return Err(CoreCommandError::OperationFailed {
+                reason_code: cols as u32,
+            });
         }
 
         let mut chunks = Vec::new();
@@ -1116,9 +1166,7 @@ impl VimCoreSession {
     pub fn eval_string(&mut self, expr: &str) -> Option<String> {
         /* println debug removed */
         let expr_c = CString::new(expr).ok()?;
-        let ptr = unsafe {
-            bindings::vim_bridge_eval_string(self.state.as_ptr(), expr_c.as_ptr())
-        };
+        let ptr = unsafe { bindings::vim_bridge_eval_string(self.state.as_ptr(), expr_c.as_ptr()) };
         if ptr.is_null() {
             /* println debug removed */
             return None;
@@ -1140,14 +1188,11 @@ impl VimCoreSession {
 
         // v:errmsg を取得してエラーメッセージの検出に使用する
         let errmsg = self.eval_string("v:errmsg").unwrap_or_default();
-        println!(
-            "[DEBUG] poll_and_dispatch_messages: v:errmsg={}",
-            errmsg
-        );
+        debug_log!("[DEBUG] poll_and_dispatch_messages: v:errmsg={}", errmsg);
 
         // execute('messages') でメッセージ履歴を取得
         let messages_output = self.eval_string("execute('messages')");
-        println!(
+        debug_log!(
             "[DEBUG] poll_and_dispatch_messages: messages_output={:?}",
             messages_output
         );
@@ -1185,9 +1230,10 @@ impl VimCoreSession {
                 CoreMessageKind::Normal
             };
 
-            println!(
+            debug_log!(
                 "[DEBUG] poll_and_dispatch_messages: dispatching kind={:?} content={}",
-                kind, trimmed
+                kind,
+                trimmed
             );
 
             handler(CoreMessageEvent {
@@ -1270,9 +1316,11 @@ impl VimCoreSession {
         display_name: &str,
         text: &str,
     ) -> Result<(), CoreCommandError> {
-        println!(
+        debug_log!(
             "[DEBUG] apply_loaded_buffer: buf_id={} display_name={} text_len={}",
-            buf_id, display_name, text.len()
+            buf_id,
+            display_name,
+            text.len()
         );
         let commit = bindings::vim_core_buffer_commit_t {
             target_buf_id: buf_id,
@@ -1283,9 +1331,8 @@ impl VimCoreSession {
             display_name_len: display_name.len(),
             clear_dirty: true,
         };
-        let status = unsafe {
-            bindings::vim_bridge_apply_buffer_commit(self.state.as_ptr(), &commit)
-        };
+        let status =
+            unsafe { bindings::vim_bridge_apply_buffer_commit(self.state.as_ptr(), &commit) };
         convert_status(status)
     }
 
@@ -1369,9 +1416,11 @@ impl VimCoreSession {
         value: i64,
         scope: CoreOptionScope,
     ) -> Result<(), CoreOptionError> {
-        println!(
+        debug_log!(
             "[DEBUG] VimCoreSession::set_option_number: name={} value={} scope={:?}",
-            name, value, scope
+            name,
+            value,
+            scope
         );
         let name_c = option_name_to_cstring(name)?;
         let result = unsafe {
@@ -1392,9 +1441,11 @@ impl VimCoreSession {
         value: bool,
         scope: CoreOptionScope,
     ) -> Result<(), CoreOptionError> {
-        println!(
+        debug_log!(
             "[DEBUG] VimCoreSession::set_option_bool: name={} value={} scope={:?}",
-            name, value, scope
+            name,
+            value,
+            scope
         );
         self.set_option_number(name, i64::from(value), scope)
     }
@@ -1405,9 +1456,11 @@ impl VimCoreSession {
         value: &str,
         scope: CoreOptionScope,
     ) -> Result<(), CoreOptionError> {
-        println!(
+        debug_log!(
             "[DEBUG] VimCoreSession::set_option_string: name={} value={} scope={:?}",
-            name, value, scope
+            name,
+            value,
+            scope
         );
         let name_c = option_name_to_cstring(name)?;
         let value_c = option_value_to_cstring(name, value)?;
@@ -1429,9 +1482,11 @@ impl VimCoreSession {
         scope: CoreOptionScope,
         expected: CoreOptionType,
     ) -> Result<ConvertedOptionValue, CoreOptionError> {
-        println!(
+        debug_log!(
             "[DEBUG] VimCoreSession::get_option_value: name={} scope={:?} expected={:?}",
-            name, scope, expected
+            name,
+            scope,
+            expected
         );
         let name_c = option_name_to_cstring(name)?;
         let result = unsafe {
@@ -1453,11 +1508,7 @@ impl VimCoreSession {
             } else {
                 let c_str = std::ffi::CStr::from_ptr(ptr);
                 let s = c_str.to_string_lossy().into_owned();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
+                if s.is_empty() { None } else { Some(s) }
             }
         }
     }
@@ -1475,7 +1526,12 @@ impl VimCoreSession {
         }
     }
 
-    pub fn get_search_highlights(&self, window_id: i32, start_row: i32, end_row: i32) -> Vec<CoreMatchRange> {
+    pub fn get_search_highlights(
+        &self,
+        window_id: i32,
+        start_row: i32,
+        end_row: i32,
+    ) -> Vec<CoreMatchRange> {
         unsafe {
             let list = bindings::vim_bridge_get_search_highlights(window_id, start_row, end_row);
             let mut result = Vec::new();
@@ -1496,12 +1552,25 @@ impl VimCoreSession {
         }
     }
 
-    pub fn get_cursor_match_info(&self, window_id: i32, row: i32, col: i32, max_count: i32, timeout_ms: i32) -> CoreCursorMatchInfo {
+    pub fn get_cursor_match_info(
+        &self,
+        window_id: i32,
+        row: i32,
+        col: i32,
+        max_count: i32,
+        timeout_ms: i32,
+    ) -> CoreCursorMatchInfo {
         unsafe {
-            let info = bindings::vim_bridge_get_cursor_match_info(window_id, row, col, max_count, timeout_ms);
+            let info = bindings::vim_bridge_get_cursor_match_info(
+                window_id, row, col, max_count, timeout_ms,
+            );
             let total_matches = match info.status {
-                bindings::vim_core_match_count_status_t_VIM_CORE_MATCH_COUNT_MAX_REACHED => MatchCountResult::MaxReached(info.total_matches as usize),
-                bindings::vim_core_match_count_status_t_VIM_CORE_MATCH_COUNT_TIMED_OUT => MatchCountResult::TimedOut,
+                bindings::vim_core_match_count_status_t_VIM_CORE_MATCH_COUNT_MAX_REACHED => {
+                    MatchCountResult::MaxReached(info.total_matches as usize)
+                }
+                bindings::vim_core_match_count_status_t_VIM_CORE_MATCH_COUNT_TIMED_OUT => {
+                    MatchCountResult::TimedOut
+                }
                 _ => MatchCountResult::Calculated(info.total_matches as usize),
             };
 
@@ -1525,11 +1594,7 @@ impl VimCoreSession {
             } else {
                 let c_str = std::ffi::CStr::from_ptr(ptr);
                 let s = c_str.to_string_lossy().into_owned();
-                if s.is_empty() {
-                    None
-                } else {
-                    Some(s)
-                }
+                if s.is_empty() { None } else { Some(s) }
             }
         }
     }
@@ -1664,18 +1729,21 @@ fn convert_snapshot(snapshot: bindings::vim_core_snapshot_t) -> CoreSnapshot {
 }
 
 /// C側のポップアップメニュー情報をRust型に変換し、C側メモリを解放する
-fn convert_pum_info(
-    pum_ptr: *mut bindings::vim_core_pum_info_t,
-) -> Option<CorePumInfo> {
+fn convert_pum_info(pum_ptr: *mut bindings::vim_core_pum_info_t) -> Option<CorePumInfo> {
     if pum_ptr.is_null() {
         return None;
     }
 
     let pum = unsafe { &*pum_ptr };
 
-    println!(
+    debug_log!(
         "[DEBUG] convert_pum_info: row={} col={} width={} height={} selected={} item_count={}",
-        pum.row, pum.col, pum.width, pum.height, pum.selected_index, pum.item_count
+        pum.row,
+        pum.col,
+        pum.width,
+        pum.height,
+        pum.selected_index,
+        pum.item_count
     );
 
     // 候補配列を走査し、各候補のC文字列をRustのStringに変換
@@ -1683,14 +1751,12 @@ fn convert_pum_info(
         let slice = unsafe { std::slice::from_raw_parts(pum.items, pum.item_count) };
         slice
             .iter()
-            .map(|item| {
-                CorePumItem {
-                    word: c_str_to_string(item.word),
-                    abbr: c_str_to_string(item.abbr),
-                    menu: c_str_to_string(item.menu),
-                    kind: c_str_to_string(item.kind),
-                    info: c_str_to_string(item.info),
-                }
+            .map(|item| CorePumItem {
+                word: c_str_to_string(item.word),
+                abbr: c_str_to_string(item.abbr),
+                menu: c_str_to_string(item.menu),
+                kind: c_str_to_string(item.kind),
+                info: c_str_to_string(item.info),
             })
             .collect()
     } else {
@@ -1718,7 +1784,7 @@ fn convert_pum_info(
         bindings::vim_bridge_free_pum_info(pum_ptr);
     }
 
-    println!(
+    debug_log!(
         "[DEBUG] convert_pum_info: conversion complete, {} items, selected={:?}",
         result.items.len(),
         result.selected_index
@@ -1732,11 +1798,7 @@ fn c_str_to_string(ptr: *const ::std::os::raw::c_char) -> String {
     if ptr.is_null() {
         return String::new();
     }
-    unsafe {
-        std::ffi::CStr::from_ptr(ptr)
-            .to_string_lossy()
-            .into_owned()
-    }
+    unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned() }
 }
 
 unsafe extern "C" {
@@ -1823,9 +1885,7 @@ fn convert_mode(mode: bindings::vim_core_mode_t) -> CoreMode {
     }
 }
 
-fn convert_pending_input(
-    pending_input: bindings::vim_core_pending_input_t,
-) -> CorePendingInput {
+fn convert_pending_input(pending_input: bindings::vim_core_pending_input_t) -> CorePendingInput {
     match pending_input {
         value if value == bindings::vim_core_pending_input_VIM_CORE_PENDING_INPUT_CHAR => {
             CorePendingInput::Char
@@ -1899,10 +1959,26 @@ fn convert_undo_tree(tree: bindings::vim_core_undo_tree_t) -> CoreUndoTree {
                 seq: node.seq as i32,
                 time: node.time,
                 save_nr: node.save_nr as i32,
-                prev_seq: if node.prev_seq > 0 { Some(node.prev_seq as i32) } else { None },
-                next_seq: if node.next_seq > 0 { Some(node.next_seq as i32) } else { None },
-                alt_next_seq: if node.alt_next_seq > 0 { Some(node.alt_next_seq as i32) } else { None },
-                alt_prev_seq: if node.alt_prev_seq > 0 { Some(node.alt_prev_seq as i32) } else { None },
+                prev_seq: if node.prev_seq > 0 {
+                    Some(node.prev_seq as i32)
+                } else {
+                    None
+                },
+                next_seq: if node.next_seq > 0 {
+                    Some(node.next_seq as i32)
+                } else {
+                    None
+                },
+                alt_next_seq: if node.alt_next_seq > 0 {
+                    Some(node.alt_next_seq as i32)
+                } else {
+                    None
+                },
+                alt_prev_seq: if node.alt_prev_seq > 0 {
+                    Some(node.alt_prev_seq as i32)
+                } else {
+                    None
+                },
                 is_newhead: node.is_newhead,
                 is_curhead: node.is_curhead,
             });
@@ -1945,7 +2021,10 @@ fn parse_ex_intent(command: &str) -> Option<ParsedExIntent> {
             path: tail,
             force: bang,
         }),
-        "update" | "up" => Some(ParsedExIntent::Update { path: tail, force: bang }),
+        "update" | "up" => Some(ParsedExIntent::Update {
+            path: tail,
+            force: bang,
+        }),
         "wq" | "wqall" => Some(ParsedExIntent::SaveAndClose { force: bang }),
         "exit" | "xit" | "x" | "xall" => Some(ParsedExIntent::SaveIfDirtyAndClose),
         "quit" | "q" | "quitall" | "qall" | "qa" => Some(ParsedExIntent::Quit { force: bang }),
@@ -1988,10 +2067,16 @@ fn convert_host_action(action: bindings::vim_host_action_t) -> Option<CoreHostAc
         }
         value if value == bindings::VIM_HOST_ACTION_JOB_START => {
             let req = action.job_start_request;
-            crate::vfd::get_manager().register_job(req.job_id, req.vfd_in, req.vfd_out, req.vfd_err);
+            crate::vfd::get_manager().register_job(
+                req.job_id,
+                req.vfd_in,
+                req.vfd_out,
+                req.vfd_err,
+            );
             let mut argv = Vec::new();
             if !req.argv_buf.is_null() && req.argv_len > 0 {
-                let slice = unsafe { std::slice::from_raw_parts(req.argv_buf as *const u8, req.argv_len) };
+                let slice =
+                    unsafe { std::slice::from_raw_parts(req.argv_buf as *const u8, req.argv_len) };
                 for arg_slice in slice.split(|&b| b == 0) {
                     if !arg_slice.is_empty() {
                         if let Ok(s) = std::str::from_utf8(arg_slice) {
@@ -2002,7 +2087,9 @@ fn convert_host_action(action: bindings::vim_host_action_t) -> Option<CoreHostAc
                 unsafe { bindings::vim_bridge_free_string(req.argv_buf) };
             }
             let cwd = if !req.cwd.is_null() {
-                let s = unsafe { std::ffi::CStr::from_ptr(req.cwd) }.to_string_lossy().into_owned();
+                let s = unsafe { std::ffi::CStr::from_ptr(req.cwd) }
+                    .to_string_lossy()
+                    .into_owned();
                 unsafe { bindings::vim_bridge_free_string(req.cwd) };
                 Some(s)
             } else {
@@ -2017,9 +2104,9 @@ fn convert_host_action(action: bindings::vim_host_action_t) -> Option<CoreHostAc
                 vfd_err: req.vfd_err,
             }))
         }
-        value if value == bindings::VIM_HOST_ACTION_JOB_STOP => {
-            Some(CoreHostAction::JobStop { job_id: action.job_start_request.job_id })
-        }
+        value if value == bindings::VIM_HOST_ACTION_JOB_STOP => Some(CoreHostAction::JobStop {
+            job_id: action.job_start_request.job_id,
+        }),
         _ => None,
     }
 }
@@ -2048,17 +2135,13 @@ enum ConvertedOptionValue {
 
 fn convert_option_scope(scope: CoreOptionScope) -> bindings::vim_core_option_scope_t {
     match scope {
-        CoreOptionScope::Default => {
-            bindings::vim_core_option_scope_VIM_CORE_OPTION_SCOPE_DEFAULT
-        }
+        CoreOptionScope::Default => bindings::vim_core_option_scope_VIM_CORE_OPTION_SCOPE_DEFAULT,
         CoreOptionScope::Global => bindings::vim_core_option_scope_VIM_CORE_OPTION_SCOPE_GLOBAL,
         CoreOptionScope::Local => bindings::vim_core_option_scope_VIM_CORE_OPTION_SCOPE_LOCAL,
     }
 }
 
-fn convert_option_type(
-    option_type: bindings::vim_core_option_type_t,
-) -> Option<CoreOptionType> {
+fn convert_option_type(option_type: bindings::vim_core_option_type_t) -> Option<CoreOptionType> {
     match option_type {
         value if value == bindings::vim_core_option_type_VIM_CORE_OPTION_TYPE_BOOL => {
             Some(CoreOptionType::Bool)
@@ -2081,9 +2164,13 @@ fn convert_option_get_result(
     result: bindings::vim_core_option_get_result_t,
 ) -> Result<ConvertedOptionValue, CoreOptionError> {
     let actual = convert_option_type(result.option_type);
-    println!(
+    debug_log!(
         "[DEBUG] convert_option_get_result: name={} scope={:?} status={} expected={:?} actual={:?}",
-        name, scope, result.status, expected, actual
+        name,
+        scope,
+        result.status,
+        expected,
+        actual
     );
 
     match result.status {
@@ -2154,9 +2241,11 @@ fn convert_option_set_result(
     name: &str,
     result: bindings::vim_core_option_set_result_t,
 ) -> Result<(), CoreOptionError> {
-    println!(
+    debug_log!(
         "[DEBUG] convert_option_set_result: name={} status={} error_len={}",
-        name, result.status, result.error_message_len
+        name,
+        result.status,
+        result.error_message_len
     );
 
     let error_message = string_from_parts(result.error_message_ptr, result.error_message_len);
@@ -2409,9 +2498,14 @@ mod undo_conversion_tests {
         unsafe extern "C" {
             fn malloc(size: usize) -> *mut std::ffi::c_void;
         }
-        
-        let ptr = unsafe { malloc(std::mem::size_of::<bindings::vim_core_undo_node_t>() * 2) as *mut bindings::vim_core_undo_node_t };
-        unsafe { std::ptr::copy_nonoverlapping(raw_nodes.as_ptr(), ptr, 2); }
+
+        let ptr = unsafe {
+            malloc(std::mem::size_of::<bindings::vim_core_undo_node_t>() * 2)
+                as *mut bindings::vim_core_undo_node_t
+        };
+        unsafe {
+            std::ptr::copy_nonoverlapping(raw_nodes.as_ptr(), ptr, 2);
+        }
 
         let tree = bindings::vim_core_undo_tree_t {
             nodes: ptr,
@@ -2428,7 +2522,7 @@ mod undo_conversion_tests {
         assert_eq!(core_tree.nodes.len(), 2);
         assert_eq!(core_tree.seq_last, 2);
         assert_eq!(core_tree.seq_cur, 2);
-        
+
         let node1 = &core_tree.nodes[0];
         assert_eq!(node1.seq, 1);
         assert_eq!(node1.time, 12345);

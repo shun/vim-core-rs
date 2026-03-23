@@ -1,8 +1,6 @@
 use std::fs;
 use std::sync::{Mutex, OnceLock};
-use vim_core_rs::{
-    CoreHostAction, VimCoreSession, CoreCommandOutcome,
-};
+use vim_core_rs::{CoreCommandOutcome, CoreHostAction, VimCoreSession};
 
 fn session_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -19,7 +17,7 @@ fn acquire_session_test_lock() -> std::sync::MutexGuard<'static, ()> {
 fn ex_write_does_not_create_file_on_disk() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
-    
+
     let test_file = "Xtest_write_not_created.txt";
     if fs::metadata(test_file).is_ok() {
         fs::remove_file(test_file).ok();
@@ -29,13 +27,12 @@ fn ex_write_does_not_create_file_on_disk() {
         .apply_ex_command(&format!(":write {}", test_file))
         .expect("write command should succeed");
 
-    assert!(matches!(
-        outcome,
-        CoreCommandOutcome::HostActionQueued
-    ));
+    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
 
     // Verify host action is queued with correct path
-    let action = session.take_pending_host_action().expect("host action should be queued");
+    let action = session
+        .take_pending_host_action()
+        .expect("host action should be queued");
     if let CoreHostAction::Write { path, force, .. } = action {
         assert_eq!(path, test_file);
         assert!(!force);
@@ -44,25 +41,27 @@ fn ex_write_does_not_create_file_on_disk() {
     }
 
     // Verify file was NOT created on disk
-    assert!(!fs::metadata(test_file).is_ok(), "File should NOT be created on disk by Vim runtime");
+    assert!(
+        !fs::metadata(test_file).is_ok(),
+        "File should NOT be created on disk by Vim runtime"
+    );
 }
 
 #[test]
 fn ex_write_bang_queues_force_write_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
-    
+
     let test_file = "Xtest_write_bang.txt";
     let outcome = session
         .apply_ex_command(&format!(":write! {}", test_file))
         .expect("write! command should succeed");
 
-    assert!(matches!(
-        outcome,
-        CoreCommandOutcome::HostActionQueued
-    ));
+    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
 
-    let action = session.take_pending_host_action().expect("host action should be queued");
+    let action = session
+        .take_pending_host_action()
+        .expect("host action should be queued");
     if let CoreHostAction::Write { path, force, .. } = action {
         assert_eq!(path, test_file);
         assert!(force);
@@ -75,17 +74,16 @@ fn ex_write_bang_queues_force_write_action() {
 fn ex_write_no_filename_queues_empty_path_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
-    
+
     let outcome = session
         .apply_ex_command(":write")
         .expect("write command should succeed");
 
-    assert!(matches!(
-        outcome,
-        CoreCommandOutcome::HostActionQueued
-    ));
+    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
 
-    let action = session.take_pending_host_action().expect("host action should be queued");
+    let action = session
+        .take_pending_host_action()
+        .expect("host action should be queued");
     if let CoreHostAction::Write { path, .. } = action {
         assert_eq!(path, "");
     } else {
@@ -97,7 +95,7 @@ fn ex_write_no_filename_queues_empty_path_action() {
 fn ex_update_is_intercepted_as_write_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
-    
+
     // :update はブリッジ層で常に write としてインターセプトされる
     // dirty 判定はホスト（Rust）側の責務
     let test_file = "Xtest_update_intercepted.txt";
@@ -105,12 +103,11 @@ fn ex_update_is_intercepted_as_write_action() {
         .apply_ex_command(&format!(":update {}", test_file))
         .expect("update command should succeed");
 
-    assert!(matches!(
-        outcome,
-        CoreCommandOutcome::HostActionQueued
-    ));
+    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
 
-    let action = session.take_pending_host_action().expect("host action should be queued");
+    let action = session
+        .take_pending_host_action()
+        .expect("host action should be queued");
     if let CoreHostAction::Write { path, .. } = action {
         assert_eq!(path, test_file);
     } else {
@@ -122,17 +119,16 @@ fn ex_update_is_intercepted_as_write_action() {
 fn ex_quit_bang_queues_force_quit_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
-    
+
     let outcome = session
         .apply_ex_command(":quit!")
         .expect("quit! command should succeed");
 
-    assert!(matches!(
-        outcome,
-        CoreCommandOutcome::HostActionQueued
-    ));
+    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
 
-    let action = session.take_pending_host_action().expect("host action should be queued");
+    let action = session
+        .take_pending_host_action()
+        .expect("host action should be queued");
     if let CoreHostAction::Quit { force, .. } = action {
         assert!(force);
     } else {
@@ -144,17 +140,16 @@ fn ex_quit_bang_queues_force_quit_action() {
 fn ex_wq_is_intercepted_as_quit_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
-    
+
     let outcome = session
         .apply_ex_command(":wq")
         .expect("wq command should succeed");
 
-    assert!(matches!(
-        outcome,
-        CoreCommandOutcome::HostActionQueued
-    ));
+    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
 
-    let action = session.take_pending_host_action().expect("host action should be queued");
+    let action = session
+        .take_pending_host_action()
+        .expect("host action should be queued");
     assert!(matches!(action, CoreHostAction::Quit { .. }));
 }
 
@@ -162,17 +157,16 @@ fn ex_wq_is_intercepted_as_quit_action() {
 fn ex_xit_is_intercepted_as_quit_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
-    
+
     let outcome = session
         .apply_ex_command(":x")
         .expect("xit command should succeed");
 
-    assert!(matches!(
-        outcome,
-        CoreCommandOutcome::HostActionQueued
-    ));
+    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
 
-    let action = session.take_pending_host_action().expect("host action should be queued");
+    let action = session
+        .take_pending_host_action()
+        .expect("host action should be queued");
     assert!(matches!(action, CoreHostAction::Quit { .. }));
 }
 
@@ -180,17 +174,16 @@ fn ex_xit_is_intercepted_as_quit_action() {
 fn ex_redraw_bang_queues_correct_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
-    
+
     let outcome = session
         .apply_ex_command(":redraw!")
         .expect("redraw! command should succeed");
 
-    assert!(matches!(
-        outcome,
-        CoreCommandOutcome::HostActionQueued
-    ));
+    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
 
-    let action = session.take_pending_host_action().expect("host action should be queued");
+    let action = session
+        .take_pending_host_action()
+        .expect("host action should be queued");
     assert_eq!(
         action,
         CoreHostAction::Redraw {
@@ -204,17 +197,16 @@ fn ex_redraw_bang_queues_correct_action() {
 fn ex_redraw_short_form_queues_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
-    
+
     let outcome = session
         .apply_ex_command(":redr")
         .expect("redr command should succeed");
 
-    assert!(matches!(
-        outcome,
-        CoreCommandOutcome::HostActionQueued
-    ));
+    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
 
-    let action = session.take_pending_host_action().expect("host action should be queued");
+    let action = session
+        .take_pending_host_action()
+        .expect("host action should be queued");
     assert_eq!(
         action,
         CoreHostAction::Redraw {
@@ -228,16 +220,25 @@ fn ex_redraw_short_form_queues_action() {
 fn multiple_ex_commands_can_queue_multiple_actions() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
-    
+
     session.apply_ex_command(":write file1.txt").unwrap();
     session.apply_ex_command(":redraw").unwrap();
     session.apply_ex_command(":quit").unwrap();
 
     assert_eq!(session.snapshot().pending_host_actions, 3);
 
-    assert!(matches!(session.take_pending_host_action(), Some(CoreHostAction::Write { .. })));
-    assert!(matches!(session.take_pending_host_action(), Some(CoreHostAction::Redraw { .. })));
-    assert!(matches!(session.take_pending_host_action(), Some(CoreHostAction::Quit { .. })));
+    assert!(matches!(
+        session.take_pending_host_action(),
+        Some(CoreHostAction::Write { .. })
+    ));
+    assert!(matches!(
+        session.take_pending_host_action(),
+        Some(CoreHostAction::Redraw { .. })
+    ));
+    assert!(matches!(
+        session.take_pending_host_action(),
+        Some(CoreHostAction::Quit { .. })
+    ));
     assert!(session.take_pending_host_action().is_none());
 }
 
@@ -245,7 +246,7 @@ fn multiple_ex_commands_can_queue_multiple_actions() {
 fn ex_compound_command_with_write_is_not_intercepted_yet() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
-    
+
     let test_file = "Xtest_compound_write.txt";
     if fs::metadata(test_file).is_ok() {
         fs::remove_file(test_file).ok();

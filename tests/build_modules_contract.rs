@@ -11,8 +11,8 @@ mod build_link_audit {
 mod archive_member_audit_tests {
     use super::build_compile_plan::CompilePlan;
     use super::build_link_audit::{
-        audit_archive_members, build_ex_delegation_proof_from_symbols,
-        build_normal_delegation_proof_from_symbols, ArchiveAuditViolation,
+        ArchiveAuditViolation, audit_archive_members, build_ex_delegation_proof_from_symbols,
+        build_normal_delegation_proof_from_symbols,
     };
     use std::collections::BTreeSet;
     use std::fs;
@@ -151,10 +151,12 @@ mod archive_member_audit_tests {
 
         assert!(report.passed, "proof should pass: {:?}", report);
         assert_eq!(report.scenarios.len(), 2);
-        assert!(report
-            .scenarios
-            .iter()
-            .all(|scenario| scenario.missing_symbols.is_empty()));
+        assert!(
+            report
+                .scenarios
+                .iter()
+                .all(|scenario| scenario.missing_symbols.is_empty())
+        );
     }
 
     #[test]
@@ -202,10 +204,12 @@ mod archive_member_audit_tests {
 
         assert!(report.passed, "proof should pass: {:?}", report);
         assert_eq!(report.scenarios.len(), 3);
-        assert!(report
-            .scenarios
-            .iter()
-            .all(|scenario| scenario.missing_symbols.is_empty()));
+        assert!(
+            report
+                .scenarios
+                .iter()
+                .all(|scenario| scenario.missing_symbols.is_empty())
+        );
     }
 
     #[test]
@@ -239,7 +243,7 @@ mod archive_member_audit_tests {
 
 mod native_source_audit_tests {
     use super::build_link_audit::{
-        audit_native_sources, NativeSourceAuditReport, NativeSourceViolation,
+        NativeSourceAuditReport, NativeSourceViolation, audit_native_sources,
     };
     use std::fs;
     use std::path::Path;
@@ -532,7 +536,7 @@ mod build_test_runner {
 
 mod build_test_runner_contract_tests {
     use super::build_test_runner::{
-        generate_upstream_tests_from, parse_skiplist, GeneratedUpstreamTestManifest,
+        GeneratedUpstreamTestManifest, generate_upstream_tests_from, parse_skiplist,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -626,7 +630,8 @@ mod build_test_runner_contract_tests {
             "expected alpha test entry in generated runner: {generated}"
         );
         assert!(
-            generated.contains("run_case_in_subprocess(\"vendor/vim_src/src/testdir/test_alpha.vim\");"),
+            generated
+                .contains("run_case_in_subprocess(\"vendor/vim_src/src/testdir/test_alpha.vim\");"),
             "expected alpha subprocess entry in generated runner: {generated}"
         );
         assert!(

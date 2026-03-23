@@ -10,6 +10,8 @@ upstream_runtime_session_t* upstream_runtime_session_new(
     uintptr_t text_len
 );
 
+void upstream_runtime_set_debug_log_path(const char* path, uintptr_t path_len);
+
 void upstream_runtime_session_free(upstream_runtime_session_t* session);
 
 vim_core_command_result_t upstream_runtime_apply_normal_command(

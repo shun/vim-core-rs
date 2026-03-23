@@ -1,5 +1,5 @@
-use std::ffi::{c_int, c_short, c_void};
 use std::collections::{HashMap, VecDeque};
+use std::ffi::{c_int, c_short, c_void};
 use std::sync::{Mutex, OnceLock};
 
 #[repr(C)]
@@ -45,15 +45,18 @@ impl VfdManager {
     }
 
     pub fn register_job(&mut self, job_id: i32, vfd_in: i32, vfd_out: i32, vfd_err: i32) {
-        self.jobs.insert(job_id, JobState {
-            vfd_in,
-            vfd_out,
-            vfd_err,
-            is_closed: false,
-            status: 0,
-            exit_code: 0,
-            reaped: false,
-        });
+        self.jobs.insert(
+            job_id,
+            JobState {
+                vfd_in,
+                vfd_out,
+                vfd_err,
+                is_closed: false,
+                status: 0,
+                exit_code: 0,
+                reaped: false,
+            },
+        );
         self.ensure_vfd(vfd_in);
         self.ensure_vfd(vfd_out);
         self.ensure_vfd(vfd_err);
@@ -61,10 +64,13 @@ impl VfdManager {
 
     pub fn ensure_vfd(&mut self, fd: i32) {
         if fd >= 0 && !self.vfds.contains_key(&fd) {
-            self.vfds.insert(fd, VfdState {
-                read_queue: VecDeque::new(),
-                is_closed: false,
-            });
+            self.vfds.insert(
+                fd,
+                VfdState {
+                    read_queue: VecDeque::new(),
+                    is_closed: false,
+                },
+            );
         }
     }
 
@@ -98,7 +104,7 @@ impl VfdManager {
         }
         false
     }
-    
+
     pub fn read_data(&mut self, fd: c_int, buf: &mut [u8]) -> isize {
         if let Some(state) = self.vfds.get_mut(&fd) {
             if state.read_queue.is_empty() {
@@ -155,7 +161,10 @@ impl VfdManager {
 static MANAGER: OnceLock<Mutex<VfdManager>> = OnceLock::new();
 
 pub fn get_manager() -> std::sync::MutexGuard<'static, VfdManager> {
-    MANAGER.get_or_init(|| Mutex::new(VfdManager::new())).lock().unwrap()
+    MANAGER
+        .get_or_init(|| Mutex::new(VfdManager::new()))
+        .lock()
+        .unwrap()
 }
 
 #[unsafe(no_mangle)]
@@ -168,7 +177,7 @@ pub extern "C" fn vim_core_vfd_read(fd: c_int, buf: *mut c_void, count: usize) -
 #[unsafe(no_mangle)]
 pub extern "C" fn vim_core_vfd_write(_fd: c_int, _buf: *const c_void, count: usize) -> isize {
     // For now, ignore write from Vim (or we could store it to pass to host)
-    count as isize 
+    count as isize
 }
 
 #[unsafe(no_mangle)]
@@ -178,7 +187,11 @@ pub extern "C" fn vim_core_vfd_close(fd: c_int) -> c_int {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn vim_core_vfd_poll(fds: *mut pollfd, nfds: std::ffi::c_ulong, _timeout: c_int) -> c_int {
+pub extern "C" fn vim_core_vfd_poll(
+    fds: *mut pollfd,
+    nfds: std::ffi::c_ulong,
+    _timeout: c_int,
+) -> c_int {
     let mgr = get_manager();
     let slice = unsafe { std::slice::from_raw_parts_mut(fds, nfds as usize) };
     mgr.poll_fds(slice)
@@ -190,7 +203,9 @@ pub extern "C" fn vim_core_job_get_status(job_id: c_int, exit_code_out: *mut c_i
     if let Some(job) = mgr.jobs.get_mut(&job_id) {
         if job.is_closed && !job.reaped {
             if !exit_code_out.is_null() {
-                unsafe { *exit_code_out = job.exit_code; }
+                unsafe {
+                    *exit_code_out = job.exit_code;
+                }
             }
             job.reaped = true;
             return 1; // Ended
@@ -217,10 +232,13 @@ mod tests {
         fn allocate_vfd(&mut self) -> i32 {
             let fd = self.next_vfd;
             self.next_vfd += 1;
-            self.vfds.insert(fd, VfdState {
-                read_queue: VecDeque::new(),
-                is_closed: false,
-            });
+            self.vfds.insert(
+                fd,
+                VfdState {
+                    read_queue: VecDeque::new(),
+                    is_closed: false,
+                },
+            );
             fd
         }
     }
@@ -229,8 +247,12 @@ mod tests {
     fn test_vfd_manager_read_write_poll() {
         let mut mgr = VfdManager::new();
         let fd = mgr.allocate_vfd();
-        
-        let mut pfd = [pollfd { fd, events: POLLIN, revents: 0 }];
+
+        let mut pfd = [pollfd {
+            fd,
+            events: POLLIN,
+            revents: 0,
+        }];
         assert_eq!(mgr.poll_fds(&mut pfd), 0); // No data, not closed
 
         mgr.inject_data(fd, b"hello");
@@ -243,11 +265,11 @@ mod tests {
         assert_eq!(&buf[..5], b"hello");
 
         assert_eq!(mgr.poll_fds(&mut pfd), 0); // Data consumed
-        
+
         mgr.close_fd(fd);
         assert_eq!(mgr.poll_fds(&mut pfd), 1); // Closed means it is readable (will return EOF)
         assert_eq!(pfd[0].revents, POLLIN);
-        
+
         let n = mgr.read_data(fd, &mut buf);
         assert_eq!(n, 0); // EOF
     }
@@ -256,20 +278,24 @@ mod tests {
     fn test_vfd_queue_large_data() {
         let mut mgr = VfdManager::new();
         let fd = mgr.allocate_vfd();
-        
+
         let large_data = vec![0x41; 1024 * 1024]; // 1MB
         mgr.inject_data(fd, &large_data);
-        
-        let mut pfd = [pollfd { fd, events: POLLIN, revents: 0 }];
+
+        let mut pfd = [pollfd {
+            fd,
+            events: POLLIN,
+            revents: 0,
+        }];
         assert_eq!(mgr.poll_fds(&mut pfd), 1);
-        
+
         let mut buf = vec![0u8; 1024 * 512]; // Read 512KB
         let n1 = mgr.read_data(fd, &mut buf);
         assert_eq!(n1, 1024 * 512);
-        
+
         let n2 = mgr.read_data(fd, &mut buf);
         assert_eq!(n2, 1024 * 512);
-        
+
         let n3 = mgr.read_data(fd, &mut buf);
         assert_eq!(n3, -2); // No more data (EAGAIN)
     }

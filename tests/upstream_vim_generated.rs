@@ -31,11 +31,13 @@ fn __vim_core_run_upstream_case() {
     // 前のテストの状態を引き継ぐことはない。
     let mut session =
         VimCoreSession::new("").expect("runner should initialize a single VimCoreSession");
-    
+
     // スクリプトファイルを source する。
     // 相対パスはリポジトリルートからの相対であることを前提とする。
     let command = format!("source {}", relative_case_path);
-    session.apply_ex_command(&command).expect("upstream case should execute without error");
+    session
+        .apply_ex_command(&command)
+        .expect("upstream case should execute without error");
 }
 
 include!(concat!(env!("OUT_DIR"), "/upstream_vim_tests.rs"));

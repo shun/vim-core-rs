@@ -256,6 +256,8 @@ vim_bridge_state_t* vim_bridge_state_new(
     uintptr_t text_len
 );
 
+void vim_bridge_set_debug_log_path(const char* path, uintptr_t path_len);
+
 void vim_bridge_state_free(vim_bridge_state_t* state);
 
 vim_core_snapshot_t vim_bridge_snapshot(const vim_bridge_state_t* state);

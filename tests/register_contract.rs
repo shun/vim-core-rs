@@ -16,16 +16,16 @@ fn acquire_session_test_lock() -> std::sync::MutexGuard<'static, ()> {
 fn test_register_access_basic() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("hello").unwrap();
-    
+
     // Set register 'a' from Rust
     session.set_register('a', "yanked from rust");
-    
+
     // Verify we can get it back
     assert_eq!(session.register('a'), Some("yanked from rust".to_string()));
-    
+
     // Put register 'a' into buffer
     session.apply_normal_command("\"ap").unwrap();
-    
+
     // "p" puts after the cursor. Initial buffer "hello" (cursor at 1,1)
     // "hello" -> "hyanked from rustello"
     // Wait, let's check exact behavior of "p" on a character-wise register.
@@ -37,11 +37,11 @@ fn test_register_access_basic() {
 fn test_register_yank_capture() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("original text").unwrap();
-    
+
     // Yank "original" into register 'b'
     // "original" is 8 characters.
     session.apply_normal_command("v7l\"by").unwrap();
-    
+
     // Verify register 'b' contains "original"
     assert_eq!(session.register('b'), Some("original".to_string()));
 }
@@ -50,13 +50,13 @@ fn test_register_yank_capture() {
 fn test_register_multiline() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("line1\nline2").unwrap();
-    
+
     // Set multi-line register
     session.set_register('m', "rust line 1\nrust line 2\n");
-    
+
     // Put it (it should be MLINE because of trailing newline)
     session.apply_normal_command("\"mp").unwrap();
-    
+
     // Current buffer:
     // line1
     // line2
@@ -65,17 +65,20 @@ fn test_register_multiline() {
     // rust line 1
     // rust line 2
     // line2
-    assert_eq!(session.snapshot().text, "line1\nrust line 1\nrust line 2\nline2\n");
+    assert_eq!(
+        session.snapshot().text,
+        "line1\nrust line 1\nrust line 2\nline2\n"
+    );
 }
 
 #[test]
 fn test_unnamed_register() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("top secret").unwrap();
-    
+
     // Yank into unnamed register
     session.apply_normal_command("yiw").unwrap();
-    
+
     // register '"' should have "top"
     assert_eq!(session.register('"'), Some("top".to_string()));
 }

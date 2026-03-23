@@ -8,6 +8,10 @@ struct vim_bridge_state {
     upstream_runtime_session_t* runtime;
 };
 
+void vim_bridge_set_debug_log_path(const char* path, uintptr_t path_len) {
+    upstream_runtime_set_debug_log_path(path, path_len);
+}
+
 vim_bridge_state_t* vim_bridge_state_new(
     const char* initial_text,
     uintptr_t text_len

@@ -16,8 +16,8 @@ mod build_test_runner {
     include!("build_test_runner.rs");
 }
 
-use build_allowlist::{validate_allowlist, verify_bridge_header, Allowlist};
-use build_compile_plan::{create_compile_plan, write_compile_proof, CompilePlan, UpstreamMetadata};
+use build_allowlist::{Allowlist, validate_allowlist, verify_bridge_header};
+use build_compile_plan::{CompilePlan, UpstreamMetadata, create_compile_plan, write_compile_proof};
 
 struct GeneratedVimBuildArtifacts {
     include_root: PathBuf,
@@ -240,7 +240,7 @@ fn prepare_generated_vim_build(
     configure.arg("--enable-cscope=no");
     configure.arg(format!("--with-modified-by={VIM_MODIFIED_BY}"));
     run_command(&mut configure, "generate Vim config headers")?;
-    
+
     // xdiff 等のサブディレクトリからの ../auto/config.h 参照を解決するため、
     // 生成されたヘッダーをソースツリーの期待される場所へコピーする。
     let generated_config_h = build_root.join("auto/config.h");

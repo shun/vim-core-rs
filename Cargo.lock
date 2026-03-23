@@ -466,6 +466,7 @@ dependencies = [
  "bindgen",
  "cc",
  "globset",
+ "log",
  "regex",
  "serde",
  "serde_json",

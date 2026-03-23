@@ -36,7 +36,8 @@ fn drain_host_actions(session: &mut VimCoreSession) -> Vec<CoreHostAction> {
 #[test]
 fn integration_create_multiple_buffers_and_verify_listing() {
     let _guard = acquire_session_test_lock();
-    let mut session = VimCoreSession::new("buffer 1 content").expect("セッション初期化に成功すること");
+    let mut session =
+        VimCoreSession::new("buffer 1 content").expect("セッション初期化に成功すること");
     session.set_screen_size(24, 80);
 
     eprintln!("[Task 4.1] === 複数バッファの作成と一覧取得の統合テスト ===");
@@ -69,7 +70,10 @@ fn integration_create_multiple_buffers_and_verify_listing() {
     let buffers = session.buffers();
     eprintln!(
         "[Task 4.1] 全バッファ: {:?}",
-        buffers.iter().map(|b| (b.id, &b.name, b.is_active)).collect::<Vec<_>>()
+        buffers
+            .iter()
+            .map(|b| (b.id, &b.name, b.is_active))
+            .collect::<Vec<_>>()
     );
     assert!(
         buffers.len() >= 3,
@@ -112,10 +116,16 @@ fn integration_switch_between_buffers_round_trip() {
     // 現在Betaがアクティブ
     let text_alpha = session.buffer_text(buf_alpha_id);
     eprintln!("[Task 4.1] 非アクティブAlphaのテキスト: {:?}", text_alpha);
-    assert_eq!(text_alpha.as_deref(), Some("alpha content"), "非アクティブAlphaのテキスト取得");
+    assert_eq!(
+        text_alpha.as_deref(),
+        Some("alpha content"),
+        "非アクティブAlphaのテキスト取得"
+    );
 
     // Alphaに切り替え
-    session.switch_to_buffer(buf_alpha_id).expect("Alphaへの切り替え成功");
+    session
+        .switch_to_buffer(buf_alpha_id)
+        .expect("Alphaへの切り替え成功");
     let snapshot = session.snapshot();
     eprintln!(
         "[Task 4.1] Alpha切り替え後: text='{}', active_buf_id={}",
@@ -131,10 +141,16 @@ fn integration_switch_between_buffers_round_trip() {
     // 非アクティブBetaのテキストも保持されていること
     let text_beta = session.buffer_text(buf_beta_id);
     eprintln!("[Task 4.1] 非アクティブBetaのテキスト: {:?}", text_beta);
-    assert_eq!(text_beta.as_deref(), Some("beta content"), "非アクティブBetaのテキスト保持");
+    assert_eq!(
+        text_beta.as_deref(),
+        Some("beta content"),
+        "非アクティブBetaのテキスト保持"
+    );
 
     // Betaに戻る
-    session.switch_to_buffer(buf_beta_id).expect("Betaへの切り替え成功");
+    session
+        .switch_to_buffer(buf_beta_id)
+        .expect("Betaへの切り替え成功");
     let snapshot = session.snapshot();
     assert_eq!(
         snapshot.text.trim_end_matches('\n'),
@@ -235,13 +251,23 @@ fn integration_buffer_dirty_flag_tracks_modifications() {
     let buf1_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
 
     // 初期状態: dirty=false
-    let buf1 = session.buffers().iter().find(|b| b.id == buf1_id).unwrap().clone();
+    let buf1 = session
+        .buffers()
+        .iter()
+        .find(|b| b.id == buf1_id)
+        .unwrap()
+        .clone();
     eprintln!("[Task 4.1] 初期状態: buf1 dirty={}", buf1.dirty);
     assert!(!buf1.dirty, "初期状態のバッファはdirty=false");
 
     // 編集後: dirty=true
     session.apply_normal_command("dd").expect("dd成功");
-    let buf1 = session.buffers().iter().find(|b| b.id == buf1_id).unwrap().clone();
+    let buf1 = session
+        .buffers()
+        .iter()
+        .find(|b| b.id == buf1_id)
+        .unwrap()
+        .clone();
     eprintln!("[Task 4.1] 編集後: buf1 dirty={}", buf1.dirty);
     assert!(buf1.dirty, "編集後のバッファはdirty=true");
 
@@ -250,14 +276,30 @@ fn integration_buffer_dirty_flag_tracks_modifications() {
     session.apply_ex_command(":enew").expect("enew成功");
 
     // 新バッファはdirty=false
-    let new_buf = session.buffers().iter().find(|b| b.is_active).unwrap().clone();
+    let new_buf = session
+        .buffers()
+        .iter()
+        .find(|b| b.is_active)
+        .unwrap()
+        .clone();
     eprintln!("[Task 4.1] 新バッファ: dirty={}", new_buf.dirty);
     assert!(!new_buf.dirty, "新規作成バッファはdirty=false");
 
     // 元のバッファはまだdirty=true
-    let buf1_check = session.buffers().iter().find(|b| b.id == buf1_id).unwrap().clone();
-    eprintln!("[Task 4.1] 元バッファ(非アクティブ): dirty={}", buf1_check.dirty);
-    assert!(buf1_check.dirty, "非アクティブでも編集済みバッファはdirty=true");
+    let buf1_check = session
+        .buffers()
+        .iter()
+        .find(|b| b.id == buf1_id)
+        .unwrap()
+        .clone();
+    eprintln!(
+        "[Task 4.1] 元バッファ(非アクティブ): dirty={}",
+        buf1_check.dirty
+    );
+    assert!(
+        buf1_check.dirty,
+        "非アクティブでも編集済みバッファはdirty=true"
+    );
 }
 
 #[test]
@@ -309,14 +351,18 @@ fn integration_multi_buffer_text_isolation() {
     // バッファBを作成（split + enew でmemlineを保持）
     session.apply_ex_command(":split").expect("split成功");
     session.apply_ex_command(":enew").expect("enew成功");
-    session.apply_ex_command(":call setline(1, 'BBB')").expect("setline成功");
+    session
+        .apply_ex_command(":call setline(1, 'BBB')")
+        .expect("setline成功");
     let buf_b_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
 
     // バッファCを作成（さらにsplit + enew で別ウィンドウに新バッファを開く）
     // enew! だとバッファBの変更が破棄されるため、split経由で別ウィンドウに新バッファを作る
     session.apply_ex_command(":split").expect("split成功");
     session.apply_ex_command(":enew").expect("enew成功");
-    session.apply_ex_command(":call setline(1, 'CCC')").expect("setline成功");
+    session
+        .apply_ex_command(":call setline(1, 'CCC')")
+        .expect("setline成功");
     let buf_c_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
 
     // 各バッファのテキストが独立していること
@@ -347,7 +393,11 @@ fn integration_multi_buffer_text_isolation() {
 
     assert_eq!(text_a_after.as_deref(), Some("AAA"), "バッファAは未変更");
     assert_eq!(text_b_after.as_deref(), Some("BBB"), "バッファBは未変更");
-    assert_eq!(text_c_after.as_deref(), Some("CCC modified"), "バッファCのみ変更");
+    assert_eq!(
+        text_c_after.as_deref(),
+        Some("CCC modified"),
+        "バッファCのみ変更"
+    );
 }
 
 // =============================================================================
@@ -369,7 +419,10 @@ fn integration_horizontal_split_geometry() {
     let before = session.windows();
     eprintln!(
         "[Task 4.2] 分割前: {:?}",
-        before.iter().map(|w| (w.id, w.row, w.col, w.width, w.height)).collect::<Vec<_>>()
+        before
+            .iter()
+            .map(|w| (w.id, w.row, w.col, w.width, w.height))
+            .collect::<Vec<_>>()
     );
 
     session.apply_ex_command(":split").expect("split成功");
@@ -377,7 +430,10 @@ fn integration_horizontal_split_geometry() {
     let after = session.windows();
     eprintln!(
         "[Task 4.2] 分割後: {:?}",
-        after.iter().map(|w| (w.id, w.row, w.col, w.width, w.height, w.is_active)).collect::<Vec<_>>()
+        after
+            .iter()
+            .map(|w| (w.id, w.row, w.col, w.width, w.height, w.is_active))
+            .collect::<Vec<_>>()
     );
 
     assert_eq!(after.len(), 2, "水平分割後は2ウィンドウ");
@@ -387,7 +443,8 @@ fn integration_horizontal_split_geometry() {
         assert!(
             win.width > 0,
             "各ウィンドウの幅は正の値: win_id={}, width={}",
-            win.id, win.width
+            win.id,
+            win.width
         );
     }
 
@@ -425,7 +482,10 @@ fn integration_vertical_split_geometry() {
     let windows = session.windows();
     eprintln!(
         "[Task 4.2] 垂直分割後: {:?}",
-        windows.iter().map(|w| (w.id, w.row, w.col, w.width, w.height, w.is_active)).collect::<Vec<_>>()
+        windows
+            .iter()
+            .map(|w| (w.id, w.row, w.col, w.width, w.height, w.is_active))
+            .collect::<Vec<_>>()
     );
 
     assert_eq!(windows.len(), 2, "垂直分割後は2ウィンドウ");
@@ -498,14 +558,19 @@ fn integration_focus_move_updates_active_window() {
     let windows = session.windows();
     eprintln!(
         "[Task 4.2] 3ウィンドウ作成後: {:?}",
-        windows.iter().map(|w| (w.id, w.is_active)).collect::<Vec<_>>()
+        windows
+            .iter()
+            .map(|w| (w.id, w.is_active))
+            .collect::<Vec<_>>()
     );
     assert_eq!(windows.len(), 3, "3ウィンドウが存在すること");
 
     // 各ウィンドウに順番にフォーカスを移動
     let win_ids: Vec<i32> = windows.iter().map(|w| w.id).collect();
     for &target_id in &win_ids {
-        session.switch_to_window(target_id).expect("ウィンドウ切り替え成功");
+        session
+            .switch_to_window(target_id)
+            .expect("ウィンドウ切り替え成功");
 
         let current = session.windows();
         let active = current.iter().find(|w| w.is_active).unwrap();
@@ -539,16 +604,20 @@ fn integration_split_event_sequence() {
     session.apply_ex_command(":split").expect("split成功");
     let actions = drain_host_actions(&mut session);
 
-    eprintln!(
-        "[Task 4.2] split後のアクション: {:?}",
-        actions
-    );
+    eprintln!("[Task 4.2] split後のアクション: {:?}", actions);
 
-    let has_win_new = actions.iter().any(|a| matches!(a, CoreHostAction::WinNew { .. }));
-    let has_layout_changed = actions.iter().any(|a| matches!(a, CoreHostAction::LayoutChanged));
+    let has_win_new = actions
+        .iter()
+        .any(|a| matches!(a, CoreHostAction::WinNew { .. }));
+    let has_layout_changed = actions
+        .iter()
+        .any(|a| matches!(a, CoreHostAction::LayoutChanged));
 
     assert!(has_win_new, ":split後にWinNewイベントが発火されること");
-    assert!(has_layout_changed, ":split後にLayoutChangedイベントが発火されること");
+    assert!(
+        has_layout_changed,
+        ":split後にLayoutChangedイベントが発火されること"
+    );
 }
 
 #[test]
@@ -568,7 +637,9 @@ fn integration_resize_event_timing() {
 
     eprintln!("[Task 4.2] resize後のアクション: {:?}", actions);
 
-    let has_layout_changed = actions.iter().any(|a| matches!(a, CoreHostAction::LayoutChanged));
+    let has_layout_changed = actions
+        .iter()
+        .any(|a| matches!(a, CoreHostAction::LayoutChanged));
     assert!(
         has_layout_changed,
         ":resize後にLayoutChangedイベントが即座に発火されること"
@@ -607,7 +678,10 @@ fn integration_window_close_updates_layout() {
     eprintln!(
         "[Task 4.2] ウィンドウ閉じ後: ウィンドウ数={}, {:?}",
         windows.len(),
-        windows.iter().map(|w| (w.id, w.is_active, w.height)).collect::<Vec<_>>()
+        windows
+            .iter()
+            .map(|w| (w.id, w.is_active, w.height))
+            .collect::<Vec<_>>()
     );
     assert_eq!(windows.len(), 1, "ウィンドウを閉じた後は1ウィンドウ");
 
@@ -643,7 +717,10 @@ fn integration_multi_split_geometry_consistency() {
     let windows = session.windows();
     eprintln!(
         "[Task 4.2] 複数分割後のウィンドウ: {:?}",
-        windows.iter().map(|w| (w.id, w.row, w.col, w.width, w.height)).collect::<Vec<_>>()
+        windows
+            .iter()
+            .map(|w| (w.id, w.row, w.col, w.width, w.height))
+            .collect::<Vec<_>>()
     );
 
     assert_eq!(windows.len(), 4, "4ウィンドウが存在すること");
@@ -653,7 +730,9 @@ fn integration_multi_split_geometry_consistency() {
         assert!(
             win.width > 0 && win.height > 0,
             "すべてのウィンドウが正のサイズを持つこと: win_id={}, width={}, height={}",
-            win.id, win.width, win.height
+            win.id,
+            win.width,
+            win.height
         );
     }
 
@@ -731,7 +810,10 @@ fn integration_screen_resize_updates_all_window_geometry() {
     let before = session.windows();
     eprintln!(
         "[Task 4.2] リサイズ前: {:?}",
-        before.iter().map(|w| (w.id, w.width, w.height)).collect::<Vec<_>>()
+        before
+            .iter()
+            .map(|w| (w.id, w.width, w.height))
+            .collect::<Vec<_>>()
     );
 
     // スクリーンサイズを大きく変更
@@ -740,7 +822,10 @@ fn integration_screen_resize_updates_all_window_geometry() {
     let after = session.windows();
     eprintln!(
         "[Task 4.2] リサイズ後: {:?}",
-        after.iter().map(|w| (w.id, w.width, w.height)).collect::<Vec<_>>()
+        after
+            .iter()
+            .map(|w| (w.id, w.width, w.height))
+            .collect::<Vec<_>>()
     );
 
     // 幅が新スクリーンサイズに合わせて更新されていること
@@ -748,13 +833,16 @@ fn integration_screen_resize_updates_all_window_geometry() {
         assert!(
             win.width > 80,
             "スクリーン拡大後のウィンドウ幅が更新されていること: win_id={}, width={}",
-            win.id, win.width
+            win.id,
+            win.width
         );
     }
 
     // LayoutChangedイベントが発火されていること
     let actions = drain_host_actions(&mut session);
-    let has_layout_changed = actions.iter().any(|a| matches!(a, CoreHostAction::LayoutChanged));
+    let has_layout_changed = actions
+        .iter()
+        .any(|a| matches!(a, CoreHostAction::LayoutChanged));
     eprintln!("[Task 4.2] スクリーンリサイズ後のアクション: {:?}", actions);
     assert!(
         has_layout_changed,
