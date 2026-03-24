@@ -10,8 +10,8 @@ Do not rely on that file being present when this skill is used standalone.
 
 - `tests/public_api_contract.rs`
   Session creation and drop behavior, single-session rejection, option getter
-  and setter behavior, backend identity, basic editing outcomes, and typed API
-  contracts.
+  and setter behavior, backend identity, basic editing outcomes,
+  `CoreSessionOptions.debug_log_path` file logging, and typed API contracts.
 - `tests/integration_contract.rs`
   Ex-command side effects, host-action emission, mark and jumplist consistency,
   mode and pending-input state, and normal-command integration behavior.

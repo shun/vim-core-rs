@@ -166,6 +166,45 @@ The vendored Vim build is intentionally constrained.
 Because of that setup, do not assume this repository behaves like a full
 desktop Vim or like Neovim.
 
+## Prebuilt artifacts
+
+By default, consumers do not build the embedded Vim runtime from source.
+`build.rs` resolves a target-specific prebuilt artifact, expands it into
+`OUT_DIR`, and links the bundled `libvimcore.a`.
+
+This repository currently publishes prebuilt artifacts for these targets:
+
+- `aarch64-apple-darwin`
+- `x86_64-unknown-linux-gnu`
+
+Each target artifact contains these files:
+
+- `libvimcore.a`
+- `bindings.rs`
+- `artifact-manifest.json`
+
+The archive also includes the generated traceability outputs that the
+repository tests expect in `OUT_DIR`, such as the compile proof, audit
+reports, generated Vim headers, and generated upstream test list.
+
+### Environment variables
+
+Use these environment variables to control the build path:
+
+- `VIM_CORE_FROM_SOURCE=1`
+  Builds the embedded Vim runtime from source. This is the expected mode for
+  repository development, CI, and release packaging.
+- `VIM_CORE_ARTIFACT_BASE_URL`
+  Overrides the base URL or local directory used to resolve the prebuilt
+  archive. This is intended for validation, mirrors, or local testing.
+- `VIM_CORE_ARTIFACT_DIR`
+  Overrides the local cache directory used to store downloaded and verified
+  prebuilt artifacts.
+
+If a prebuilt artifact is unavailable, the build fails with an explicit error.
+The build does not fall back to a source build unless you set
+`VIM_CORE_FROM_SOURCE=1`.
+
 ## Vim license notice
 
 This repository vendors and modifies portions of upstream Vim in order to

@@ -3,6 +3,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod build_artifact {
+    include!("build_artifact.rs");
+}
 mod build_allowlist {
     include!("build_allowlist.rs");
 }
@@ -17,6 +20,10 @@ mod build_test_runner {
 }
 
 use build_allowlist::{Allowlist, validate_allowlist, verify_bridge_header};
+use build_artifact::{
+    emit_artifact_rerun_if_env_changed, install_prebuilt_artifact,
+    resolve_artifact_config_from_env, source_build_requested,
+};
 use build_compile_plan::{CompilePlan, UpstreamMetadata, create_compile_plan, write_compile_proof};
 
 struct GeneratedVimBuildArtifacts {
@@ -31,6 +38,8 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
+    emit_artifact_rerun_if_env_changed();
+
     let repo_root = PathBuf::from(
         env::var("CARGO_MANIFEST_DIR")
             .map_err(|error| format!("missing CARGO_MANIFEST_DIR: {error}"))?,
@@ -44,6 +53,21 @@ fn run() -> Result<(), String> {
     let manifest_path = repo_root.join("vim-source-build-manifest.txt");
     let metadata_path = repo_root.join("upstream-metadata.json");
     let skiplist_path = repo_root.join("upstream-test-skiplist.txt");
+
+    if !source_build_requested() {
+        let artifact_config = resolve_artifact_config_from_env()?;
+        let prepared = install_prebuilt_artifact(&artifact_config, &out_dir)?;
+        println!(
+            "cargo:warning=using prebuilt vim-core-rs artifact target={} cache_key={}",
+            prepared.manifest.target_triple, prepared.cache_key
+        );
+        println!("cargo:rustc-link-search=native={}", out_dir.display());
+        println!("cargo:rustc-link-lib=static=vimcore");
+        if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+            println!("cargo:rustc-link-lib=iconv");
+        }
+        return Ok(());
+    }
 
     emit_static_rerun_if_changed(&[
         &bridge_header,

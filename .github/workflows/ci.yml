@@ -16,6 +16,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  VIM_CORE_FROM_SOURCE: "1"
 
 jobs:
   checks:

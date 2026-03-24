@@ -1,3 +1,7 @@
+#[allow(dead_code)]
+mod build_artifact {
+    include!("../build_artifact.rs");
+}
 mod build_allowlist {
     include!("../build_allowlist.rs");
 }
@@ -837,6 +841,8 @@ mod ffi_boundary_contract_tests {
 
 #[test]
 fn build_modules_are_shared_with_tests_via_include() {
+    let _ = build_artifact::artifact_asset_name;
+    let _ = build_artifact::install_prebuilt_artifact;
     let _ = build_allowlist::Allowlist::load;
     let _ = build_allowlist::validate_allowlist;
     let _ = build_compile_plan::create_compile_plan;

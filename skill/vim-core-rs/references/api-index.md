@@ -39,7 +39,8 @@ Read the bundled pages in this order when you need complete coverage.
 - Structs: `CoreMarkPosition`, `CoreJumpListEntry`, `CoreJumpList`,
   `CoreJobStartRequest`, `CoreBufferInfo`, `CoreWindowInfo`, `CoreUndoNode`,
   `CoreUndoTree`, `CoreSyntaxChunk`, `CoreMessageEvent`, `CorePumItem`,
-  `CorePumInfo`, `CoreMatchRange`, `CoreCursorMatchInfo`, `CoreSnapshot`
+  `CorePumInfo`, `CoreMatchRange`, `CoreCursorMatchInfo`, `CoreSessionOptions`,
+  `CoreSnapshot`
 - Re-exported VFS items: `CoreBufferBinding`, `CoreBufferSourceKind`,
   `CoreDeferredClose`, `CorePendingVfsOperation`, `CoreRequestEntry`,
   `CoreRequestStatus`, `CoreVfsError`, `CoreVfsErrorKind`,
@@ -48,7 +49,8 @@ Read the bundled pages in this order when you need complete coverage.
 
 ### Public `VimCoreSession` methods
 
-- Lifecycle and snapshots: `new`, `snapshot`, `mode`, `pending_input`
+- Lifecycle and snapshots: `new`, `new_with_options`, `snapshot`, `mode`,
+  `pending_input`
 - Navigation and state writes: `mark`, `set_mark`, `jumplist`,
   `switch_to_buffer`, `switch_to_window`, `buffer_text`
 - Command execution: `apply_normal_command`, `apply_ex_command`,

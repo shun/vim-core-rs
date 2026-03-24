@@ -60,6 +60,10 @@ Read only the materials needed for the current task.
 - Treat host actions as part of the public contract. `Write`, `Quit`,
   `Redraw`, `RequestInput`, `VfsRequest`, `JobStart`, and `JobStop` are not
   incidental side effects.
+- Treat debug logging as configurable session behavior. When
+  `CoreSessionOptions.debug_log_path` is set, Rust-side debug output is
+  appended to that file instead of stderr, and the configured path is also
+  forwarded into the native bridge.
 - Keep host responsibilities outside the core. VFS responses, process spawning,
   screen sizing, message handling, and redraw behavior belong to the host.
 - Respect the documented project non-goals. In the repository, they live in
@@ -139,6 +143,10 @@ Apply these rules whenever you write or modify tests.
   commands only move the cursor, switch modes, or queue host work.
 - Use `snapshot()` when the task needs a coherent state capture; use focused
   getters when tests only need one property.
+- When debugging logging behavior, initialize the session with
+  `VimCoreSession::new_with_options(...)` and set
+  `CoreSessionOptions.debug_log_path` explicitly. If the path is `None`,
+  debug output still goes to stderr.
 - For VFS-backed buffers, expect multi-step flows: resolve, load, edit, save,
   deferred close, and possible resume or denial.
 - For jobs, treat `JobStart` as a request for the host to spawn a real process
@@ -152,6 +160,8 @@ Before finishing, check the smallest relevant set below.
 
 - Public API or session semantics:
   `cargo test --test public_api_contract`
+  This suite also covers `CoreSessionOptions.debug_log_path` and verifies that
+  debug log output is written to the configured file.
 - Ex and Normal behavior:
   `cargo test --test integration_contract`
 - VFS flows:

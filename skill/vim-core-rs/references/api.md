@@ -14,6 +14,11 @@ standalone.
 - `VimCoreSession::new(initial_text: &str) -> Result<Self, CoreSessionError>`
   Create a new core session seeded with text. Fail with
   `CoreSessionError::SessionAlreadyActive` if another session is still alive.
+- `VimCoreSession::new_with_options(initial_text: &str, options: CoreSessionOptions)
+  -> Result<Self, CoreSessionError>`
+  Create a session with explicit initialization options. Set
+  `CoreSessionOptions.debug_log_path` to append Rust-side debug logs to a file;
+  if it is `None`, debug logs continue to go to stderr.
 - `Drop`
   Release the native state and the global single-session lock.
 

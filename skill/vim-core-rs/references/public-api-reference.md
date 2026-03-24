@@ -50,9 +50,14 @@ coordinates VFS and VFD bridges.
 ### Lifecycle and snapshot methods
 
 - `new(initial_text: &str) -> Result<Self, CoreSessionError>`
+- `new_with_options(initial_text: &str, options: CoreSessionOptions)
+  -> Result<Self, CoreSessionError>`
 - `snapshot(&self) -> CoreSnapshot`
 - `mode(&self) -> CoreMode`
 - `pending_input(&self) -> CorePendingInput`
+
+`CoreSessionOptions` currently exposes `debug_log_path: Option<PathBuf>`. When
+set, Rust-side debug log lines are appended to that file instead of stderr.
 
 ### Navigation and state methods
 
