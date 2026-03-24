@@ -156,6 +156,7 @@ cmd_apply() {
 
   echo "==> パッチ適用"
   if apply_patches "$TARGET"; then
+    mkdir -p "$REPO_ROOT/target"
     touch "$REPO_ROOT/target/.vendor-patched"
     echo "==> 完了"
   else
@@ -219,6 +220,7 @@ cmd_update() {
 
   echo "==> パッチ適用を試行"
   if apply_patches "$TARGET"; then
+    mkdir -p "$REPO_ROOT/target"
     touch "$REPO_ROOT/target/.vendor-patched"
     echo ""
     echo "==> 完了"
