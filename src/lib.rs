@@ -1129,15 +1129,21 @@ impl VimCoreSession {
         let mut current_id = out_ids[0];
         let mut start_col = 0;
 
-        for i in 1..(cols as usize) {
-            if out_ids[i] != current_id {
+        for (i, syn_id) in out_ids
+            .iter()
+            .copied()
+            .enumerate()
+            .take(cols as usize)
+            .skip(1)
+        {
+            if syn_id != current_id {
                 chunks.push(CoreSyntaxChunk {
                     start_col,
                     end_col: i,
                     syn_id: current_id,
                     name: self.get_syntax_name(current_id),
                 });
-                current_id = out_ids[i];
+                current_id = syn_id;
                 start_col = i;
             }
         }
@@ -1222,13 +1228,12 @@ impl VimCoreSession {
                 continue;
             }
 
-            let kind = if is_error_message(trimmed) {
-                CoreMessageKind::Error
-            } else if !errmsg.is_empty() && trimmed.contains(&errmsg) {
-                CoreMessageKind::Error
-            } else {
-                CoreMessageKind::Normal
-            };
+            let kind =
+                if is_error_message(trimmed) || (!errmsg.is_empty() && trimmed.contains(&errmsg)) {
+                    CoreMessageKind::Error
+                } else {
+                    CoreMessageKind::Normal
+                };
 
             debug_log!(
                 "[DEBUG] poll_and_dispatch_messages: dispatching kind={:?} content={}",
@@ -2078,10 +2083,10 @@ fn convert_host_action(action: bindings::vim_host_action_t) -> Option<CoreHostAc
                 let slice =
                     unsafe { std::slice::from_raw_parts(req.argv_buf as *const u8, req.argv_len) };
                 for arg_slice in slice.split(|&b| b == 0) {
-                    if !arg_slice.is_empty() {
-                        if let Ok(s) = std::str::from_utf8(arg_slice) {
-                            argv.push(s.to_owned());
-                        }
+                    if !arg_slice.is_empty()
+                        && let Ok(s) = std::str::from_utf8(arg_slice)
+                    {
+                        argv.push(s.to_owned());
                     }
                 }
                 unsafe { bindings::vim_bridge_free_string(req.argv_buf) };
@@ -2470,7 +2475,7 @@ mod undo_conversion_tests {
 
     #[test]
     fn convert_undo_tree_handles_populated_tree() {
-        let raw_nodes = vec![
+        let raw_nodes = [
             bindings::vim_core_undo_node_t {
                 seq: 1,
                 time: 12345,

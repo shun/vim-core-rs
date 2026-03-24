@@ -19,7 +19,7 @@ fn test_undo_tree_and_jump() {
     assert_eq!(session.buffer_text(buf_id).unwrap(), "initial text\nline 2");
 
     let tree_after_1 = session.get_undo_tree(buf_id).expect("should get undo tree");
-    assert!(tree_after_1.nodes.len() > 0, "should have undo nodes");
+    assert!(!tree_after_1.nodes.is_empty(), "should have undo nodes");
     let seq_after_1 = tree_after_1.seq_last;
 
     session

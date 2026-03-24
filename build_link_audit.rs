@@ -410,10 +410,11 @@ fn normalize_archive_member_name(archive_member: &str) -> Option<String> {
     let file_name = Path::new(archive_member).file_name()?.to_str()?;
     let stem = file_name.strip_suffix(".o")?;
 
-    if let Some((prefix, rest)) = stem.split_once('-') {
-        if !rest.is_empty() && prefix.chars().all(|ch| ch.is_ascii_hexdigit()) {
-            return Some(rest.to_string());
-        }
+    if let Some((prefix, rest)) = stem.split_once('-')
+        && !rest.is_empty()
+        && prefix.chars().all(|ch| ch.is_ascii_hexdigit())
+    {
+        return Some(rest.to_string());
     }
 
     Some(stem.to_string())

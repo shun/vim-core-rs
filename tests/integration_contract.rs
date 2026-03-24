@@ -18,13 +18,13 @@ where
 {
     let outcome = session
         .apply_ex_command(command)
-        .expect(&format!("Failed to apply command: {}", command));
+        .unwrap_or_else(|_| panic!("Failed to apply command: {}", command));
 
     match outcome {
         CoreCommandOutcome::HostActionQueued => {
             let action = session
                 .take_pending_host_action()
-                .expect(&format!("Expected host action for command: {}", command));
+                .unwrap_or_else(|| panic!("Expected host action for command: {}", command));
             predicate(&action);
         }
         _ => panic!(

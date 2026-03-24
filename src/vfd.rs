@@ -96,11 +96,11 @@ impl VfdManager {
     }
 
     pub fn inject_data(&mut self, fd: c_int, data: &[u8]) -> bool {
-        if let Some(state) = self.vfds.get_mut(&fd) {
-            if !state.is_closed {
-                state.read_queue.extend(data);
-                return true;
-            }
+        if let Some(state) = self.vfds.get_mut(&fd)
+            && !state.is_closed
+        {
+            state.read_queue.extend(data);
+            return true;
         }
         false
     }

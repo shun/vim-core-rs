@@ -9,14 +9,9 @@ enum DebugLogSink {
     File(File),
 }
 
+#[derive(Default)]
 pub(crate) struct DebugLogConfig {
     pub(crate) path: Option<PathBuf>,
-}
-
-impl Default for DebugLogConfig {
-    fn default() -> Self {
-        Self { path: None }
-    }
 }
 
 struct DebugLogState {

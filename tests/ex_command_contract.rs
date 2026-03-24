@@ -42,7 +42,7 @@ fn ex_write_does_not_create_file_on_disk() {
 
     // Verify file was NOT created on disk
     assert!(
-        !fs::metadata(test_file).is_ok(),
+        fs::metadata(test_file).is_err(),
         "File should NOT be created on disk by Vim runtime"
     );
 }

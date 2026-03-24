@@ -1080,16 +1080,15 @@ impl DocumentCoordinator {
     }
 
     fn clear_pending_if_matches(&mut self, buf_id: i32, request_id: u64) {
-        if let Some(state) = self.bindings.get_mut(&buf_id) {
-            if state
+        if let Some(state) = self.bindings.get_mut(&buf_id)
+            && state
                 .binding
                 .pending_operation
                 .as_ref()
                 .map(|pending| pending.request_id == request_id)
                 .unwrap_or(false)
-            {
-                state.binding.pending_operation = None;
-            }
+        {
+            state.binding.pending_operation = None;
         }
     }
 

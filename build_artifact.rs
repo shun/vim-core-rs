@@ -677,7 +677,7 @@ mod tests {
         );
 
         assert!(result.is_err(), "checksum mismatch should fail");
-        let error = result.err().expect("result should contain an error");
+        let error = result.expect_err("result should contain an error");
         assert!(
             error.contains("checksum mismatch"),
             "checksum error should mention mismatch: {error}"

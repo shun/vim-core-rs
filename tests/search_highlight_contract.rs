@@ -22,7 +22,7 @@ fn test_search_pattern_and_hlsearch_state() {
     session.apply_ex_command("set nohlsearch").unwrap();
 
     assert_eq!(session.get_search_pattern(), None);
-    assert_eq!(session.is_hlsearch_active(), false);
+    assert!(!session.is_hlsearch_active());
 
     // Set search
     session.apply_ex_command("let @/ = 'test_pattern'").unwrap();
@@ -32,11 +32,11 @@ fn test_search_pattern_and_hlsearch_state() {
         session.get_search_pattern(),
         Some("test_pattern".to_string())
     );
-    assert_eq!(session.is_hlsearch_active(), true);
+    assert!(session.is_hlsearch_active());
 
     // Disable highlight temporarily
     session.apply_ex_command("nohlsearch").unwrap();
-    assert_eq!(session.is_hlsearch_active(), false);
+    assert!(!session.is_hlsearch_active());
     assert_eq!(
         session.get_search_pattern(),
         Some("test_pattern".to_string())
@@ -75,7 +75,7 @@ fn test_search_highlights() {
     session.apply_ex_command("let @/ = 'hello'").unwrap();
     session.apply_ex_command("set hlsearch").unwrap();
 
-    let win_id = session.snapshot().windows[0].id as i32;
+    let win_id = session.snapshot().windows[0].id;
     // Fetch highlights for line 1 (window_id, row=1)
     let highlights = session.get_search_highlights(win_id, 1, 1);
 
@@ -105,7 +105,7 @@ fn test_cursor_match_info() {
     session.apply_ex_command("let @/ = 'hello'").unwrap();
     session.apply_ex_command("set hlsearch").unwrap();
 
-    let win_id = session.snapshot().windows[0].id as i32;
+    let win_id = session.snapshot().windows[0].id;
     // Cursor on first 'hello'
     let info = session.get_cursor_match_info(win_id, 1, 0, 100, 100);
     assert!(info.is_on_match);
