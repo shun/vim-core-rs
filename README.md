@@ -172,6 +172,11 @@ By default, consumers do not build the embedded Vim runtime from source.
 `build.rs` resolves a target-specific prebuilt artifact, expands it into
 `OUT_DIR`, and links the bundled `libvimcore.a`.
 
+The published crate still contains the allowlisted `vendor/vim_src` inputs
+required for an explicit source build. That means a crates.io consumer can
+override the default path with `VIM_CORE_FROM_SOURCE=1` without checking out
+this repository.
+
 This repository currently publishes prebuilt artifacts for these targets:
 
 - `aarch64-apple-darwin`
@@ -204,6 +209,30 @@ Use these environment variables to control the build path:
 If a prebuilt artifact is unavailable, the build fails with an explicit error.
 The build does not fall back to a source build unless you set
 `VIM_CORE_FROM_SOURCE=1`.
+
+## Development and release verification
+
+Repository development uses an explicit source build. Run the checks from the
+repository root with these commands:
+
+```bash
+VIM_CORE_FROM_SOURCE=1 cargo test
+VIM_CORE_FROM_SOURCE=1 cargo publish --dry-run --allow-dirty
+```
+
+Do not treat a bare `cargo test` in this repository as the development
+baseline. The default build path looks for a GitHub Releases asset whose tag
+matches `Cargo.toml`'s crate version. Before that release exists, the build
+fails with a 404 by design instead of silently compiling from source.
+
+When you validate the default consumer path before publication, point
+`VIM_CORE_ARTIFACT_BASE_URL` at a local directory that contains the packaged
+target archives, then run a clean build with `VIM_CORE_FROM_SOURCE=0`.
+
+For a production release, publish GitHub Releases assets for every supported
+target before you publish the crate to crates.io. That ordering keeps
+`vim-core-rs = "<version>"` consumers from hitting a transient 404 between the
+crate publish and the asset upload.
 
 ## Vim license notice
 

@@ -2,10 +2,34 @@
 name = "vim-core-rs"
 version = "0.1.0"
 edition = "2024"
+description = "Rust host integration layer for one embedded Vim runtime"
 build = "build.rs"
 license-file = "LICENSE"
 readme = "README.md"
 repository = "https://github.com/shun/vim-core-rs"
+include = [
+  "/Cargo.toml",
+  "/Cargo.lock",
+  "/README.md",
+  "/LICENSE",
+  "/LICENSE-vim",
+  "/THIRD_PARTY_NOTICES.md",
+  "/build.rs",
+  "/build_allowlist.rs",
+  "/build_artifact.rs",
+  "/build_compile_plan.rs",
+  "/build_link_audit.rs",
+  "/build_test_runner.rs",
+  "/docs/**",
+  "/native/**",
+  "/src/**",
+  "/tests/**",
+  "/vendor/vim_src/**",
+  "/vim-source-allowlist.txt",
+  "/vim-source-build-manifest.txt",
+  "/upstream-metadata.json",
+  "/upstream-test-skiplist.txt",
+]
 
 [lib]
 path = "src/lib.rs"

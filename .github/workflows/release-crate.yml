@@ -286,6 +286,18 @@ jobs:
         with:
           name: ${{ needs.prepare.outputs.artifact_name }}
 
+      - name: Download packaged macOS archive
+        uses: actions/download-artifact@v4
+        with:
+          name: prebuilt-aarch64-apple-darwin
+          path: local-prebuilt
+
+      - name: Download packaged Linux archive
+        uses: actions/download-artifact@v4
+        with:
+          name: prebuilt-x86_64-unknown-linux-gnu
+          path: local-prebuilt
+
       - name: Extract workspace
         shell: bash
         run: |
@@ -296,11 +308,26 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cargo package dry run
+        env:
+          VIM_CORE_FROM_SOURCE: "1"
         shell: bash
         run: |
           set -euo pipefail
           cargo package --allow-dirty
           cargo publish --dry-run --allow-dirty
+
+      - name: Verify packaged crate default build with local prebuilt assets
+        env:
+          VIM_CORE_ARTIFACT_BASE_URL: ${{ github.workspace }}/local-prebuilt
+          VIM_CORE_FROM_SOURCE: "0"
+        shell: bash
+        run: |
+          set -euo pipefail
+          crate_dir="$(mktemp -d)"
+          crate_path="target/package/vim-core-rs-${{ needs.prepare.outputs.crate_version }}.crate"
+          tar -xzf "$crate_path" -C "$crate_dir"
+          cd "$crate_dir/vim-core-rs-${{ needs.prepare.outputs.crate_version }}"
+          cargo build --release -vv
 
   approval_gate:
     name: Approval gate
@@ -322,6 +349,7 @@ jobs:
     needs:
       - prepare
       - approval_gate
+      - publish_prebuilt_release
     if: needs.prepare.outputs.publish == 'true'
     environment:
       name: crates-io-publish
