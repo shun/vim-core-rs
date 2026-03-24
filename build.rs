@@ -29,6 +29,7 @@ use build_compile_plan::{CompilePlan, UpstreamMetadata, create_compile_plan, wri
 struct GeneratedVimBuildArtifacts {
     include_root: PathBuf,
     generated_sources: Vec<PathBuf>,
+    staged_vendor_src_root: PathBuf,
 }
 
 fn main() {
@@ -156,10 +157,18 @@ fn compile_vendor_archive(
     compile_plan: &CompilePlan,
     generated_vim_build: &GeneratedVimBuildArtifacts,
 ) -> Result<PathBuf, String> {
+    let vendor_src_root = repo_root.join("vendor/vim_src/src");
     let vendor_files = compile_plan
         .vendor_sources
         .iter()
         .map(|path| repo_root.join(path))
+        .map(|path| {
+            path.strip_prefix(&vendor_src_root)
+                .ok()
+                .filter(|relative| relative.starts_with("xdiff"))
+                .map(|relative| generated_vim_build.staged_vendor_src_root.join(relative))
+                .unwrap_or(path)
+        })
         .collect::<Vec<_>>();
     let mut regular_files = Vec::new();
     let mut archives = Vec::new();
@@ -288,6 +297,7 @@ fn prepare_generated_vim_build(
 
     let build_root = out_dir.join("vim_build");
     let auto_dir = build_root.join("auto");
+    let staged_vendor_src_root = build_root.join("src");
     fs::create_dir_all(&auto_dir).map_err(|error| {
         format!(
             "failed to create generated Vim build directory {}: {error}",
@@ -317,12 +327,24 @@ fn prepare_generated_vim_build(
     configure.arg(format!("--with-modified-by={VIM_MODIFIED_BY}"));
     run_command(&mut configure, "generate Vim config headers")?;
 
-    // xdiff 等のサブディレクトリからの ../auto/config.h 参照を解決するため、
-    // 生成されたヘッダーをソースツリーの期待される場所へコピーする。
     let generated_config_h = build_root.join("auto/config.h");
-    let target_config_h = vendor_src_dir.join("auto/config.h");
-    std::fs::copy(&generated_config_h, &target_config_h)
-        .map_err(|e| format!("failed to copy config.h: {}", e))?;
+    let staged_auto_dir = staged_vendor_src_root.join("auto");
+    fs::create_dir_all(&staged_auto_dir).map_err(|error| {
+        format!(
+            "failed to create staged Vim auto directory {}: {error}",
+            staged_auto_dir.display()
+        )
+    })?;
+    fs::copy(&generated_config_h, staged_auto_dir.join("config.h")).map_err(|error| {
+        format!(
+            "failed to stage generated config.h into {}: {error}",
+            staged_auto_dir.display()
+        )
+    })?;
+
+    let vendor_xdiff_dir = vendor_src_dir.join("xdiff");
+    let staged_xdiff_dir = staged_vendor_src_root.join("xdiff");
+    copy_directory_recursively(&vendor_xdiff_dir, &staged_xdiff_dir)?;
 
     generate_osdef_header(vendor_src_dir, &build_root)?;
 
@@ -333,7 +355,50 @@ fn prepare_generated_vim_build(
     Ok(GeneratedVimBuildArtifacts {
         include_root: build_root,
         generated_sources: vec![auto_dir.join("pathdef.c")],
+        staged_vendor_src_root,
     })
+}
+
+fn copy_directory_recursively(source: &Path, destination: &Path) -> Result<(), String> {
+    fs::create_dir_all(destination).map_err(|error| {
+        format!(
+            "failed to create staged directory {}: {error}",
+            destination.display()
+        )
+    })?;
+
+    for entry in fs::read_dir(source)
+        .map_err(|error| format!("failed to read directory {}: {error}", source.display()))?
+    {
+        let entry = entry.map_err(|error| {
+            format!(
+                "failed to read directory entry in {}: {error}",
+                source.display()
+            )
+        })?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        let file_type = entry.file_type().map_err(|error| {
+            format!(
+                "failed to read file type for {}: {error}",
+                source_path.display()
+            )
+        })?;
+
+        if file_type.is_dir() {
+            copy_directory_recursively(&source_path, &destination_path)?;
+        } else if file_type.is_file() {
+            fs::copy(&source_path, &destination_path).map_err(|error| {
+                format!(
+                    "failed to copy {} to {}: {error}",
+                    source_path.display(),
+                    destination_path.display()
+                )
+            })?;
+        }
+    }
+
+    Ok(())
 }
 
 struct VimPaths {
