@@ -88,7 +88,7 @@ jobs:
       artifact_name: ${{ needs.prepare.outputs.artifact_name }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0
@@ -119,7 +119,7 @@ jobs:
           cp "$archive_path" workspace.tar.gz
 
       - name: Upload prepared workspace
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ needs.prepare.outputs.artifact_name }}
           path: workspace.tar.gz
@@ -141,7 +141,7 @@ jobs:
             os: ubuntu-latest
     steps:
       - name: Download prepared workspace
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.prepare.outputs.artifact_name }}
 
@@ -181,7 +181,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
     steps:
       - name: Download prepared workspace
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.prepare.outputs.artifact_name }}
 
@@ -224,7 +224,7 @@ jobs:
             dist
 
       - name: Upload packaged prebuilt archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: prebuilt-${{ matrix.target }}
           path: dist/*
@@ -247,12 +247,12 @@ jobs:
             target: x86_64-unknown-linux-gnu
     steps:
       - name: Download prepared workspace
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.prepare.outputs.artifact_name }}
 
       - name: Download packaged prebuilt archive
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: prebuilt-${{ matrix.target }}
           path: local-prebuilt
@@ -285,18 +285,18 @@ jobs:
       - verify_prebuilt
     steps:
       - name: Download prepared workspace
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.prepare.outputs.artifact_name }}
 
       - name: Download packaged macOS archive
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: prebuilt-aarch64-apple-darwin
           path: local-prebuilt
 
       - name: Download packaged Linux archive
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: prebuilt-x86_64-unknown-linux-gnu
           path: local-prebuilt
@@ -358,7 +358,7 @@ jobs:
       name: crates-io-publish
     steps:
       - name: Download prepared workspace
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.prepare.outputs.artifact_name }}
 
@@ -389,13 +389,13 @@ jobs:
     if: needs.prepare.outputs.publish == 'true'
     steps:
       - name: Download packaged macOS archive
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: prebuilt-aarch64-apple-darwin
           path: release-assets
 
       - name: Download packaged Linux archive
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: prebuilt-x86_64-unknown-linux-gnu
           path: release-assets
