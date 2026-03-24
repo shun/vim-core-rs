@@ -146,6 +146,7 @@ fn compile_native_archive(
         &files,
         &generated_vim_build.include_root,
         WarningPolicy::Strict,
+        &[],
     )
 }
 
@@ -155,21 +156,68 @@ fn compile_vendor_archive(
     compile_plan: &CompilePlan,
     generated_vim_build: &GeneratedVimBuildArtifacts,
 ) -> Result<PathBuf, String> {
-    let mut files = compile_plan
+    let vendor_files = compile_plan
         .vendor_sources
         .iter()
         .map(|path| repo_root.join(path))
         .collect::<Vec<_>>();
-    files.extend(generated_vim_build.generated_sources.iter().cloned());
+    let mut regular_files = Vec::new();
+    let mut archives = Vec::new();
 
-    compile_archive(
-        repo_root,
-        out_dir,
-        "vimcore_vendor",
-        &files,
-        &generated_vim_build.include_root,
-        WarningPolicy::Relaxed,
-    )
+    for file in vendor_files {
+        if file.ends_with("vendor/vim_src/src/main.c") {
+            archives.push(compile_archive(
+                repo_root,
+                out_dir,
+                "vimcore_vendor_main",
+                &[file],
+                &generated_vim_build.include_root,
+                WarningPolicy::Relaxed,
+                &[
+                    ("main", "vim_core_embedded_main"),
+                    ("getout", "vim_core_embedded_getout"),
+                ],
+            )?);
+        } else if file.ends_with("vendor/vim_src/src/os_unix.c") {
+            archives.push(compile_archive(
+                repo_root,
+                out_dir,
+                "vimcore_vendor_os_unix",
+                &[file],
+                &generated_vim_build.include_root,
+                WarningPolicy::Relaxed,
+                &[
+                    ("mch_inchar", "vim_core_vendor_mch_inchar"),
+                    ("mch_job_start", "vim_core_vendor_mch_job_start"),
+                    ("mch_job_status", "vim_core_vendor_mch_job_status"),
+                    (
+                        "mch_detect_ended_job",
+                        "vim_core_vendor_mch_detect_ended_job",
+                    ),
+                    ("mch_signal_job", "vim_core_vendor_mch_signal_job"),
+                    ("mch_clear_job", "vim_core_vendor_mch_clear_job"),
+                ],
+            )?);
+        } else {
+            regular_files.push(file);
+        }
+    }
+    regular_files.extend(generated_vim_build.generated_sources.iter().cloned());
+
+    archives.insert(
+        0,
+        compile_archive(
+            repo_root,
+            out_dir,
+            "vimcore_vendor",
+            &regular_files,
+            &generated_vim_build.include_root,
+            WarningPolicy::Relaxed,
+            &[],
+        )?,
+    );
+
+    combine_archives_named(out_dir, "libvimcore_vendor_combined.a", &archives)
 }
 
 enum WarningPolicy {
@@ -184,6 +232,7 @@ fn compile_archive(
     files: &[PathBuf],
     generated_include_root: &Path,
     warning_policy: WarningPolicy,
+    extra_defines: &[(&str, &str)],
 ) -> Result<PathBuf, String> {
     if files.is_empty() {
         return Err(format!("{library_name} does not have source files"));
@@ -198,6 +247,9 @@ fn compile_archive(
     build.include(repo_root.join("vendor/vim_src/src/proto"));
     build.define("HAVE_CONFIG_H", None);
     build.define("FEAT_JOB_CHANNEL", "1");
+    for (key, value) in extra_defines {
+        build.define(key, Some(*value));
+    }
 
     if library_name == "vimcore_vendor" {
         build.define("read", "vim_bridge_vfd_read");
@@ -382,8 +434,16 @@ fn generate_osdef_header(vendor_src_dir: &Path, build_root: &Path) -> Result<(),
 }
 
 fn combine_archives(out_dir: &Path, archives: &[PathBuf]) -> Result<PathBuf, String> {
+    combine_archives_named(out_dir, "libvimcore.a", archives)
+}
+
+fn combine_archives_named(
+    out_dir: &Path,
+    output_name: &str,
+    archives: &[PathBuf],
+) -> Result<PathBuf, String> {
     let ar = env::var("AR").unwrap_or_else(|_| "ar".to_string());
-    let final_archive = out_dir.join("libvimcore.a");
+    let final_archive = out_dir.join(output_name);
     if final_archive.exists() {
         fs::remove_file(&final_archive).map_err(|error| {
             format!(
