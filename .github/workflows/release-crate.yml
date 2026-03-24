@@ -109,11 +109,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          archive_path="$RUNNER_TEMP/workspace.tar.gz"
           tar \
             --exclude=.git \
             --exclude=target \
-            -czf workspace.tar.gz \
+            --exclude=workspace.tar.gz \
+            -czf "$archive_path" \
             .
+          cp "$archive_path" workspace.tar.gz
 
       - name: Upload prepared workspace
         uses: actions/upload-artifact@v4
