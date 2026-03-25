@@ -79,7 +79,7 @@ static upstream_runtime_session_t* upstream_runtime_active_session = NULL;
 int upstream_runtime_is_injecting = FALSE;
 jmp_buf* upstream_runtime_active_quit_env = NULL;
 static FILE* upstream_runtime_debug_log_file = NULL;
-static int upstream_runtime_debug_log_to_stderr = TRUE;
+static int upstream_runtime_debug_log_to_stderr = FALSE;
 
 static void upstream_runtime_debug_vprintf(const char* format, va_list args) {
     FILE* stream = upstream_runtime_debug_log_file != NULL
@@ -106,7 +106,7 @@ void upstream_runtime_set_debug_log_path(const char* path, uintptr_t path_len) {
     }
 
     if (path == NULL || path_len == 0) {
-        upstream_runtime_debug_log_to_stderr = TRUE;
+        upstream_runtime_debug_log_to_stderr = FALSE;
         return;
     }
 

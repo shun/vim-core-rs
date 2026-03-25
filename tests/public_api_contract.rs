@@ -64,12 +64,50 @@ fn session_options_route_debug_log_output_to_file() {
     session
         .apply_ex_command(":write output.txt")
         .expect("write command should succeed");
+    let tabstop = session
+        .get_option_number("tabstop", CoreOptionScope::Global)
+        .expect("get_option_number should succeed");
 
+    assert!(tabstop > 0, "tabstop should be a positive number");
     let log_output = fs::read_to_string(&log_path).expect("debug log file should be readable");
     assert!(
         log_output.contains("[DEBUG] apply_write_intent: local write buf_id=1 path=output.txt"),
         "debug log should be written to the configured file: {}",
         log_output
+    );
+    assert!(
+        log_output.contains("[DEBUG] get_option: name='tabstop'"),
+        "native debug log should be written to the configured file: {}",
+        log_output
+    );
+}
+
+#[test]
+fn session_options_disable_debug_log_output_by_default() {
+    let _guard = acquire_session_test_lock();
+    let tempdir = tempfile::tempdir().expect("tempdir should be created");
+    let log_path = tempdir.path().join("vim-core-rs-debug.log");
+    let mut session =
+        VimCoreSession::new("buffer").expect("session should initialize with default options");
+
+    session
+        .apply_ex_command(":write output.txt")
+        .expect("write command should succeed");
+    let tabstop = session
+        .get_option_number("tabstop", CoreOptionScope::Global)
+        .expect("get_option_number should succeed");
+
+    assert!(tabstop > 0, "tabstop should be a positive number");
+    assert!(
+        !log_path.exists(),
+        "debug log file should not exist when debug_log_path is omitted"
+    );
+    assert_eq!(
+        fs::read_dir(tempdir.path())
+            .expect("tempdir should remain readable")
+            .count(),
+        0,
+        "default debug logging should not create any files"
     );
 }
 

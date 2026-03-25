@@ -402,6 +402,7 @@ pub enum CoreSessionError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CoreSessionOptions {
+    /// `None` のとき debug log は無効。指定時のみファイルへ追記する。
     pub debug_log_path: Option<PathBuf>,
 }
 
