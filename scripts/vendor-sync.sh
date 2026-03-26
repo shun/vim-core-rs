@@ -184,8 +184,10 @@ cmd_refresh() {
 
   # パッチ対象ファイル一覧（必要に応じて追加）
   local patch_targets=(
-    src/ui.c
-    src/ex_docmd.c
+    src/message.c
+    src/undo.c
+    src/eval.c
+    src/vim9execute.c
   )
 
   for f in "${patch_targets[@]}"; do
@@ -232,7 +234,7 @@ cmd_update() {
     echo ""
     echo "==> パッチ適用に失敗"
     echo "    次のステップ:"
-    echo "    1. vendor/vim_src/src/ui.c, src/ex_docmd.c を手動修正"
+    echo "    1. vendor/vim_src/src/*.c の手動修正内容を確認"
     echo "    2. ./scripts/vendor-sync.sh refresh > patches/0001-xxx.patch"
     echo "    3. cargo build && cargo test"
     exit 1
