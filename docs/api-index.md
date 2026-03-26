@@ -17,14 +17,14 @@ Read the pages in this order when you need the full mental model.
 - `SCOPE.md` defines the intended product boundary and non-goals.
 - `known-limitations.md` lists current implementation gaps and intentionally
   incomplete behavior.
+- `api-contracts.md` documents the behavior contracts that matter more than
+  raw signatures, including session ownership, host-action flow, VFS
+  sequencing, message delivery, and job bridging.
 - `public-api-reference.md` documents every crate-public module, type, enum
   variant family, alias, and method that a host application can call.
 - `internal-api-reference.md` documents every non-public Rust API that the
   crate uses to implement the public surface, including private helper
   functions, crate-visible coordination layers, and C ABI shims.
-- `api-contracts.md` documents the behavior contracts that matter more than
-  raw signatures, including session ownership, host-action flow, VFS
-  sequencing, message delivery, and job bridging.
 
 ## Symbol map
 

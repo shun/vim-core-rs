@@ -327,9 +327,6 @@ on its own.
   - `Redraw { full, clear_before_draw }`
   - `RequestInput { prompt, input_kind, correlation_id }`
   - `Bell`
-  - `BufAdd { buf_id }`
-  - `WinNew { win_id }`
-  - `LayoutChanged`
   - `JobStart(CoreJobStartRequest)`
   - `JobStop { job_id }`
 
