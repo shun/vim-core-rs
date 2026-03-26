@@ -187,10 +187,16 @@ typedef struct vim_core_pum_info {
     size_t item_count;
 } vim_core_pum_info_t;
 
-typedef enum vim_core_message_kind {
-    VIM_CORE_MESSAGE_NORMAL = 0,
-    VIM_CORE_MESSAGE_ERROR = 1
-} vim_core_message_kind_t;
+typedef enum vim_core_message_severity {
+    VIM_CORE_MESSAGE_SEVERITY_INFO = 0,
+    VIM_CORE_MESSAGE_SEVERITY_WARNING = 1,
+    VIM_CORE_MESSAGE_SEVERITY_ERROR = 2
+} vim_core_message_severity_t;
+
+typedef enum vim_core_message_category {
+    VIM_CORE_MESSAGE_CATEGORY_USER_VISIBLE = 0,
+    VIM_CORE_MESSAGE_CATEGORY_COMMAND_FEEDBACK = 1
+} vim_core_message_category_t;
 
 typedef enum vim_core_event_kind {
     VIM_CORE_EVENT_NONE = 0,
@@ -210,7 +216,8 @@ typedef enum vim_core_pager_prompt_kind {
 
 typedef struct vim_core_event {
     uint32_t kind;
-    vim_core_message_kind_t message_kind;
+    vim_core_message_severity_t message_severity;
+    vim_core_message_category_t message_category;
     vim_core_pager_prompt_kind_t pager_prompt_kind;
     const char* text_ptr;
     uintptr_t text_len;
@@ -416,7 +423,8 @@ int vim_core_bridge_embedded_mode_active(void);
 void vim_core_bridge_enqueue_message_event(
     const char* text,
     uintptr_t text_len,
-    vim_core_message_kind_t kind
+    vim_core_message_severity_t severity,
+    vim_core_message_category_t category
 );
 void vim_core_bridge_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind);
 void vim_core_bridge_enqueue_bell(void);

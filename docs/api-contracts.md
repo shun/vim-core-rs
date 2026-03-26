@@ -91,6 +91,9 @@ The event contract explains how embedded-mode observability works.
   event queue and the host-action queue before returning the transaction.
 - Message delivery does not depend on `execute('messages')`, `v:errmsg`, or a
   registered callback.
+- `CoreMessageEvent` carries structured metadata. Hosts must distinguish
+  user-visible notifications from command feedback through
+  `CoreMessageCategory`, not by parsing message text.
 - `CoreSnapshot` is state-only. Reading a snapshot does not drain pending
   events.
 - UI-like notifications such as bell, redraw, buffer creation, window

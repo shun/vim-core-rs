@@ -121,7 +121,8 @@ int upstream_runtime_embedded_mode_active(void);
 void upstream_runtime_enqueue_message_event(
     const char* text,
     uintptr_t text_len,
-    vim_core_message_kind_t kind
+    vim_core_message_severity_t severity,
+    vim_core_message_category_t category
 );
 void upstream_runtime_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind);
 void upstream_runtime_enqueue_bell_for_active_session(void);

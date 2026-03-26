@@ -266,7 +266,8 @@ These types describe the observable result surface for embedded execution.
   `PagerPrompt(CorePagerPromptKind)`, `Bell`,
   `Redraw { full, clear_before_draw }`, `BufferAdded { buf_id }`,
   `WindowCreated { win_id }`, `LayoutChanged`
-- `CoreMessageKind`: `Normal`, `Error`
+- `CoreMessageSeverity`: `Info`, `Warning`, `Error`
+- `CoreMessageCategory`: `UserVisible`, `CommandFeedback`
 - `CorePagerPromptKind`: `More`, `HitReturn`
 - `CoreHostAction`: `VfsRequest`, `Write`, `Quit`, `Redraw`,
   `RequestInput`, `Bell`, `JobStart`, `JobStop`
@@ -377,8 +378,9 @@ These structs feed editor UI and history views.
 
 These types capture message and search metadata.
 
-- `CoreMessageKind`: `Normal`, `Error`
-- `CoreMessageEvent { kind, content }`
+- `CoreMessageSeverity`: `Info`, `Warning`, `Error`
+- `CoreMessageCategory`: `UserVisible`, `CommandFeedback`
+- `CoreMessageEvent { severity, category, content }`
 - `CoreMatchType`: `Regular`, `IncSearch`, `CurSearch`
 - `CoreMatchRange { start_row, start_col, end_row, end_col, match_type }`
 - `MatchCountResult`: `Calculated(usize)`, `MaxReached(usize)`, `TimedOut`

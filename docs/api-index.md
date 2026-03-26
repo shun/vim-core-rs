@@ -40,7 +40,8 @@ The crate root exports these user-facing symbols.
 - Enums: `CoreMode`, `CorePendingInput`, `CoreCommandOutcome`,
   `CoreInputRequestKind`, `CoreBackendIdentity`, `CoreRuntimeMode`,
   `CoreOptionScope`, `CoreOptionType`, `CoreOptionError`, `JobStatus`,
-  `CoreHostAction`, `CoreMessageKind`, `CorePagerPromptKind`, `CoreEvent`,
+  `CoreHostAction`, `CoreMessageSeverity`, `CoreMessageCategory`,
+  `CorePagerPromptKind`, `CoreEvent`,
   `CoreMatchType`, `MatchCountResult`, `CoreSearchDirection`,
   `CoreCommandError`, `CoreSessionError`
 - Structs: `CoreMarkPosition`, `CoreJumpListEntry`, `CoreJumpList`,

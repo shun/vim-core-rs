@@ -149,7 +149,8 @@ static int upstream_runtime_enqueue_message_event_for_session(
     upstream_runtime_session_t* session,
     const char* text,
     uintptr_t text_len,
-    vim_core_message_kind_t kind
+    vim_core_message_severity_t severity,
+    vim_core_message_category_t category
 );
 static void upstream_runtime_queue_bell_event(upstream_runtime_session_t* session);
 static void upstream_runtime_queue_redraw_event(
@@ -2610,7 +2611,8 @@ static int upstream_runtime_enqueue_message_event_for_session(
     upstream_runtime_session_t* session,
     const char* text,
     uintptr_t text_len,
-    vim_core_message_kind_t kind
+    vim_core_message_severity_t severity,
+    vim_core_message_category_t category
 ) {
     vim_core_event_t event;
     char* copy;
@@ -2623,7 +2625,8 @@ static int upstream_runtime_enqueue_message_event_for_session(
 
     memset(&event, 0, sizeof(event));
     event.kind = VIM_CORE_EVENT_MESSAGE;
-    event.message_kind = kind;
+    event.message_severity = severity;
+    event.message_category = category;
     event.text_ptr = copy;
     event.text_len = text_len;
     if (!upstream_runtime_enqueue_event(session, &event)) {
@@ -2702,13 +2705,15 @@ int upstream_runtime_embedded_mode_active(void) {
 void upstream_runtime_enqueue_message_event(
     const char* text,
     uintptr_t text_len,
-    vim_core_message_kind_t kind
+    vim_core_message_severity_t severity,
+    vim_core_message_category_t category
 ) {
     (void)upstream_runtime_enqueue_message_event_for_session(
         upstream_runtime_active_session,
         text,
         text_len,
-        kind
+        severity,
+        category
     );
 }
 

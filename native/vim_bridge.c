@@ -266,9 +266,10 @@ int vim_core_bridge_embedded_mode_active(void) {
 void vim_core_bridge_enqueue_message_event(
     const char* text,
     uintptr_t text_len,
-    vim_core_message_kind_t kind
+    vim_core_message_severity_t severity,
+    vim_core_message_category_t category
 ) {
-    upstream_runtime_enqueue_message_event(text, text_len, kind);
+    upstream_runtime_enqueue_message_event(text, text_len, severity, category);
 }
 
 void vim_core_bridge_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind) {

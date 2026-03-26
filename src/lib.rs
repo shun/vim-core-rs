@@ -282,19 +282,37 @@ pub struct CoreSyntaxChunk {
     pub name: Option<String>,
 }
 
-/// Vimから発せられたメッセージの種別
+/// Vimメッセージの重要度
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CoreMessageKind {
-    /// 通常のメッセージ
-    Normal,
+pub enum CoreMessageSeverity {
+    /// 情報メッセージ
+    Info,
+    /// 警告やガイダンス
+    Warning,
     /// エラーメッセージ（Eから始まるメッセージ等）
     Error,
+}
+
+/// Vimメッセージの配信カテゴリ
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreMessageCategory {
+    /// 埋め込みUIがユーザー向け通知として表示すべきメッセージ
+    UserVisible,
+    /// undo/redo などの操作進捗。UIは通常表示しない
+    CommandFeedback,
+}
+
+impl CoreMessageCategory {
+    pub fn is_user_visible(&self) -> bool {
+        matches!(self, Self::UserVisible)
+    }
 }
 
 /// メッセージイベントのペイロード
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreMessageEvent {
-    pub kind: CoreMessageKind,
+    pub severity: CoreMessageSeverity,
+    pub category: CoreMessageCategory,
     pub content: String,
 }
 
@@ -2169,14 +2187,33 @@ fn convert_event(event: bindings::vim_core_event_t) -> Option<CoreEvent> {
     match event.kind {
         value if value == bindings::vim_core_event_kind_VIM_CORE_EVENT_NONE => None,
         value if value == bindings::vim_core_event_kind_VIM_CORE_EVENT_MESSAGE => {
-            let kind = match event.message_kind {
-                value if value == bindings::vim_core_message_kind_VIM_CORE_MESSAGE_ERROR => {
-                    CoreMessageKind::Error
+            let severity = match event.message_severity {
+                value
+                    if value
+                        == bindings::vim_core_message_severity_VIM_CORE_MESSAGE_SEVERITY_ERROR =>
+                {
+                    CoreMessageSeverity::Error
                 }
-                _ => CoreMessageKind::Normal,
+                value
+                    if value
+                        == bindings::vim_core_message_severity_VIM_CORE_MESSAGE_SEVERITY_WARNING =>
+                {
+                    CoreMessageSeverity::Warning
+                }
+                _ => CoreMessageSeverity::Info,
+            };
+            let category = match event.message_category {
+                value
+                    if value
+                        == bindings::vim_core_message_category_VIM_CORE_MESSAGE_CATEGORY_COMMAND_FEEDBACK =>
+                {
+                    CoreMessageCategory::CommandFeedback
+                }
+                _ => CoreMessageCategory::UserVisible,
             };
             Some(CoreEvent::Message(CoreMessageEvent {
-                kind,
+                severity,
+                category,
                 content: string_from_parts(event.text_ptr, event.text_len),
             }))
         }

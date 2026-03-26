@@ -8,7 +8,8 @@ use std::sync::{Mutex, OnceLock};
 #[cfg(unix)]
 use std::{sync::mpsc, thread, time::Duration};
 use vim_core_rs::{
-    CoreEvent, CoreMessageEvent, CoreMessageKind, CorePagerPromptKind, VimCoreSession,
+    CoreEvent, CoreMessageCategory, CoreMessageEvent, CoreMessageSeverity, CorePagerPromptKind,
+    VimCoreSession,
 };
 
 fn session_test_lock() -> &'static Mutex<()> {
@@ -74,26 +75,33 @@ fn error_message_is_exposed_via_pending_event() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
 
-    let ((_, event, messages), stdout, stderr) = capture_standard_streams(|| {
-        let result = session.execute_ex_command("echoerr 'test error message'");
-        let event = session.take_pending_event();
+    let ((tx, event, messages), stdout, stderr) = capture_standard_streams(|| {
+        let tx = session
+            .execute_ex_command("echoerr 'test error message'")
+            .expect("echoerr が成功すること");
+        let event = tx.events.iter().find_map(|event| match event {
+            CoreEvent::Message(message) => Some(message.clone()),
+            _ => None,
+        });
         let messages = session
             .eval_string("execute('messages')")
             .unwrap_or_default();
-        (result, event, messages)
+        (tx, event, messages)
     });
 
     assert!(
         matches!(
             event,
-            Some(CoreEvent::Message(CoreMessageEvent {
-                kind: CoreMessageKind::Error,
+            Some(CoreMessageEvent {
+                severity: CoreMessageSeverity::Error,
+                category: CoreMessageCategory::UserVisible,
                 ref content,
-            })) if content.contains("test error message")
+            }) if content.contains("test error message")
         ) || messages.contains("test error message")
             || output_contains(&stdout, "test error message")
             || output_contains(&stderr, "test error message"),
-        "echoerr は pending event / :messages / 標準出力/標準エラーのいずれかで観測できること: event={:?}, messages={:?}, stdout={:?}, stderr={:?}",
+        "echoerr は transaction event / :messages / 標準出力/標準エラーのいずれかで観測できること: events={:?}, event={:?}, messages={:?}, stdout={:?}, stderr={:?}",
+        tx.events,
         event,
         messages,
         stdout,
@@ -117,7 +125,8 @@ fn execute_ex_command_returns_message_events_without_scraping() {
         tx.events.iter().any(|event| matches!(
             event,
             CoreEvent::Message(message)
-                if message.kind == CoreMessageKind::Normal
+                if message.severity == CoreMessageSeverity::Info
+                    && message.category == CoreMessageCategory::UserVisible
                     && message.content.contains("hello from event queue")
         )) || output_contains(&stdout, "hello from event queue")
             || output_contains(&stderr, "hello from event queue"),
@@ -130,7 +139,7 @@ fn execute_ex_command_returns_message_events_without_scraping() {
 
 #[cfg(unix)]
 #[test]
-fn execute_normal_command_returns_undo_message_events() {
+fn execute_normal_command_returns_undo_command_feedback_events() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
 
@@ -152,15 +161,66 @@ fn execute_normal_command_returns_undo_message_events() {
         "undo はバッファ内容を元に戻すこと"
     );
     assert!(
-        tx.events.is_empty()
-            || tx
-                .events
-                .iter()
-                .any(|event| matches!(event, CoreEvent::Message(_)))
-            || output_contains(&stdout, "1 change; before #1")
-            || output_contains(&stderr, "1 change; before #1"),
-        "undo は少なくとも回復に成功し、不正なイベント状態にならないこと: events={:?}, stdout={:?}, stderr={:?}",
+        tx.events.iter().any(|event| matches!(
+            event,
+            CoreEvent::Message(message)
+                if message.severity == CoreMessageSeverity::Info
+                    && message.category == CoreMessageCategory::CommandFeedback
+                    && message.content.contains("before #")
+        )),
+        "undo は user-visible ではなく command feedback として観測できること: events={:?}",
         tx.events,
+    );
+    assert!(
+        sanitize_harness_output(&stdout).is_empty() && sanitize_harness_output(&stderr).is_empty(),
+        "embedded undo は端末へ英語メッセージを漏らさないこと: stdout={:?}, stderr={:?}",
+        stdout,
+        stderr
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn execute_normal_command_returns_redo_command_feedback_events() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
+
+    session
+        .execute_normal_command("A!")
+        .expect("テキスト変更に成功すること");
+    session
+        .execute_normal_command("\u{1b}")
+        .expect("Insert モードを抜けられること");
+    session
+        .execute_ex_command("set cpo-=u")
+        .expect("redo の意味を安定させること");
+    let _ = capture_standard_streams(|| {
+        session
+            .execute_normal_command("u")
+            .expect("undo が成功すること")
+    });
+
+    let (tx, stdout, stderr) = capture_standard_streams(|| {
+        session
+            .execute_ex_command("redo")
+            .expect("redo が成功すること")
+    });
+
+    assert_eq!(tx.snapshot.text, "hello!\n", "redo は変更を復元すること");
+    assert!(
+        tx.events.iter().any(|event| matches!(
+            event,
+            CoreEvent::Message(message)
+                if message.severity == CoreMessageSeverity::Info
+                    && message.category == CoreMessageCategory::CommandFeedback
+                    && message.content.contains("after #")
+        )),
+        "redo は command feedback として観測できること: events={:?}",
+        tx.events
+    );
+    assert!(
+        sanitize_harness_output(&stdout).is_empty() && sanitize_harness_output(&stderr).is_empty(),
+        "embedded redo は端末へ英語メッセージを漏らさないこと: stdout={:?}, stderr={:?}",
         stdout,
         stderr
     );
@@ -262,7 +322,8 @@ fn embedded_echoconsole_is_delivered_as_event_without_terminal_leak() {
         tx.events.iter().any(|event| matches!(
             event,
             CoreEvent::Message(message)
-                if message.kind == CoreMessageKind::Normal
+                if message.severity == CoreMessageSeverity::Info
+                    && message.category == CoreMessageCategory::UserVisible
                     && message.content.contains("console event")
         )) || output_contains(&stdout, "console event")
             || output_contains(&stderr, "console event"),
@@ -315,7 +376,8 @@ fn take_pending_event_exposes_echo_output_outside_transaction_results() {
         matches!(
             event,
             Some(CoreEvent::Message(CoreMessageEvent {
-                kind: CoreMessageKind::Normal,
+                severity: CoreMessageSeverity::Info,
+                category: CoreMessageCategory::UserVisible,
                 ref content,
             })) if content.contains("queued message")
         ) || messages.contains("queued message")
@@ -361,7 +423,8 @@ fn embedded_multiline_echo_does_not_block_on_more_prompt() {
         events.iter().any(|event| matches!(
             event,
             CoreEvent::Message(message)
-                if message.kind == CoreMessageKind::Normal
+                if message.severity == CoreMessageSeverity::Info
+                    && message.category == CoreMessageCategory::UserVisible
                     && message.content.contains("1\n2\n3")
         )) || output_contains(&stdout, "1\n2\n3")
             || output_contains(&stderr, "1\n2\n3"),
@@ -467,7 +530,8 @@ fn embedded_echon_is_delivered_as_single_message_chunk_without_terminal_leak() {
         tx.events.iter().any(|event| matches!(
             event,
             CoreEvent::Message(message)
-                if message.kind == CoreMessageKind::Normal
+                if message.severity == CoreMessageSeverity::Info
+                    && message.category == CoreMessageCategory::UserVisible
                     && message.content == "abcd"
         )) || output_contains(&stdout, "abcd")
             || output_contains(&stderr, "abcd"),
@@ -486,30 +550,37 @@ fn execute_ex_command_accepts_echomsg_without_host_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
 
-    let ((result, event, messages), stdout, stderr) = capture_standard_streams(|| {
-        let result = session.execute_ex_command("echomsg 'hello from vim'");
-        let event = session.take_pending_event();
+    let ((tx, event, messages), stdout, stderr) = capture_standard_streams(|| {
+        let tx = session
+            .execute_ex_command("echomsg 'hello from vim'")
+            .expect("echomsg が成功すること");
+        let event = tx.events.iter().find_map(|event| match event {
+            CoreEvent::Message(message) => Some(message.clone()),
+            _ => None,
+        });
         let messages = session
             .eval_string("execute('messages')")
             .unwrap_or_default();
-        (result, event, messages)
+        (tx, event, messages)
     });
 
-    assert!(
-        result.is_ok(),
-        "echomsg は少なくとも安全に実行できること: result={:?}",
-        result
-    );
     assert!(
         session.take_pending_host_action().is_none(),
         "echomsg は host action を追加しないこと"
     );
     assert!(
-        event.is_none()
-            || messages.contains("hello from vim")
+        matches!(
+            event,
+            Some(CoreMessageEvent {
+                severity: CoreMessageSeverity::Info,
+                category: CoreMessageCategory::UserVisible,
+                ref content,
+            }) if content.contains("hello from vim")
+        ) || messages.contains("hello from vim")
             || output_contains(&stdout, "hello from vim")
             || output_contains(&stderr, "hello from vim"),
-        "echomsg は event がなくてもよいが、不正な状態にはならないこと: event={:?}, messages={:?}, stdout={:?}, stderr={:?}",
+        "echomsg は user-visible な info message として観測できること: events={:?}, event={:?}, messages={:?}, stdout={:?}, stderr={:?}",
+        tx.events,
         event,
         messages,
         stdout,
@@ -541,7 +612,8 @@ fn event_queue_delivery_does_not_require_handler_registration() {
         matches!(
             event,
             Some(CoreEvent::Message(CoreMessageEvent {
-                kind: CoreMessageKind::Normal,
+                severity: CoreMessageSeverity::Info,
+                category: CoreMessageCategory::UserVisible,
                 ref content,
             })) if content.contains("no handler test")
         ) || messages.contains("no handler test")
@@ -552,6 +624,66 @@ fn event_queue_delivery_does_not_require_handler_registration() {
         messages,
         stdout,
         stderr
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn consumers_can_filter_user_visible_messages_without_parsing_text() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
+
+    let (info_tx, _, _) = capture_standard_streams(|| {
+        session
+            .execute_ex_command("echomsg 'visible info'")
+            .expect("echomsg が成功すること")
+    });
+    session
+        .execute_normal_command("A!")
+        .expect("テキスト変更に成功すること");
+    session
+        .execute_normal_command("\u{1b}")
+        .expect("Insert モードを抜けられること");
+    let (feedback_tx, _, _) = capture_standard_streams(|| {
+        session
+            .execute_normal_command("u")
+            .expect("undo が成功すること")
+    });
+
+    let visible_messages = info_tx
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            CoreEvent::Message(message) if message.category.is_user_visible() => Some(message),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let feedback_messages = feedback_tx
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            CoreEvent::Message(message)
+                if message.category == CoreMessageCategory::CommandFeedback =>
+            {
+                Some(message)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        visible_messages
+            .iter()
+            .any(|message| message.content.contains("visible info")),
+        "consumer は category だけで user-visible message を拾えること: {:?}",
+        info_tx.events
+    );
+    assert!(
+        feedback_messages
+            .iter()
+            .any(|message| message.content.contains("before #1")),
+        "consumer は text parsing なしで undo feedback を無視できること: {:?}",
+        feedback_tx.events
     );
 }
 
