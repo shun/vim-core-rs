@@ -20,12 +20,17 @@ fn quit_should_not_exit_process() {
 
     // This should currently exit the process if it's not trapped.
     let outcome = session
-        .apply_ex_command(":quit")
+        .execute_ex_command(":quit")
         .expect("Failed to apply :quit");
 
-    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
-    let action = session
-        .take_pending_host_action()
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::HostActionQueued
+    ));
+    let action = outcome
+        .host_actions
+        .into_iter()
+        .next()
         .expect("Expected host action");
     assert!(matches!(action, CoreHostAction::Quit { .. }));
 }
@@ -38,16 +43,21 @@ fn quit_bang_should_not_exit_process() {
 
     // Make the buffer dirty to ensure :quit! is different from :quit
     session
-        .apply_normal_command("Aadded text\x1b")
+        .execute_normal_command("Aadded text\x1b")
         .expect("Failed to edit");
 
     let outcome = session
-        .apply_ex_command(":quit!")
+        .execute_ex_command(":quit!")
         .expect("Failed to apply :quit!");
 
-    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
-    let action = session
-        .take_pending_host_action()
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::HostActionQueued
+    ));
+    let action = outcome
+        .host_actions
+        .into_iter()
+        .next()
         .expect("Expected host action");
     assert!(matches!(action, CoreHostAction::Quit { force: true, .. }));
 }

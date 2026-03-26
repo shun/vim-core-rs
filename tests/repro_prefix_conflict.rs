@@ -20,17 +20,19 @@ fn input_command_prefix_full_match() {
     // ":input" should work (5 chars)
     // CURRENT implementation only matches "inp" exactly (3 chars + space/null)
     let outcome = session
-        .apply_ex_command(":input Please enter something")
+        .execute_ex_command(":input Please enter something")
         .expect("input command should succeed");
 
     assert!(
-        matches!(outcome, CoreCommandOutcome::HostActionQueued),
+        matches!(outcome.outcome, CoreCommandOutcome::HostActionQueued),
         "Expected HostActionQueued for :input, but got {:?}",
         outcome
     );
 
-    let action = session
-        .take_pending_host_action()
+    let action = outcome
+        .host_actions
+        .into_iter()
+        .next()
         .expect("host action should be queued");
     if let CoreHostAction::RequestInput { prompt, .. } = action {
         assert_eq!(prompt, "Please enter something");
@@ -46,13 +48,18 @@ fn input_command_shorthand_match() {
 
     // ":inp" should work (3 chars)
     let outcome = session
-        .apply_ex_command(":inp hello")
+        .execute_ex_command(":inp hello")
         .expect("inp command should succeed");
 
-    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::HostActionQueued
+    ));
 
-    let action = session
-        .take_pending_host_action()
+    let action = outcome
+        .host_actions
+        .into_iter()
+        .next()
         .expect("host action should be queued");
     if let CoreHostAction::RequestInput { prompt, .. } = action {
         assert_eq!(prompt, "hello");
@@ -68,14 +75,11 @@ fn bell_command_prefix_match() {
 
     // ":bell" should work
     let outcome = session
-        .apply_ex_command(":bell")
+        .execute_ex_command(":bell")
         .expect("bell command should succeed");
 
-    assert!(matches!(outcome, CoreCommandOutcome::NoChange));
+    assert!(matches!(outcome.outcome, CoreCommandOutcome::NoChange));
 
-    assert!(matches!(
-        session.take_pending_event(),
-        Some(CoreEvent::Bell)
-    ));
-    assert!(session.take_pending_host_action().is_none());
+    assert!(matches!(outcome.events.as_slice(), [CoreEvent::Bell]));
+    assert!(outcome.host_actions.is_empty());
 }

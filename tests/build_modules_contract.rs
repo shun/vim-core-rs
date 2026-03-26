@@ -22,14 +22,16 @@ mod archive_member_audit_tests {
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn create_temp_dir(suffix: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be monotonic")
+            .as_nanos();
         let dir = std::env::temp_dir()
             .join("vim_core_rs_test_archive_audit")
-            .join(suffix);
-        if dir.exists() {
-            fs::remove_dir_all(&dir).expect("should clean test dir");
-        }
+            .join(format!("{suffix}-{unique}"));
         fs::create_dir_all(&dir).expect("should create test dir");
         dir
     }
@@ -194,8 +196,8 @@ mod archive_member_audit_tests {
     #[test]
     fn ex_delegation_proof_passes_with_required_symbols() {
         let report = build_ex_delegation_proof_from_symbols(BTreeSet::from([
-            "vim_bridge_apply_ex_command".to_string(),
-            "upstream_runtime_apply_ex_command".to_string(),
+            "vim_bridge_execute_ex_command".to_string(),
+            "upstream_runtime_execute_ex_command".to_string(),
             "do_cmdline_cmd".to_string(),
             "do_cmdline".to_string(),
             "vim_bridge_take_pending_host_action".to_string(),
@@ -219,8 +221,8 @@ mod archive_member_audit_tests {
     #[test]
     fn ex_delegation_proof_fails_when_host_action_symbols_are_missing() {
         let report = build_ex_delegation_proof_from_symbols(BTreeSet::from([
-            "vim_bridge_apply_ex_command".to_string(),
-            "upstream_runtime_apply_ex_command".to_string(),
+            "vim_bridge_execute_ex_command".to_string(),
+            "upstream_runtime_execute_ex_command".to_string(),
             "do_cmdline_cmd".to_string(),
             "do_cmdline".to_string(),
             "redraw_cmd".to_string(),
@@ -251,14 +253,16 @@ mod native_source_audit_tests {
     };
     use std::fs;
     use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn create_temp_native_dir(suffix: &str) -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be monotonic")
+            .as_nanos();
         let dir = std::env::temp_dir()
             .join("vim_core_rs_test_native_audit")
-            .join(suffix);
-        if dir.exists() {
-            fs::remove_dir_all(&dir).expect("should clean test dir");
-        }
+            .join(format!("{suffix}-{unique}"));
         fs::create_dir_all(&dir).expect("should create test dir");
         dir
     }
@@ -285,10 +289,10 @@ vim_bridge_state_t* vim_bridge_state_new(
     return state;
 }
 
-vim_core_command_result_t vim_bridge_apply_normal_command(
+vim_core_command_result_t vim_bridge_execute_normal_command(
     vim_bridge_state_t* state, const char* command, uintptr_t command_len
 ) {
-    return upstream_runtime_apply_normal_command(state->runtime, command, command_len);
+    return upstream_runtime_execute_normal_command(state->runtime, command, command_len);
 }
 "#,
         )
@@ -544,14 +548,16 @@ mod build_test_runner_contract_tests {
     };
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn create_temp_dir(suffix: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be monotonic")
+            .as_nanos();
         let dir = std::env::temp_dir()
             .join("vim_core_rs_test_build_test_runner")
-            .join(suffix);
-        if dir.exists() {
-            fs::remove_dir_all(&dir).expect("should clean test dir");
-        }
+            .join(format!("{suffix}-{unique}"));
         fs::create_dir_all(&dir).expect("should create test dir");
         dir
     }

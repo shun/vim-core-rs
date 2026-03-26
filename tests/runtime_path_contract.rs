@@ -21,7 +21,7 @@ fn runtimepath_contract_suite() {
 
     // 1. Verify default runtimepath from pathdef.c
     session
-        .apply_ex_command("put =&runtimepath")
+        .execute_ex_command("put =&runtimepath")
         .expect("failed to put runtimepath");
     let snapshot1 = session.snapshot();
     let rtp = snapshot1.text.trim();
@@ -41,19 +41,19 @@ fn runtimepath_contract_suite() {
 
     // Clear buffer for next check
     session
-        .apply_ex_command("%d")
+        .execute_ex_command("%d")
         .expect("failed to clear buffer");
 
     let set_rtp = format!("let &rtp .= ',' . '{}'", tmp_dir.path().display());
     session
-        .apply_ex_command(&set_rtp)
+        .execute_ex_command(&set_rtp)
         .expect("failed to set rtp");
 
     session
-        .apply_ex_command("runtime! plugin/test.vim")
+        .execute_ex_command("runtime! plugin/test.vim")
         .expect("failed to run :runtime");
     session
-        .apply_ex_command("if exists('g:test_loaded') | put ='LOADED' | endif")
+        .execute_ex_command("if exists('g:test_loaded') | put ='LOADED' | endif")
         .expect("failed to check var");
 
     assert!(
@@ -63,10 +63,10 @@ fn runtimepath_contract_suite() {
 
     // 3. Verify $VIM
     session
-        .apply_ex_command("%d")
+        .execute_ex_command("%d")
         .expect("failed to clear buffer");
     session
-        .apply_ex_command("put =$VIM")
+        .execute_ex_command("put =$VIM")
         .expect("failed to put $VIM");
     let snapshot2 = session.snapshot();
     let vim_val = snapshot2.text.trim();

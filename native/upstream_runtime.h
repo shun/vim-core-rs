@@ -14,13 +14,13 @@ void upstream_runtime_set_debug_log_path(const char* path, uintptr_t path_len);
 
 void upstream_runtime_session_free(upstream_runtime_session_t* session);
 
-vim_core_command_result_t upstream_runtime_apply_normal_command(
+vim_core_command_result_t upstream_runtime_execute_normal_command(
     upstream_runtime_session_t* session,
     const char* command,
     uintptr_t command_len
 );
 
-vim_core_command_result_t upstream_runtime_apply_ex_command(
+vim_core_command_result_t upstream_runtime_execute_ex_command(
     upstream_runtime_session_t* session,
     const char* command,
     uintptr_t command_len
@@ -61,7 +61,7 @@ vim_core_option_set_result_t upstream_runtime_set_option_string(
     vim_core_option_scope_t scope
 );
 
-vim_core_status_t upstream_runtime_apply_buffer_commit(
+vim_core_status_t upstream_runtime_commit_buffer_update(
     upstream_runtime_session_t* session,
     const vim_core_buffer_commit_t* commit
 );

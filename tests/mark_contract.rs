@@ -19,10 +19,10 @@ fn mark_api_returns_none_for_unset_marks() {
         VimCoreSession::new("alpha\nbeta\ngamma\n").expect("session should initialize");
 
     session
-        .apply_ex_command(":delmarks!")
+        .execute_ex_command(":delmarks!")
         .expect("local marks should be clearable");
     session
-        .apply_ex_command(":delmarks A-Z 0-9")
+        .execute_ex_command(":delmarks A-Z 0-9")
         .expect("global and numeric marks should be clearable");
 
     assert_eq!(session.mark('a'), None);
@@ -44,19 +44,19 @@ fn mark_api_reads_local_global_numeric_and_special_marks() {
         .id;
 
     session
-        .apply_normal_command("2G2lma")
+        .execute_normal_command("2G2lma")
         .expect("local mark command should succeed");
     session
-        .apply_normal_command("3GmA")
+        .execute_normal_command("3GmA")
         .expect("global mark command should succeed");
     session
-        .apply_ex_command(":call setpos(\"'0\", [bufnr('%'), 1, 3, 0])")
+        .execute_ex_command(":call setpos(\"'0\", [bufnr('%'), 1, 3, 0])")
         .expect("numeric mark setup should succeed");
     session
-        .apply_ex_command(":call setpos(\"'<\", [bufnr('%'), 1, 1, 0])")
+        .execute_ex_command(":call setpos(\"'<\", [bufnr('%'), 1, 1, 0])")
         .expect("visual start mark setup should succeed");
     session
-        .apply_ex_command(":call setpos(\"'>\", [bufnr('%'), 2, 4, 0])")
+        .execute_ex_command(":call setpos(\"'>\", [bufnr('%'), 2, 4, 0])")
         .expect("visual end mark setup should succeed");
 
     assert_eq!(
@@ -108,7 +108,7 @@ fn mark_api_reflects_updated_positions_after_vim_changes() {
         VimCoreSession::new("alpha\nbeta\ngamma\n").expect("session should initialize");
 
     session
-        .apply_normal_command("ma")
+        .execute_normal_command("ma")
         .expect("initial mark command should succeed");
     assert_eq!(
         session.mark('a'),
@@ -120,7 +120,7 @@ fn mark_api_reflects_updated_positions_after_vim_changes() {
     );
 
     session
-        .apply_normal_command("3G1lma")
+        .execute_normal_command("3G1lma")
         .expect("updated mark command should succeed");
 
     assert_eq!(
@@ -171,7 +171,7 @@ fn set_mark_round_trips_local_and_global_marks() {
     );
 
     session
-        .apply_normal_command("gg0ma")
+        .execute_normal_command("gg0ma")
         .expect("vim local mark update should succeed");
     assert_eq!(
         session.mark('a'),

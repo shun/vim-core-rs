@@ -7,9 +7,9 @@ use std::{
     os::fd::{FromRawFd, RawFd},
 };
 use vim_core_rs::{
-    CoreCommandOutcome, CoreEvent, CoreHostAction, CoreInputRequestKind, CoreMessageKind, CoreMode,
-    CoreOptionError, CoreOptionScope, CoreOptionType, CoreRuntimeMode, CoreSessionError,
-    CoreSessionOptions, VimCoreSession,
+    CoreCommandOutcome, CoreEvent, CoreHostAction, CoreInputRequestKind, CoreMode, CoreOptionError,
+    CoreOptionScope, CoreOptionType, CoreRuntimeMode, CoreSessionError, CoreSessionOptions,
+    VimCoreSession,
 };
 
 fn session_test_lock() -> &'static Mutex<()> {
@@ -146,7 +146,7 @@ fn session_options_route_debug_log_output_to_file() {
         .expect("session should initialize with debug log path");
 
     session
-        .apply_ex_command(":write output.txt")
+        .execute_ex_command(":write output.txt")
         .expect("write command should succeed");
     let tabstop = session
         .get_option_number("tabstop", CoreOptionScope::Global)
@@ -202,7 +202,7 @@ fn session_options_disable_debug_log_output_by_default() {
         VimCoreSession::new("buffer").expect("session should initialize with default options");
 
     session
-        .apply_ex_command(":write output.txt")
+        .execute_ex_command(":write output.txt")
         .expect("write command should succeed");
     let tabstop = session
         .get_option_number("tabstop", CoreOptionScope::Global)
@@ -242,12 +242,12 @@ fn event_queue_is_empty_by_default() {
 }
 
 #[test]
-fn execute_ex_command_v2_returns_transaction_with_events_and_host_actions() {
+fn execute_ex_command_returns_transaction_with_events_and_host_actions() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
     let tx = session
-        .execute_ex_command_v2(":redraw!")
+        .execute_ex_command(":redraw!")
         .expect("redraw command should succeed");
 
     assert!(matches!(tx.outcome, CoreCommandOutcome::NoChange));
@@ -278,7 +278,7 @@ fn embedded_redraw_event_does_not_leak_terminal_sequences_or_message_events() {
 
     let (tx, stdout, stderr) = capture_standard_streams(|| {
         session
-            .execute_ex_command_v2(":redraw!")
+            .execute_ex_command(":redraw!")
             .expect("redraw command should succeed")
     });
 
@@ -347,13 +347,13 @@ fn embedded_screen_resize_emits_layout_event_without_terminal_leak() {
 }
 
 #[test]
-fn execute_ex_command_v2_surfaces_split_as_events_without_ui_host_action_duplication() {
+fn execute_ex_command_surfaces_split_as_events_without_ui_host_action_duplication() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
     session.set_screen_size(24, 80);
 
     let tx = session
-        .execute_ex_command_v2(":split")
+        .execute_ex_command(":split")
         .expect("split command should succeed");
 
     assert!(
@@ -378,12 +378,12 @@ fn execute_ex_command_v2_surfaces_split_as_events_without_ui_host_action_duplica
 }
 
 #[test]
-fn execute_ex_command_v2_surfaces_enew_as_event_without_ui_host_action_duplication() {
+fn execute_ex_command_surfaces_enew_as_event_without_ui_host_action_duplication() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
     let tx = session
-        .execute_ex_command_v2(":enew")
+        .execute_ex_command(":enew")
         .expect("enew command should succeed");
 
     assert!(
@@ -404,45 +404,43 @@ fn execute_ex_command_v2_surfaces_enew_as_event_without_ui_host_action_duplicati
 fn snapshot_does_not_drain_pending_event_queue() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    while session.take_pending_event().is_some() {}
 
-    session
-        .apply_ex_command("echomsg 'queued event'")
-        .expect("echomsg should succeed");
+    session.set_screen_size(40, 120);
 
     let snapshot = session.snapshot();
     assert_eq!(snapshot.text.trim_end_matches('\n'), "buffer");
     assert!(matches!(
         session.take_pending_event(),
-        Some(CoreEvent::Message(message))
-            if message.kind == CoreMessageKind::Normal
-                && message.content.contains("queued event")
+        Some(CoreEvent::LayoutChanged)
     ));
 }
 
 #[test]
-fn legacy_host_action_queue_no_longer_duplicates_redraw_events() {
+fn host_action_queue_no_longer_duplicates_redraw_events() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
-    session
-        .apply_ex_command(":redraw!")
+    let tx = session
+        .execute_ex_command(":redraw!")
         .expect("redraw command should succeed");
 
     assert!(matches!(
-        session.take_pending_event(),
-        Some(CoreEvent::Redraw {
+        tx.events.as_slice(),
+        [CoreEvent::Redraw {
             full: true,
             clear_before_draw: true,
-        })
+        }]
     ));
     assert!(
         session.take_pending_host_action().is_none(),
-        "legacy queue should no longer duplicate redraw once event delivery exists"
+        "queue API should no longer duplicate redraw once event delivery exists"
     );
 }
 
 #[test]
-fn legacy_host_action_queue_no_longer_retains_layout_changed() {
+fn host_action_queue_no_longer_retains_layout_changed() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
     session.set_screen_size(24, 80);
@@ -555,13 +553,13 @@ fn option_getters_return_typed_values_from_vim() {
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
     session
-        .apply_ex_command(":set tabstop=6")
+        .execute_ex_command(":set tabstop=6")
         .expect("tabstop should be set via ex command");
     session
-        .apply_ex_command(":set expandtab")
+        .execute_ex_command(":set expandtab")
         .expect("expandtab should be set via ex command");
     session
-        .apply_ex_command(":set filetype=rust")
+        .execute_ex_command(":set filetype=rust")
         .expect("filetype should be set via ex command");
 
     assert_eq!(
@@ -589,10 +587,10 @@ fn option_getters_support_scope_selection_for_local_options() {
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
     session
-        .apply_ex_command(":setglobal shiftwidth=8")
+        .execute_ex_command(":setglobal shiftwidth=8")
         .expect("global shiftwidth should be set");
     session
-        .apply_ex_command(":setlocal shiftwidth=3")
+        .execute_ex_command(":setlocal shiftwidth=3")
         .expect("local shiftwidth should be set");
 
     assert_eq!(
@@ -776,10 +774,10 @@ fn option_api_interoperates_with_ex_commands_both_directions() {
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
     session
-        .apply_ex_command(":set tabstop=6")
+        .execute_ex_command(":set tabstop=6")
         .expect("tabstop should be set via ex command");
     session
-        .apply_ex_command(":set filetype=rust")
+        .execute_ex_command(":set filetype=rust")
         .expect("filetype should be set via ex command");
 
     assert_eq!(
@@ -803,13 +801,13 @@ fn option_api_interoperates_with_ex_commands_both_directions() {
         .expect("filetype should be updated through API");
 
     session
-        .apply_ex_command("%d")
+        .execute_ex_command("%d")
         .expect("buffer should be cleared before ex confirmation");
     session
-        .apply_ex_command("put =&tabstop")
+        .execute_ex_command("put =&tabstop")
         .expect("tabstop should be queryable via ex command");
     session
-        .apply_ex_command("put =&filetype")
+        .execute_ex_command("put =&filetype")
         .expect("filetype should be queryable via ex command");
 
     let snapshot = session.snapshot();
@@ -888,11 +886,11 @@ fn normal_delete_command_mutates_buffer_via_vim_runtime() {
         .expect("session should initialize");
 
     let outcome = session
-        .apply_normal_command("dd")
+        .execute_normal_command("dd")
         .expect("dd should succeed");
 
     assert!(matches!(
-        outcome,
+        outcome.outcome,
         vim_core_rs::CoreCommandOutcome::BufferChanged { revision: 1 }
     ));
 
@@ -911,7 +909,9 @@ fn normal_insert_command_switches_mode() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
-    let _outcome = session.apply_normal_command("i").expect("i should succeed");
+    let _outcome = session
+        .execute_normal_command("i")
+        .expect("i should succeed");
 
     assert_eq!(session.mode(), CoreMode::Insert);
 }
@@ -933,7 +933,7 @@ fn normal_other_insert_commands_switch_mode() {
         let mut session = VimCoreSession::new(initial_text).expect("session should initialize");
 
         let _outcome = session
-            .apply_normal_command(cmd)
+            .execute_normal_command(cmd)
             .expect("command should succeed");
 
         let snapshot = session.snapshot();
@@ -962,25 +962,23 @@ fn ex_write_command_queues_host_action_once() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
-    let outcome = session
-        .apply_ex_command(":write! output.txt")
+    let tx = session
+        .execute_ex_command(":write! output.txt")
         .expect("write command should succeed");
 
     assert!(matches!(
-        outcome,
+        tx.outcome,
         vim_core_rs::CoreCommandOutcome::HostActionQueued
     ));
-    assert_eq!(session.snapshot().pending_host_actions, 1);
     assert_eq!(
-        session.take_pending_host_action(),
-        Some(CoreHostAction::Write {
+        tx.host_actions,
+        vec![CoreHostAction::Write {
             path: "output.txt".to_string(),
             force: true,
             issued_after_revision: 0,
-        })
+        }]
     );
     assert!(session.take_pending_host_action().is_none());
-    assert_eq!(session.snapshot().pending_host_actions, 0);
 }
 
 #[test]
@@ -988,20 +986,20 @@ fn ex_quit_command_queues_quit_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
-    let outcome = session
-        .apply_ex_command(":quit!")
+    let tx = session
+        .execute_ex_command(":quit!")
         .expect("quit command should succeed");
 
     assert!(matches!(
-        outcome,
+        tx.outcome,
         vim_core_rs::CoreCommandOutcome::HostActionQueued
     ));
     assert_eq!(
-        session.take_pending_host_action(),
-        Some(CoreHostAction::Quit {
+        tx.host_actions,
+        vec![CoreHostAction::Quit {
             force: true,
             issued_after_revision: 0,
-        })
+        }]
     );
     assert!(session.take_pending_host_action().is_none());
 }
@@ -1011,17 +1009,20 @@ fn ex_redraw_command_surfaces_redraw_event() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
-    let outcome = session
-        .apply_ex_command(":redraw!")
+    let tx = session
+        .execute_ex_command(":redraw!")
         .expect("redraw command should succeed");
 
-    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::NoChange));
     assert!(matches!(
-        session.take_pending_event(),
-        Some(CoreEvent::Redraw {
+        tx.outcome,
+        vim_core_rs::CoreCommandOutcome::NoChange
+    ));
+    assert!(matches!(
+        tx.events.as_slice(),
+        [CoreEvent::Redraw {
             full: true,
             clear_before_draw: true,
-        })
+        }]
     ));
     assert!(session.take_pending_host_action().is_none());
 }
@@ -1031,31 +1032,31 @@ fn ex_input_command_queues_input_request_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
-    let outcome = session
-        .apply_ex_command(":input Enter filename")
+    let tx = session
+        .execute_ex_command(":input Enter filename")
         .expect("input command should succeed");
 
     assert!(matches!(
-        outcome,
+        tx.outcome,
         vim_core_rs::CoreCommandOutcome::HostActionQueued
     ));
     assert_eq!(
-        session.take_pending_host_action(),
-        Some(CoreHostAction::RequestInput {
+        tx.host_actions,
+        vec![CoreHostAction::RequestInput {
             prompt: "Enter filename".to_string(),
             input_kind: CoreInputRequestKind::CommandLine,
             correlation_id: 1,
-        })
+        }]
     );
 }
 
 #[test]
-fn execute_ex_command_v2_keeps_input_flow_as_host_action_not_pager_prompt() {
+fn execute_ex_command_keeps_input_flow_as_host_action_not_pager_prompt() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
     let tx = session
-        .execute_ex_command_v2(":input Enter filename")
+        .execute_ex_command(":input Enter filename")
         .expect("input command should succeed");
 
     assert_eq!(
@@ -1080,15 +1081,15 @@ fn ex_bell_command_surfaces_bell_event() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
-    let outcome = session
-        .apply_ex_command(":bell")
+    let tx = session
+        .execute_ex_command(":bell")
         .expect("bell command should succeed");
 
-    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::NoChange));
     assert!(matches!(
-        session.take_pending_event(),
-        Some(CoreEvent::Bell)
+        tx.outcome,
+        vim_core_rs::CoreCommandOutcome::NoChange
     ));
+    assert!(matches!(tx.events.as_slice(), [CoreEvent::Bell]));
     assert!(session.take_pending_host_action().is_none());
 }
 
@@ -1099,11 +1100,14 @@ fn ex_set_command_executes_via_vim_without_host_action() {
 
     // :set number は Vim 本体の Ex 実行経路で処理され、host action は生成されない
     let outcome = session
-        .apply_ex_command(":set number")
+        .execute_ex_command(":set number")
         .expect("set command should succeed");
 
     assert!(
-        !matches!(outcome, vim_core_rs::CoreCommandOutcome::HostActionQueued),
+        !matches!(
+            outcome.outcome,
+            vim_core_rs::CoreCommandOutcome::HostActionQueued
+        ),
         "set number は host action を生成しない"
     );
     assert!(session.take_pending_host_action().is_none());
@@ -1116,7 +1120,7 @@ fn ex_substitute_command_modifies_buffer_via_vim() {
 
     // :s/hello/goodbye/ は Vim 本体の Ex 実行経路でバッファを変更する
     let _outcome = session
-        .apply_ex_command(":s/hello/goodbye/")
+        .execute_ex_command(":s/hello/goodbye/")
         .expect("substitute command should succeed");
 
     let snapshot = session.snapshot();
@@ -1129,21 +1133,21 @@ fn ex_write_short_form_queues_host_action() {
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
     // :w は :write の短縮形で、同様に host action を生成する
-    let outcome = session
-        .apply_ex_command(":w output.txt")
+    let tx = session
+        .execute_ex_command(":w output.txt")
         .expect("w command should succeed");
 
     assert!(matches!(
-        outcome,
+        tx.outcome,
         vim_core_rs::CoreCommandOutcome::HostActionQueued
     ));
     assert_eq!(
-        session.take_pending_host_action(),
-        Some(CoreHostAction::Write {
+        tx.host_actions,
+        vec![CoreHostAction::Write {
             path: "output.txt".to_string(),
             force: false,
             issued_after_revision: 0,
-        })
+        }]
     );
 }
 
@@ -1153,20 +1157,20 @@ fn ex_quit_short_form_queues_host_action() {
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
     // :q! は :quit! の短縮形で、同様に host action を生成する
-    let outcome = session
-        .apply_ex_command(":q!")
+    let tx = session
+        .execute_ex_command(":q!")
         .expect("q command should succeed");
 
     assert!(matches!(
-        outcome,
+        tx.outcome,
         vim_core_rs::CoreCommandOutcome::HostActionQueued
     ));
     assert_eq!(
-        session.take_pending_host_action(),
-        Some(CoreHostAction::Quit {
+        tx.host_actions,
+        vec![CoreHostAction::Quit {
             force: true,
             issued_after_revision: 0,
-        })
+        }]
     );
 }
 
@@ -1180,11 +1184,14 @@ fn pathdef_resolves_non_empty_runtimepath() {
     // パスをデフォルト runtimepath として設定する。
     // この Ex コマンドはバッファを変更しないので NoChange が返る。
     let outcome = session
-        .apply_ex_command(":set runtimepath?")
+        .execute_ex_command(":set runtimepath?")
         .expect("set runtimepath? should succeed");
 
     assert!(
-        !matches!(outcome, vim_core_rs::CoreCommandOutcome::HostActionQueued),
+        !matches!(
+            outcome.outcome,
+            vim_core_rs::CoreCommandOutcome::HostActionQueued
+        ),
         "set runtimepath? は host action を生成しない"
     );
     assert!(session.take_pending_host_action().is_none());
@@ -1204,12 +1211,15 @@ fn pathdef_provides_vim_dir_for_runtime_discovery() {
     // 間接検証である。$VIM が環境変数として設定されている場合はそちらが
     // 優先されるが、pathdef.c のフォールバック値が空でないことが重要。
     let outcome = session
-        .apply_ex_command(":set runtimepath?")
+        .execute_ex_command(":set runtimepath?")
         .expect("should succeed");
 
     // コマンド自体がエラーにならないことが最低条件
     assert!(
-        !matches!(outcome, vim_core_rs::CoreCommandOutcome::HostActionQueued),
+        !matches!(
+            outcome.outcome,
+            vim_core_rs::CoreCommandOutcome::HostActionQueued
+        ),
         "set runtimepath? はホストアクションを生成しない"
     );
 }
@@ -1220,17 +1230,20 @@ fn ex_redraw_without_bang_surfaces_non_clearing_event() {
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
     // :redraw（! なし）は clear_before_draw: false の redraw event を生成する
-    let outcome = session
-        .apply_ex_command(":redraw")
+    let tx = session
+        .execute_ex_command(":redraw")
         .expect("redraw command should succeed");
 
-    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::NoChange));
     assert!(matches!(
-        session.take_pending_event(),
-        Some(CoreEvent::Redraw {
+        tx.outcome,
+        vim_core_rs::CoreCommandOutcome::NoChange
+    ));
+    assert!(matches!(
+        tx.events.as_slice(),
+        [CoreEvent::Redraw {
             full: true,
             clear_before_draw: false,
-        })
+        }]
     ));
     assert!(session.take_pending_host_action().is_none());
 }
@@ -1241,10 +1254,12 @@ fn normal_movement_command_changes_cursor() {
     let mut session = VimCoreSession::new("first line\nsecond line\nthird line\n")
         .expect("session should initialize");
 
-    let outcome = session.apply_normal_command("j").expect("j should succeed");
+    let outcome = session
+        .execute_normal_command("j")
+        .expect("j should succeed");
 
     assert!(matches!(
-        outcome,
+        outcome.outcome,
         vim_core_rs::CoreCommandOutcome::CursorChanged { row: 1, col: 0 }
     ));
 
@@ -1252,10 +1267,12 @@ fn normal_movement_command_changes_cursor() {
     assert_eq!(snapshot.cursor_row, 1);
     assert_eq!(snapshot.cursor_col, 0);
 
-    let outcome2 = session.apply_normal_command("l").expect("l should succeed");
+    let outcome2 = session
+        .execute_normal_command("l")
+        .expect("l should succeed");
 
     assert!(matches!(
-        outcome2,
+        outcome2.outcome,
         vim_core_rs::CoreCommandOutcome::CursorChanged { row: 1, col: 1 }
     ));
 

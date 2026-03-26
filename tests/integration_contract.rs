@@ -19,19 +19,21 @@ where
     F: FnOnce(&CoreHostAction),
 {
     let outcome = session
-        .apply_ex_command(command)
+        .execute_ex_command(command)
         .unwrap_or_else(|_| panic!("Failed to apply command: {}", command));
 
-    match outcome {
+    match outcome.outcome {
         CoreCommandOutcome::HostActionQueued => {
-            let action = session
-                .take_pending_host_action()
+            let action = outcome
+                .host_actions
+                .into_iter()
+                .next()
                 .unwrap_or_else(|| panic!("Expected host action for command: {}", command));
             predicate(&action);
         }
         _ => panic!(
             "Expected HostActionQueued for command: {}, got {:?}",
-            command, outcome
+            command, outcome.outcome
         ),
     }
 }
@@ -88,38 +90,35 @@ fn side_effect_convergence_matrix() {
         assert_quit_action(&mut session, command, command.ends_with('!'));
     }
 
-    session
-        .apply_ex_command("redraw")
+    let redraw_tx = session
+        .execute_ex_command("redraw")
         .expect("redraw should succeed");
     assert!(matches!(
-        session.take_pending_event(),
-        Some(CoreEvent::Redraw {
+        redraw_tx.events.as_slice(),
+        [CoreEvent::Redraw {
             clear_before_draw: false,
             ..
-        })
+        }]
     ));
-    assert!(session.take_pending_host_action().is_none());
+    assert!(redraw_tx.host_actions.is_empty());
 
-    session
-        .apply_ex_command("redraw!")
+    let redraw_bang_tx = session
+        .execute_ex_command("redraw!")
         .expect("redraw! should succeed");
     assert!(matches!(
-        session.take_pending_event(),
-        Some(CoreEvent::Redraw {
+        redraw_bang_tx.events.as_slice(),
+        [CoreEvent::Redraw {
             clear_before_draw: true,
             ..
-        })
+        }]
     ));
-    assert!(session.take_pending_host_action().is_none());
+    assert!(redraw_bang_tx.host_actions.is_empty());
 
-    session
-        .apply_ex_command("bell")
+    let bell_tx = session
+        .execute_ex_command("bell")
         .expect("bell should succeed");
-    assert!(matches!(
-        session.take_pending_event(),
-        Some(CoreEvent::Bell)
-    ));
-    assert!(session.take_pending_host_action().is_none());
+    assert!(matches!(bell_tx.events.as_slice(), [CoreEvent::Bell]));
+    assert!(bell_tx.host_actions.is_empty());
 
     assert_host_action(&mut session, "input Hello", |action| {
         if let CoreHostAction::RequestInput { prompt, .. } = action {
@@ -138,18 +137,24 @@ fn normal_mode_side_effects() {
 
     // ZZ is a normal command that saves and exits
     let outcome = session
-        .apply_normal_command("ZZ")
+        .execute_normal_command("ZZ")
         .expect("Failed to apply ZZ");
 
-    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
-    let action = session.take_pending_host_action().expect("Expected action");
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::HostActionQueued
+    ));
+    let action = outcome.host_actions.first().expect("Expected action");
     assert!(matches!(action, CoreHostAction::Quit { .. }));
 
     let outcome = session
-        .apply_normal_command("ZQ")
+        .execute_normal_command("ZQ")
         .expect("Failed to apply ZQ");
-    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
-    let action = session.take_pending_host_action().expect("Expected action");
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::HostActionQueued
+    ));
+    let action = outcome.host_actions.first().expect("Expected action");
     assert!(matches!(action, CoreHostAction::Quit { force: true, .. }));
 }
 
@@ -167,7 +172,7 @@ fn snapshot_and_session_state_apis_stay_consistent_within_one_session() {
         .id;
 
     session
-        .apply_ex_command(":clearjumps")
+        .execute_ex_command(":clearjumps")
         .expect("clearjumps should succeed");
     session
         .set_mark('a', current_buf_id, 3, 0)
@@ -182,7 +187,7 @@ fn snapshot_and_session_state_apis_stay_consistent_within_one_session() {
     assert!(session.jumplist().entries.is_empty());
 
     session
-        .apply_normal_command("'a")
+        .execute_normal_command("'a")
         .expect("mark jump should succeed within one injection");
     let jumped_snapshot = session.snapshot();
     assert_eq!(jumped_snapshot.mode, CoreMode::Normal);
@@ -201,7 +206,7 @@ fn snapshot_and_session_state_apis_stay_consistent_within_one_session() {
     );
 
     session
-        .apply_normal_command("v")
+        .execute_normal_command("v")
         .expect("v should enter visual mode");
     let visual_snapshot = session.snapshot();
     assert_eq!(visual_snapshot.mode, CoreMode::Visual);
@@ -214,14 +219,14 @@ fn snapshot_and_session_state_apis_stay_consistent_within_one_session() {
     );
 
     session
-        .apply_normal_command("\x1bR")
+        .execute_normal_command("\x1bR")
         .expect("escape then R should enter replace mode");
     assert_eq!(session.mode(), CoreMode::Replace);
     assert_eq!(session.snapshot().mode, CoreMode::Replace);
     assert_eq!(session.pending_input(), CorePendingInput::None);
 
     session
-        .apply_normal_command("\x1bf")
+        .execute_normal_command("\x1bf")
         .expect("escape then f should enter char-pending state");
     assert_eq!(session.mode(), CoreMode::Normal);
     assert_eq!(session.pending_input(), CorePendingInput::Char);

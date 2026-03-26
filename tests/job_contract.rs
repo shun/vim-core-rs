@@ -5,14 +5,12 @@ fn test_job_start_is_intercepted_and_sent_to_host() {
     let mut session = VimCoreSession::new("").unwrap();
 
     // Execute a simple job_start command.
-    let _result = session
-        .apply_ex_command("call job_start(['echo', 'hello'])")
+    let result = session
+        .execute_ex_command("call job_start(['echo', 'hello'])")
         .unwrap();
 
-    // Verify that the command executed without session error (it will return HostActionQueued or Ok depending on if it executed immediately)
-    // Actually, `call job_start` evaluates the function. Let's drain the host actions and look for JobStart.
     let mut found_job_start = false;
-    while let Some(action) = session.take_pending_host_action() {
+    for action in result.host_actions {
         if let CoreHostAction::JobStart(req) = action {
             found_job_start = true;
             assert_eq!(req.argv, vec!["echo", "hello"]);

@@ -95,12 +95,12 @@ incorrect assumptions about ownership, persistence, and concurrency.
 
 An embedding host must implement these behaviors.
 
-- Prefer `execute_normal_command_v2()` and `execute_ex_command_v2()` when you
+- Prefer `execute_normal_command()` and `execute_ex_command()` when you
   need one transaction result that contains the final snapshot, emitted
   events, and emitted host actions.
 - Drain `take_pending_host_action()` until it returns `None`.
-- Drain `take_pending_event()` until it returns `None` when you use the legacy
-  queue-based integration path.
+- Drain `take_pending_event()` until it returns `None` when you consume
+  asynchronous or queue-delivered editor events outside a transaction result.
 - Handle `CoreHostAction::Write` and `CoreHostAction::Quit`.
 - Handle every `CoreHostAction::VfsRequest` and send one matching
   `CoreVfsResponse`.

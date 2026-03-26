@@ -62,8 +62,8 @@ The public session methods are grouped by role.
   `runtime_mode`, `pending_input`
 - Navigation and state writes: `mark`, `set_mark`, `jumplist`,
   `switch_to_buffer`, `switch_to_window`, `buffer_text`
-- Command execution: `apply_normal_command`, `apply_ex_command`,
-  `execute_normal_command_v2`, `execute_ex_command_v2`, `eval_string`
+- Command execution: `execute_normal_command`, `execute_ex_command`,
+  `eval_string`
 - Host integration: `take_pending_host_action`, `take_pending_event`,
   `set_screen_size`, `submit_vfs_response`
 - Buffer and window inspection: `buffers`, `windows`, `buffer_binding`,
@@ -83,7 +83,8 @@ The public session methods are grouped by role.
 
 The internal reference breaks non-public APIs into these areas.
 
-- `src/lib.rs`: `ParsedExIntent`, `apply_native_ex_command`, `apply_intent`,
+- `src/lib.rs`: `ParsedExIntent`, `execute_native_ex_command_for_outcome`,
+  `apply_intent`,
   `apply_write_intent`, `apply_loaded_buffer`, `drain_native_host_actions`,
   `drain_native_events`, `get_option_value`, conversion helpers, and parser
   helpers

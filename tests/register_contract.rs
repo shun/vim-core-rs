@@ -24,7 +24,7 @@ fn test_register_access_basic() {
     assert_eq!(session.register('a'), Some("yanked from rust".to_string()));
 
     // Put register 'a' into buffer
-    session.apply_normal_command("\"ap").unwrap();
+    session.execute_normal_command("\"ap").unwrap();
 
     // "p" puts after the cursor. Initial buffer "hello" (cursor at 1,1)
     // "hello" -> "hyanked from rustello"
@@ -40,7 +40,7 @@ fn test_register_yank_capture() {
 
     // Yank "original" into register 'b'
     // "original" is 8 characters.
-    session.apply_normal_command("v7l\"by").unwrap();
+    session.execute_normal_command("v7l\"by").unwrap();
 
     // Verify register 'b' contains "original"
     assert_eq!(session.register('b'), Some("original".to_string()));
@@ -55,7 +55,7 @@ fn test_register_multiline() {
     session.set_register('m', "rust line 1\nrust line 2\n");
 
     // Put it (it should be MLINE because of trailing newline)
-    session.apply_normal_command("\"mp").unwrap();
+    session.execute_normal_command("\"mp").unwrap();
 
     // Current buffer:
     // line1
@@ -77,7 +77,7 @@ fn test_unnamed_register() {
     let mut session = VimCoreSession::new("top secret").unwrap();
 
     // Yank into unnamed register
-    session.apply_normal_command("yiw").unwrap();
+    session.execute_normal_command("yiw").unwrap();
 
     // register '"' should have "top"
     assert_eq!(session.register('"'), Some("top".to_string()));
@@ -91,7 +91,7 @@ fn test_black_hole_register() {
     session.set_register('"', "baseline");
 
     // Delete into black hole register
-    session.apply_normal_command("\"_diw").unwrap();
+    session.execute_normal_command("\"_diw").unwrap();
 
     // Unnamed register should remain unchanged.
     assert_eq!(session.register('"'), Some("baseline".to_string()));

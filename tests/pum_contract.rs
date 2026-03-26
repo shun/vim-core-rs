@@ -11,7 +11,7 @@ fn test_pum_extraction_contract() {
     // ヘッドレスモードではポップアップメニューの画面描画でクラッシュするため、
     // completeopt から menu を除外してポップアップ描画を抑制する
     session
-        .apply_ex_command(":set completeopt=noselect")
+        .execute_ex_command(":set completeopt=noselect")
         .expect("set completeopt");
 
     // ================================================
@@ -32,17 +32,17 @@ fn test_pum_extraction_contract() {
     {
         // 補完候補となるテキストを挿入してノーマルモードに戻る
         session
-            .apply_normal_command("ihello\nhello_world\nhello_rust\n\x1b")
+            .execute_normal_command("ihello\nhello_world\nhello_rust\n\x1b")
             .expect("insert text should succeed");
 
         // 新しい行でインサートモードに入り、"hel" と入力
         session
-            .apply_normal_command("ohel")
+            .execute_normal_command("ohel")
             .expect("enter insert and type hel");
 
         // <C-n> で補完トリガー（インサートモード中のキー注入）
         session
-            .apply_normal_command("\x0e")
+            .execute_normal_command("\x0e")
             .expect("trigger completion with C-n");
 
         let snapshot = session.snapshot();
@@ -93,7 +93,7 @@ fn test_pum_extraction_contract() {
     // ================================================
     //
     // ヘッドレスモードの制約:
-    //   apply_normal_command の呼び出し境界で ins_compl_clear() が呼ばれるため、
+    //   command 実行境界で ins_compl_clear() が呼ばれるため、
     //   補完中に追加のキーを別呼び出しで送ることはできない。
     //   そのため、以下の2つのアプローチで selected_index の追従を検証する:
     //
@@ -115,26 +115,26 @@ fn test_pum_extraction_contract() {
 
         // noselect なしでの選択状態検証のため、新しい補完セッションを開始
         session
-            .apply_normal_command("\x1b")
+            .execute_normal_command("\x1b")
             .expect("escape to normal mode");
 
         // undo で補完による変更を戻し、テスト2の候補テキストを維持
         session
-            .apply_normal_command("u")
+            .execute_normal_command("u")
             .expect("undo completion insertion");
 
         // completeopt を noselect なし に変更
         session
-            .apply_ex_command(":set completeopt=")
+            .execute_ex_command(":set completeopt=")
             .expect("set completeopt= (no noselect, default behavior)");
 
         // 新しい行で "hel" を入力し、C-n で補完トリガー
         // noselect なしの場合、C-n で最初の候補が自動選択される
         session
-            .apply_normal_command("ohel")
+            .execute_normal_command("ohel")
             .expect("enter insert and type hel");
         session
-            .apply_normal_command("\x0e")
+            .execute_normal_command("\x0e")
             .expect("trigger completion with C-n (no noselect)");
 
         let snapshot_sel = session.snapshot();
@@ -179,12 +179,12 @@ fn test_pum_extraction_contract() {
 
         // completeopt を戻す
         session
-            .apply_ex_command(":set completeopt=noselect")
+            .execute_ex_command(":set completeopt=noselect")
             .expect("restore completeopt");
 
         // テスト2.5の状態をクリーンアップ
         session
-            .apply_normal_command("\x1b")
+            .execute_normal_command("\x1b")
             .expect("escape to clean up test 2.5");
     }
 
@@ -209,20 +209,20 @@ fn test_pum_extraction_contract() {
     {
         // テスト2.5でバッファ内容が変わっている可能性があるため、
         // 候補テキストを再準備する
-        session.apply_ex_command(":%d").expect("clear buffer");
+        session.execute_ex_command(":%d").expect("clear buffer");
         session
-            .apply_normal_command("ihello\nhello_world\nhello_rust\n\x1b")
+            .execute_normal_command("ihello\nhello_world\nhello_rust\n\x1b")
             .expect("re-insert completion candidates");
         session
-            .apply_ex_command(":set completeopt=noselect")
+            .execute_ex_command(":set completeopt=noselect")
             .expect("set completeopt=noselect");
 
         for i in 0..5 {
             session
-                .apply_normal_command("ohel")
+                .execute_normal_command("ohel")
                 .expect("enter insert and type");
             session
-                .apply_normal_command("\x0e")
+                .execute_normal_command("\x0e")
                 .expect("trigger completion");
 
             let snapshot = session.snapshot();
@@ -230,7 +230,7 @@ fn test_pum_extraction_contract() {
 
             // Esc でノーマルモードに戻る
             session
-                .apply_normal_command("\x1b")
+                .execute_normal_command("\x1b")
                 .expect("escape to normal mode");
         }
         // クラッシュしなければ成功（メモリ解放が正しい）

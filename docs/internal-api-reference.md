@@ -38,7 +38,7 @@ commands behave.
 
 These methods are private helpers on `VimCoreSession`.
 
-- `apply_native_ex_command(&mut self, command: &str)
+- `execute_native_ex_command_for_outcome(&mut self, command: &str)
   -> Result<CoreCommandOutcome, CoreCommandError>`
   Sends an Ex command directly to the bridge without intent interception, then
   drains native host actions and dispatches messages.

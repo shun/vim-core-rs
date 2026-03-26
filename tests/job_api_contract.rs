@@ -17,14 +17,14 @@ fn test_inject_vfd_data_and_notify_status() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("").unwrap();
 
-    session
-        .apply_ex_command("call job_start(['echo', 'hello'])")
+    let tx = session
+        .execute_ex_command("call job_start(['echo', 'hello'])")
         .unwrap();
 
     let mut job_id = None;
     let mut vfd_out = None;
 
-    while let Some(action) = session.take_pending_host_action() {
+    for action in tx.host_actions {
         if let CoreHostAction::JobStart(req) = action {
             job_id = Some(req.job_id);
             vfd_out = Some(req.vfd_out);
@@ -46,12 +46,12 @@ fn test_job_rejection_and_status() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("").unwrap();
 
-    session
-        .apply_ex_command("let g:my_job = job_start(['echo', 'hello'])")
+    let tx = session
+        .execute_ex_command("let g:my_job = job_start(['echo', 'hello'])")
         .unwrap();
 
     let mut job_id = None;
-    while let Some(action) = session.take_pending_host_action() {
+    for action in tx.host_actions {
         if let CoreHostAction::JobStart(req) = action {
             job_id = Some(req.job_id);
         }
@@ -63,10 +63,10 @@ fn test_job_rejection_and_status() {
         .unwrap();
 
     session
-        .apply_ex_command("call append(0, job_status(g:my_job))")
+        .execute_ex_command("call append(0, job_status(g:my_job))")
         .unwrap();
     session
-        .apply_ex_command("call append(1, job_info(g:my_job).exitval)")
+        .execute_ex_command("call append(1, job_info(g:my_job).exitval)")
         .unwrap();
 
     let buf_id = session
@@ -91,11 +91,11 @@ fn test_session_cleanup_on_drop() {
 
     {
         let mut session = VimCoreSession::new("").unwrap();
-        session
-            .apply_ex_command("call job_start(['echo', 'hello'])")
+        let tx = session
+            .execute_ex_command("call job_start(['echo', 'hello'])")
             .unwrap();
 
-        while let Some(action) = session.take_pending_host_action() {
+        for action in tx.host_actions {
             if let CoreHostAction::JobStart(req) = action {
                 job_id = Some(req.job_id);
                 vfd_out = Some(req.vfd_out);
@@ -120,13 +120,13 @@ fn test_event_loop_interference() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("initial").unwrap();
 
-    session
-        .apply_ex_command("let g:my_job = job_start(['sleep', '10'])")
+    let tx = session
+        .execute_ex_command("let g:my_job = job_start(['sleep', '10'])")
         .unwrap();
 
     // Verify Vim is not blocked and can still process UI events / commands
     session
-        .apply_ex_command("call append(0, 'still alive')")
+        .execute_ex_command("call append(0, 'still alive')")
         .unwrap();
     let buf_id = session
         .snapshot()
@@ -139,7 +139,7 @@ fn test_event_loop_interference() {
     assert!(buf_text.contains("still alive"));
 
     let mut job_id = None;
-    while let Some(action) = session.take_pending_host_action() {
+    for action in tx.host_actions {
         if let CoreHostAction::JobStart(req) = action {
             job_id = Some(req.job_id);
         }
@@ -158,14 +158,14 @@ fn test_in_memory_host_e2e_normal() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("").unwrap();
 
-    session
-        .apply_ex_command("let g:my_job = job_start(['echo', 'hello'])")
+    let tx = session
+        .execute_ex_command("let g:my_job = job_start(['echo', 'hello'])")
         .unwrap();
 
     let mut job_id = None;
     let mut vfd_out = None;
 
-    while let Some(action) = session.take_pending_host_action() {
+    for action in tx.host_actions {
         if let CoreHostAction::JobStart(req) = action {
             job_id = Some(req.job_id);
             vfd_out = Some(req.vfd_out);
@@ -181,15 +181,15 @@ fn test_in_memory_host_e2e_normal() {
         .unwrap();
 
     session
-        .apply_ex_command("call append(0, 'JOB: ' . job_status(g:my_job))")
+        .execute_ex_command("call append(0, 'JOB: ' . job_status(g:my_job))")
         .unwrap();
     session
-        .apply_ex_command("call append(1, 'CHAN: ' . ch_status(g:my_job))")
+        .execute_ex_command("call append(1, 'CHAN: ' . ch_status(g:my_job))")
         .unwrap();
 
     // Synchronously read from the channel in Vim script
     let read_result =
-        session.apply_ex_command("let g:job_out = ch_readraw(g:my_job, {'part': 'out'})");
+        session.execute_ex_command("let g:job_out = ch_readraw(g:my_job, {'part': 'out'})");
     if let Err(e) = &read_result {
         println!("READ ERR: {:?}", e);
     }
@@ -201,7 +201,7 @@ fn test_in_memory_host_e2e_normal() {
 
     // Check variable content.
     session
-        .apply_ex_command("call append(0, g:job_out)")
+        .execute_ex_command("call append(0, g:job_out)")
         .unwrap();
 
     let buf_id = session
@@ -223,14 +223,14 @@ fn test_job_communication_mismatch() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("").unwrap();
 
-    session
-        .apply_ex_command("let g:my_job = job_start(['echo', 'hello'])")
+    let tx = session
+        .execute_ex_command("let g:my_job = job_start(['echo', 'hello'])")
         .unwrap();
 
     let mut job_id = None;
     let mut vfd_out = None;
 
-    while let Some(action) = session.take_pending_host_action() {
+    for action in tx.host_actions {
         if let CoreHostAction::JobStart(req) = action {
             job_id = Some(req.job_id);
             vfd_out = Some(req.vfd_out);

@@ -72,8 +72,8 @@ const NORMAL_INSERT_REQUIRED_SYMBOLS: &[&str] = &[
 ];
 
 const EX_COMMANDLINE_REQUIRED_SYMBOLS: &[&str] = &[
-    "vim_bridge_apply_ex_command",
-    "upstream_runtime_apply_ex_command",
+    "vim_bridge_execute_ex_command",
+    "upstream_runtime_execute_ex_command",
     "do_cmdline_cmd",
     "do_cmdline",
 ];

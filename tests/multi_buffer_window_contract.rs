@@ -107,7 +107,7 @@ fn buffer_info_contains_name_and_dirty_flag() {
 
     // バッファを変更するとdirtyフラグがtrueになる
     session
-        .apply_normal_command("dd")
+        .execute_normal_command("dd")
         .expect("dd should succeed");
     let snapshot = session.snapshot();
     let active_buf = snapshot
@@ -175,7 +175,7 @@ fn switch_to_buffer_changes_active_buffer() {
 
     // 新しいバッファを作成
     session
-        .apply_ex_command(":enew")
+        .execute_ex_command(":enew")
         .expect("enew should succeed");
 
     let snapshot = session.snapshot();
@@ -231,7 +231,7 @@ fn switch_to_window_changes_active_window() {
 
     // ウィンドウを分割
     session
-        .apply_ex_command(":split")
+        .execute_ex_command(":split")
         .expect("split should succeed");
 
     let snapshot = session.snapshot();
@@ -324,7 +324,7 @@ fn split_creates_additional_window() {
     let initial_windows = session.snapshot().windows.len();
 
     session
-        .apply_ex_command(":split")
+        .execute_ex_command(":split")
         .expect("split should succeed");
 
     let after_split = session.snapshot().windows.len();
@@ -346,7 +346,7 @@ fn vsplit_creates_additional_window() {
     let initial_windows = session.snapshot().windows.len();
 
     session
-        .apply_ex_command(":vsplit")
+        .execute_ex_command(":vsplit")
         .expect("vsplit should succeed");
 
     let after_vsplit = session.snapshot().windows.len();
@@ -458,10 +458,10 @@ fn buffer_ids_use_vim_fnum_which_is_positive() {
 
     // 複数バッファ作成後もIDは常に正の値（Vimのb_fnum由来）
     session
-        .apply_ex_command(":enew")
+        .execute_ex_command(":enew")
         .expect("enew should succeed");
     session
-        .apply_ex_command(":enew")
+        .execute_ex_command(":enew")
         .expect("enew should succeed");
 
     let buffers = session.buffers();
@@ -492,10 +492,10 @@ fn window_ids_use_vim_wid_which_is_positive() {
     session.set_screen_size(24, 80);
 
     session
-        .apply_ex_command(":split")
+        .execute_ex_command(":split")
         .expect("split should succeed");
     session
-        .apply_ex_command(":vsplit")
+        .execute_ex_command(":vsplit")
         .expect("vsplit should succeed");
 
     let windows = session.windows();
@@ -540,7 +540,7 @@ fn buffers_method_returns_all_buffers() {
 
     // バッファ追加後: 2バッファ
     session
-        .apply_ex_command(":enew")
+        .execute_ex_command(":enew")
         .expect("enew should succeed");
     let after_buffers = session.buffers();
     eprintln!("[Task 2.2] enew後バッファ数: {}", after_buffers.len());
@@ -552,10 +552,10 @@ fn buffers_method_returns_all_buffers() {
 
     // 現在のバッファを変更してからさらに追加（Vim は未変更の無名バッファで :enew するとバッファを再利用する）
     session
-        .apply_ex_command(":call setline(1, 'some content')")
+        .execute_ex_command(":call setline(1, 'some content')")
         .expect("setline should succeed");
     session
-        .apply_ex_command(":enew!")
+        .execute_ex_command(":enew!")
         .expect("enew should succeed");
     let final_buffers = session.buffers();
     eprintln!(
@@ -586,7 +586,7 @@ fn windows_method_returns_all_windows() {
 
     // split後: 2ウィンドウ
     session
-        .apply_ex_command(":split")
+        .execute_ex_command(":split")
         .expect("split should succeed");
     let after_windows = session.windows();
     eprintln!("[Task 2.2] split後ウィンドウ数: {}", after_windows.len());
@@ -604,10 +604,10 @@ fn exactly_one_active_buffer_exists() {
 
     // 複数バッファ作成後もアクティブバッファは常に1つ
     session
-        .apply_ex_command(":enew")
+        .execute_ex_command(":enew")
         .expect("enew should succeed");
     session
-        .apply_ex_command(":enew")
+        .execute_ex_command(":enew")
         .expect("enew should succeed");
 
     let buffers = session.buffers();
@@ -632,10 +632,10 @@ fn exactly_one_active_window_exists() {
 
     // 複数ウィンドウ作成後もアクティブウィンドウは常に1つ
     session
-        .apply_ex_command(":split")
+        .execute_ex_command(":split")
         .expect("split should succeed");
     session
-        .apply_ex_command(":vsplit")
+        .execute_ex_command(":vsplit")
         .expect("vsplit should succeed");
 
     let windows = session.windows();
@@ -703,7 +703,7 @@ fn buffers_and_windows_consistent_with_snapshot() {
     let mut session = VimCoreSession::new("consistency test").expect("session should initialize");
     session.set_screen_size(24, 80);
     session
-        .apply_ex_command(":split")
+        .execute_ex_command(":split")
         .expect("split should succeed");
 
     // buffers() と windows() が snapshot() と同一の結果を返すこと
@@ -741,7 +741,7 @@ fn switch_to_buffer_returns_ok_for_valid_id() {
     let mut session = VimCoreSession::new("switch buf ok").expect("session should initialize");
 
     session
-        .apply_ex_command(":enew")
+        .execute_ex_command(":enew")
         .expect("enew should succeed");
 
     let first_buf_id = session.buffers().iter().find(|b| !b.is_active).unwrap().id;
@@ -771,7 +771,7 @@ fn switch_to_window_returns_ok_for_valid_id() {
     session.set_screen_size(24, 80);
 
     session
-        .apply_ex_command(":split")
+        .execute_ex_command(":split")
         .expect("split should succeed");
 
     let inactive_win_id = session.windows().iter().find(|w| !w.is_active).unwrap().id;
@@ -810,10 +810,10 @@ fn buffer_text_for_inactive_buffer_returns_correct_content() {
     // :split + :enew で新しいウィンドウに新バッファを作成
     // （:enew 単体だと Vim が無名バッファの memline を unload する場合がある）
     session
-        .apply_ex_command(":split")
+        .execute_ex_command(":split")
         .expect("split should succeed");
     session
-        .apply_ex_command(":enew")
+        .execute_ex_command(":enew")
         .expect("enew should succeed");
 
     // 新バッファが作成されていること
@@ -863,16 +863,16 @@ fn switch_buffer_and_verify_text_round_trip() {
 
     // :split + :enew で新ウィンドウに新バッファを作成（memline が確実にロードされたままにする）
     session
-        .apply_ex_command(":split")
+        .execute_ex_command(":split")
         .expect("split should succeed");
     session
-        .apply_ex_command(":enew")
+        .execute_ex_command(":enew")
         .expect("enew should succeed");
     let buf_b_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
 
     // バッファBにテキストを挿入
     session
-        .apply_ex_command(":call setline(1, 'buffer B content')")
+        .execute_ex_command(":call setline(1, 'buffer B content')")
         .expect("setline should succeed");
 
     eprintln!(
@@ -925,7 +925,7 @@ fn switch_window_preserves_buffer_association() {
 
     // ウィンドウ分割
     session
-        .apply_ex_command(":split")
+        .execute_ex_command(":split")
         .expect("split should succeed");
 
     let windows_before = session.windows();
@@ -971,12 +971,12 @@ fn enew_triggers_buffer_added_event() {
 
     // :enew でバッファ生成 → HostBufAdd イベントが発火されること
     let outcome = session
-        .apply_ex_command(":enew")
+        .execute_ex_command(":enew")
         .expect("enew should succeed");
 
     eprintln!("[Task 3.1] enew outcome: {:?}", outcome);
 
-    let events = drain_events(&mut session);
+    let events = outcome.events;
     let found_buf_add = events
         .iter()
         .any(|event| matches!(event, CoreEvent::BufferAdded { .. }));
@@ -986,7 +986,7 @@ fn enew_triggers_buffer_added_event() {
         ":enew 後に BufferAdded event が発火されること。取得されたイベント: {:?}",
         events
     );
-    assert!(session.take_pending_host_action().is_none());
+    assert!(outcome.host_actions.is_empty());
 }
 
 #[test]
@@ -997,12 +997,12 @@ fn split_triggers_window_created_event() {
 
     // :split でウィンドウ分割 → HostWinNew イベントが発火されること
     let outcome = session
-        .apply_ex_command(":split")
+        .execute_ex_command(":split")
         .expect("split should succeed");
 
     eprintln!("[Task 3.1] split outcome: {:?}", outcome);
 
-    let events = drain_events(&mut session);
+    let events = outcome.events;
     let found_win_new = events
         .iter()
         .any(|event| matches!(event, CoreEvent::WindowCreated { .. }));
@@ -1012,7 +1012,7 @@ fn split_triggers_window_created_event() {
         ":split 後に WindowCreated event が発火されること。取得されたイベント: {:?}",
         events
     );
-    assert!(session.take_pending_host_action().is_none());
+    assert!(outcome.host_actions.is_empty());
 }
 
 #[test]
@@ -1022,12 +1022,12 @@ fn buffer_added_event_contains_buffer_id() {
     session.set_screen_size(24, 80);
 
     // :enew でバッファ生成
-    session
-        .apply_ex_command(":enew")
+    let tx = session
+        .execute_ex_command(":enew")
         .expect("enew should succeed");
 
     // BufferAdded event に有効なバッファIDが含まれること
-    while let Some(event) = session.take_pending_event() {
+    for event in tx.events {
         if let CoreEvent::BufferAdded { buf_id } = event {
             eprintln!("[Task 3.1] BufAdd buf_id: {}", buf_id);
             assert!(
@@ -1056,12 +1056,12 @@ fn window_created_event_contains_window_id() {
     session.set_screen_size(24, 80);
 
     // :split でウィンドウ分割
-    session
-        .apply_ex_command(":split")
+    let tx = session
+        .execute_ex_command(":split")
         .expect("split should succeed");
 
     // WindowCreated event に有効なウィンドウIDが含まれること
-    while let Some(event) = session.take_pending_event() {
+    for event in tx.events {
         if let CoreEvent::WindowCreated { win_id } = event {
             eprintln!("[Task 3.1] WinNew win_id: {}", win_id);
             assert!(
@@ -1090,11 +1090,11 @@ fn vsplit_also_triggers_window_created_event() {
     session.set_screen_size(24, 80);
 
     // :vsplit でもウィンドウ生成イベントが発火されること
-    session
-        .apply_ex_command(":vsplit")
+    let tx = session
+        .execute_ex_command(":vsplit")
         .expect("vsplit should succeed");
 
-    let events = drain_events(&mut session);
+    let events = tx.events;
     let found_win_new = events
         .iter()
         .any(|event| matches!(event, CoreEvent::WindowCreated { .. }));
@@ -1103,7 +1103,7 @@ fn vsplit_also_triggers_window_created_event() {
         found_win_new,
         ":vsplit 後に WindowCreated event が発火されること"
     );
-    assert!(session.take_pending_host_action().is_none());
+    assert!(tx.host_actions.is_empty());
 }
 
 // =============================================================================
@@ -1118,19 +1118,19 @@ fn window_resize_triggers_layout_changed_event() {
     session.set_screen_size(24, 80);
 
     // まずウィンドウを分割
-    session
-        .apply_ex_command(":split")
+    let split_tx = session
+        .execute_ex_command(":split")
         .expect("split should succeed");
 
-    while session.take_pending_event().is_some() {}
-    while session.take_pending_host_action().is_some() {}
+    assert!(!split_tx.events.is_empty());
+    assert!(split_tx.host_actions.is_empty());
 
     // ウィンドウサイズを変更（:resize でアクティブウィンドウの高さを変更）
-    session
-        .apply_ex_command(":resize 5")
+    let resize_tx = session
+        .execute_ex_command(":resize 5")
         .expect("resize should succeed");
 
-    let events = drain_events(&mut session);
+    let events = resize_tx.events;
     let found_layout_changed = events
         .iter()
         .any(|event| matches!(event, CoreEvent::LayoutChanged));
@@ -1140,7 +1140,7 @@ fn window_resize_triggers_layout_changed_event() {
         ":resize 後に LayoutChanged event が発火されること。取得されたイベント: {:?}",
         events
     );
-    assert!(session.take_pending_host_action().is_none());
+    assert!(resize_tx.host_actions.is_empty());
 }
 
 #[test]
@@ -1150,19 +1150,19 @@ fn vertical_resize_triggers_layout_changed_event() {
     session.set_screen_size(24, 80);
 
     // 垂直分割
-    session
-        .apply_ex_command(":vsplit")
+    let vsplit_tx = session
+        .execute_ex_command(":vsplit")
         .expect("vsplit should succeed");
 
-    while session.take_pending_event().is_some() {}
-    while session.take_pending_host_action().is_some() {}
+    assert!(!vsplit_tx.events.is_empty());
+    assert!(vsplit_tx.host_actions.is_empty());
 
     // 垂直サイズ変更
-    session
-        .apply_ex_command(":vertical resize 30")
+    let resize_tx = session
+        .execute_ex_command(":vertical resize 30")
         .expect("vertical resize should succeed");
 
-    let events = drain_events(&mut session);
+    let events = resize_tx.events;
     let found_layout_changed = events
         .iter()
         .any(|event| matches!(event, CoreEvent::LayoutChanged));
@@ -1172,7 +1172,7 @@ fn vertical_resize_triggers_layout_changed_event() {
         ":vertical resize 後に LayoutChanged event が発火されること。取得されたイベント: {:?}",
         events
     );
-    assert!(session.take_pending_host_action().is_none());
+    assert!(resize_tx.host_actions.is_empty());
 }
 
 #[test]
@@ -1183,7 +1183,7 @@ fn screen_size_change_triggers_layout_changed_event() {
 
     // ウィンドウを分割してからスクリーンサイズを変更
     session
-        .apply_ex_command(":split")
+        .execute_ex_command(":split")
         .expect("split should succeed");
 
     while session.take_pending_event().is_some() {}
@@ -1213,11 +1213,11 @@ fn split_triggers_both_window_created_and_layout_changed_events() {
     session.set_screen_size(24, 80);
 
     // :split はウィンドウ生成とレイアウト変更の両方を発火すること
-    session
-        .apply_ex_command(":split")
+    let tx = session
+        .execute_ex_command(":split")
         .expect("split should succeed");
 
-    let events = drain_events(&mut session);
+    let events = tx.events;
     let found_win_new = events
         .iter()
         .any(|event| matches!(event, CoreEvent::WindowCreated { .. }));
@@ -1235,5 +1235,5 @@ fn split_triggers_both_window_created_and_layout_changed_events() {
         ":split 後に LayoutChanged が発火されること。取得されたイベント: {:?}",
         events
     );
-    assert!(session.take_pending_host_action().is_none());
+    assert!(tx.host_actions.is_empty());
 }

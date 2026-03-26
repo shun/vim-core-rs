@@ -40,14 +40,12 @@ The snapshot contract explains what `snapshot()` means.
 
 The command contract explains how mutations report outcomes.
 
-- `apply_normal_command` and `apply_native_ex_command` return one
-  `CoreCommandOutcome`, not a full diff.
-- `execute_normal_command_v2` and `execute_ex_command_v2` return one
+- `execute_normal_command` and `execute_ex_command` return one
   `CoreCommandTransaction` that contains the outcome, final snapshot, emitted
   events, and emitted host actions.
 - `CoreCommandOutcome::HostActionQueued` means the host must drain pending
   actions. It does not mean the side effect already completed.
-- `apply_ex_command` first parses command text into a `ParsedExIntent` for
+- `execute_ex_command` first parses command text into a `ParsedExIntent` for
   file-like commands. Other Ex commands go straight to native execution.
 
 ## Ex intent routing contract
@@ -89,7 +87,7 @@ The event contract explains how embedded-mode observability works.
   side effect.
 - `take_pending_event()` drains the native event queue into a Rust FIFO and
   returns one event at a time.
-- `execute_normal_command_v2()` and `execute_ex_command_v2()` drain both the
+- `execute_normal_command()` and `execute_ex_command()` drain both the
   event queue and the host-action queue before returning the transaction.
 - Message delivery does not depend on `execute('messages')`, `v:errmsg`, or a
   registered callback.

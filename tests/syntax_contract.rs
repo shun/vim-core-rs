@@ -11,16 +11,16 @@ fn test_syntax_highlight_extraction() {
     let buf_id = windows[0].buf_id;
 
     // Enable syntax manually without runtime files
-    session.apply_ex_command(":syntax on").ok(); // may fail if no runtime, that's fine
+    session.execute_ex_command(":syntax on").ok(); // may fail if no runtime, that's fine
 
     // Create a syntax rule: match "Error" for the word "hello"
     session
-        .apply_ex_command(":syntax match Error /hello/")
+        .execute_ex_command(":syntax match Error /hello/")
         .expect("syntax match should succeed");
 
     // Insert text
     session
-        .apply_normal_command("ihello world\x1b")
+        .execute_normal_command("ihello world\x1b")
         .expect("insert should succeed");
     assert_eq!(session.buffer_text(buf_id).unwrap(), "hello world");
 

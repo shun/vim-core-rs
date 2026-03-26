@@ -14,7 +14,7 @@ fn test_undo_tree_and_jump() {
 
     // Do some edits to create undo history
     session
-        .apply_normal_command("oline 2\x1b")
+        .execute_normal_command("oline 2\x1b")
         .expect("insert successful");
     assert_eq!(session.buffer_text(buf_id).unwrap(), "initial text\nline 2");
 
@@ -23,7 +23,7 @@ fn test_undo_tree_and_jump() {
     let seq_after_1 = tree_after_1.seq_last;
 
     session
-        .apply_normal_command("oline 3\x1b")
+        .execute_normal_command("oline 3\x1b")
         .expect("insert successful");
     assert_eq!(
         session.buffer_text(buf_id).unwrap(),
@@ -47,7 +47,7 @@ fn test_undo_tree_and_jump() {
 
     // Create an alternate branch
     session
-        .apply_normal_command("oalt line 3\x1b")
+        .execute_normal_command("oalt line 3\x1b")
         .expect("insert successful");
     assert_eq!(
         session.buffer_text(buf_id).unwrap(),

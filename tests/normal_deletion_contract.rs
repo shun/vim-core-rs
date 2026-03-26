@@ -19,7 +19,9 @@ fn normal_dd_command_deletes_line_and_updates_cursor_and_revision() {
         VimCoreSession::new("line 1\nline 2\nline 3\n").expect("session should initialize");
 
     // Move to second line
-    session.apply_normal_command("j").expect("j should succeed");
+    session
+        .execute_normal_command("j")
+        .expect("j should succeed");
 
     let snapshot_before = session.snapshot();
     assert_eq!(snapshot_before.cursor_row, 1);
@@ -28,11 +30,11 @@ fn normal_dd_command_deletes_line_and_updates_cursor_and_revision() {
 
     // Delete second line
     let outcome = session
-        .apply_normal_command("dd")
+        .execute_normal_command("dd")
         .expect("dd should succeed");
 
     assert!(matches!(
-        outcome,
+        outcome.outcome,
         CoreCommandOutcome::BufferChanged { revision: 1 }
     ));
 
@@ -54,11 +56,11 @@ fn normal_dw_command_deletes_word_and_updates_cursor() {
 
     // Delete "hello "
     let outcome = session
-        .apply_normal_command("dw")
+        .execute_normal_command("dw")
         .expect("dw should succeed");
 
     assert!(matches!(
-        outcome,
+        outcome.outcome,
         CoreCommandOutcome::BufferChanged { revision: 1 }
     ));
 
@@ -74,12 +76,16 @@ fn normal_x_command_deletes_char_under_cursor() {
     let mut session = VimCoreSession::new("abc\n").expect("session should initialize");
 
     // Move to 'b'
-    session.apply_normal_command("l").expect("l should succeed");
+    session
+        .execute_normal_command("l")
+        .expect("l should succeed");
 
-    let outcome = session.apply_normal_command("x").expect("x should succeed");
+    let outcome = session
+        .execute_normal_command("x")
+        .expect("x should succeed");
 
     assert!(matches!(
-        outcome,
+        outcome.outcome,
         CoreCommandOutcome::BufferChanged { revision: 1 }
     ));
 
@@ -96,15 +102,15 @@ fn normal_d_dollar_command_deletes_to_end_of_line() {
 
     // Move to 'w'
     session
-        .apply_normal_command("6l")
+        .execute_normal_command("6l")
         .expect("6l should succeed");
 
     let outcome = session
-        .apply_normal_command("d$")
+        .execute_normal_command("d$")
         .expect("d$ should succeed");
 
     assert!(matches!(
-        outcome,
+        outcome.outcome,
         CoreCommandOutcome::BufferChanged { revision: 1 }
     ));
 
@@ -121,15 +127,15 @@ fn multiple_deletions_increment_revision_monotonically() {
 
     assert_eq!(session.snapshot().revision, 0);
 
-    session.apply_normal_command("dd").expect("1st dd");
+    session.execute_normal_command("dd").expect("1st dd");
     assert_eq!(session.snapshot().revision, 1);
     assert_eq!(session.snapshot().text, "2\n3\n4\n");
 
-    session.apply_normal_command("dd").expect("2nd dd");
+    session.execute_normal_command("dd").expect("2nd dd");
     assert_eq!(session.snapshot().revision, 2);
     assert_eq!(session.snapshot().text, "3\n4\n");
 
-    session.apply_normal_command("x").expect("x");
+    session.execute_normal_command("x").expect("x");
     assert_eq!(session.snapshot().revision, 3);
     assert_eq!(session.snapshot().text, "\n4\n");
 }
@@ -140,12 +146,14 @@ fn deleting_last_line_moves_cursor_up() {
     let mut session = VimCoreSession::new("line 1\nline 2\n").expect("session should initialize");
 
     // Move to last line
-    session.apply_normal_command("G").expect("G should succeed");
+    session
+        .execute_normal_command("G")
+        .expect("G should succeed");
     assert_eq!(session.snapshot().cursor_row, 1);
 
     // Delete last line
     session
-        .apply_normal_command("dd")
+        .execute_normal_command("dd")
         .expect("dd should succeed");
 
     let snapshot = session.snapshot();

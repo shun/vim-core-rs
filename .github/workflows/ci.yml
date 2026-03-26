@@ -65,4 +65,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo test -- --skip upstream_
+          cargo test --lib
+          cargo test --doc
+          for test_file in tests/*.rs; do
+            test_name="$(basename "$test_file" .rs)"
+            case "$test_name" in
+              upstream_vim_generated)
+                continue
+                ;;
+            esac
+            cargo test --test "$test_name"
+          done
+          cargo test --test message_log_contract -- --test-threads=1

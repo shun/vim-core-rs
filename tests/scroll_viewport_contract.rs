@@ -41,7 +41,7 @@ fn vertical_scroll_updates_viewport_boundaries() {
 
     // Move cursor down by 50 lines which forces a scroll
     session
-        .apply_normal_command("50j")
+        .execute_normal_command("50j")
         .expect("50j should succeed");
 
     // Update layout automatically upon snapshot
@@ -69,7 +69,7 @@ fn horizontal_scroll_updates_viewport_boundaries() {
 
     // Turn off wrap so horizontal scroll occurs
     session
-        .apply_ex_command("set nowrap")
+        .execute_ex_command("set nowrap")
         .expect("set nowrap should succeed");
 
     // Update layout automatically upon snapshot
@@ -85,7 +85,7 @@ fn horizontal_scroll_updates_viewport_boundaries() {
 
     // Move cursor right by 200 columns
     session
-        .apply_normal_command("200l")
+        .execute_normal_command("200l")
         .expect("200l should succeed");
 
     // Update layout automatically upon snapshot

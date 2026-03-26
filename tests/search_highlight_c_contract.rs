@@ -49,8 +49,8 @@ fn test_c_ffi_search_pattern() {
     let mut session = VimCoreSession::new("test buffer\nmatch this\nmatch that\n").unwrap();
 
     // Set a search pattern in vim via ex command
-    let _ = session.apply_ex_command("let @/ = 'match'");
-    let _ = session.apply_ex_command("set hlsearch");
+    let _ = session.execute_ex_command("let @/ = 'match'");
+    let _ = session.execute_ex_command("set hlsearch");
 
     unsafe {
         let pattern_ptr = vim_bridge_get_search_pattern();

@@ -607,29 +607,6 @@ impl VimCoreSession {
         }
     }
 
-    pub fn apply_normal_command(
-        &mut self,
-        command: &str,
-    ) -> Result<CoreCommandOutcome, CoreCommandError> {
-        let (outcome, _) = self.invoke_native_normal_command(command)?;
-        self.drain_native_host_actions();
-        Ok(normalize_legacy_command_outcome(
-            outcome,
-            &self.pending_host_actions.borrow(),
-        ))
-    }
-
-    pub fn apply_ex_command(
-        &mut self,
-        command: &str,
-    ) -> Result<CoreCommandOutcome, CoreCommandError> {
-        if let Some(intent) = parse_ex_intent(command) {
-            return self.apply_intent(intent);
-        }
-
-        self.apply_native_ex_command(command)
-    }
-
     pub fn submit_vfs_response(
         &mut self,
         response: CoreVfsResponse,
@@ -673,7 +650,7 @@ impl VimCoreSession {
                 }
                 drop(coordinator);
                 let command = format!(":edit {}", locator);
-                let outcome = self.apply_native_ex_command(&command)?;
+                let outcome = self.execute_native_ex_command_for_outcome(&command)?;
                 let snapshot = self.snapshot();
                 let revision = snapshot.revision;
                 let active_buffer = snapshot
@@ -817,13 +794,13 @@ impl VimCoreSession {
         }
     }
 
-    fn apply_native_ex_command(
+    fn execute_native_ex_command_for_outcome(
         &mut self,
         command: &str,
     ) -> Result<CoreCommandOutcome, CoreCommandError> {
         let (outcome, _) = self.invoke_native_ex_command(command)?;
         self.drain_native_host_actions();
-        Ok(normalize_legacy_command_outcome(
+        Ok(normalize_outcome_after_host_action_drain(
             outcome,
             &self.pending_host_actions.borrow(),
         ))
@@ -1077,7 +1054,7 @@ impl VimCoreSession {
         self.pending_events.borrow_mut().pop_front()
     }
 
-    pub fn execute_normal_command_v2(
+    pub fn execute_normal_command(
         &mut self,
         command: &str,
     ) -> Result<CoreCommandTransaction, CoreCommandError> {
@@ -1085,7 +1062,7 @@ impl VimCoreSession {
         Ok(self.collect_transaction(outcome, snapshot))
     }
 
-    pub fn execute_ex_command_v2(
+    pub fn execute_ex_command(
         &mut self,
         command: &str,
     ) -> Result<CoreCommandTransaction, CoreCommandError> {
@@ -1232,7 +1209,7 @@ impl VimCoreSession {
         command: &str,
     ) -> Result<(CoreCommandOutcome, CoreSnapshot), CoreCommandError> {
         let result = unsafe {
-            bindings::vim_bridge_apply_normal_command(
+            bindings::vim_bridge_execute_normal_command(
                 self.state.as_ptr(),
                 command.as_ptr().cast(),
                 command.len(),
@@ -1246,7 +1223,7 @@ impl VimCoreSession {
         command: &str,
     ) -> Result<(CoreCommandOutcome, CoreSnapshot), CoreCommandError> {
         let result = unsafe {
-            bindings::vim_bridge_apply_ex_command(
+            bindings::vim_bridge_execute_ex_command(
                 self.state.as_ptr(),
                 command.as_ptr().cast(),
                 command.len(),
@@ -1344,7 +1321,7 @@ impl VimCoreSession {
     }
 
     /// VFS load/save の結果を target buffer に反映する runtime apply contract。
-    /// vim_bridge_apply_buffer_commit を使用して text, name, dirty を一括で反映する。
+    /// vim_bridge_commit_buffer_update を使用して text, name, dirty を一括で反映する。
     fn apply_loaded_buffer(
         &mut self,
         buf_id: i32,
@@ -1367,7 +1344,7 @@ impl VimCoreSession {
             clear_dirty: true,
         };
         let status =
-            unsafe { bindings::vim_bridge_apply_buffer_commit(self.state.as_ptr(), &commit) };
+            unsafe { bindings::vim_bridge_commit_buffer_update(self.state.as_ptr(), &commit) };
         convert_status(status)
     }
 
@@ -1378,7 +1355,7 @@ impl VimCoreSession {
             let Some(action) = convert_host_action(action) else {
                 break;
             };
-            if should_expose_legacy_host_action(&action) {
+            if should_expose_host_action_in_queue_api(&action) {
                 self.pending_host_actions.borrow_mut().push_back(action);
             }
         }
@@ -2162,11 +2139,11 @@ fn convert_host_action(action: bindings::vim_host_action_t) -> Option<CoreHostAc
     }
 }
 
-fn should_expose_legacy_host_action(action: &CoreHostAction) -> bool {
+fn should_expose_host_action_in_queue_api(action: &CoreHostAction) -> bool {
     !matches!(action, CoreHostAction::Redraw { .. } | CoreHostAction::Bell)
 }
 
-fn normalize_legacy_command_outcome(
+fn normalize_outcome_after_host_action_drain(
     outcome: CoreCommandOutcome,
     pending_host_actions: &VecDeque<CoreHostAction>,
 ) -> CoreCommandOutcome {

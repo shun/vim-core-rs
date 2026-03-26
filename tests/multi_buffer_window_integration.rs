@@ -48,19 +48,19 @@ fn integration_create_multiple_buffers_and_verify_listing() {
     assert_eq!(initial.len(), 1, "初期状態ではバッファは1つ");
 
     // バッファ2を作成（ウィンドウを分割してからenewすることでmemlineを保持）
-    session.apply_ex_command(":split").expect("split成功");
-    session.apply_ex_command(":enew").expect("enew成功");
+    session.execute_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":enew").expect("enew成功");
     session
-        .apply_ex_command(":call setline(1, 'buffer 2 content')")
+        .execute_ex_command(":call setline(1, 'buffer 2 content')")
         .expect("setline成功");
 
     let buf2_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
     eprintln!("[Task 4.1] バッファ2のID: {}", buf2_id);
 
     // バッファ3を作成（バッファ2が変更済みなので :enew! で強制）
-    session.apply_ex_command(":enew!").expect("enew!成功");
+    session.execute_ex_command(":enew!").expect("enew!成功");
     session
-        .apply_ex_command(":call setline(1, 'buffer 3 content')")
+        .execute_ex_command(":call setline(1, 'buffer 3 content')")
         .expect("setline成功");
 
     let buf3_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
@@ -104,10 +104,10 @@ fn integration_switch_between_buffers_round_trip() {
     eprintln!("[Task 4.1] バッファAlpha ID: {}", buf_alpha_id);
 
     // バッファBetaを作成
-    session.apply_ex_command(":split").expect("split成功");
-    session.apply_ex_command(":enew").expect("enew成功");
+    session.execute_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":enew").expect("enew成功");
     session
-        .apply_ex_command(":call setline(1, 'beta content')")
+        .execute_ex_command(":call setline(1, 'beta content')")
         .expect("setline成功");
     let buf_beta_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
     eprintln!("[Task 4.1] バッファBeta ID: {}", buf_beta_id);
@@ -168,10 +168,10 @@ fn integration_delete_buffer_updates_listing() {
     eprintln!("[Task 4.1] === バッファ削除後の一覧更新テスト ===");
 
     // バッファを追加
-    session.apply_ex_command(":split").expect("split成功");
-    session.apply_ex_command(":enew").expect("enew成功");
+    session.execute_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":enew").expect("enew成功");
     session
-        .apply_ex_command(":call setline(1, 'delete me')")
+        .execute_ex_command(":call setline(1, 'delete me')")
         .expect("setline成功");
 
     let buf_to_delete = session.buffers().iter().find(|b| b.is_active).unwrap().id;
@@ -183,7 +183,7 @@ fn integration_delete_buffer_updates_listing() {
 
     // バッファを完全削除（bwipeout はバッファリストからも完全に除去する）
     let cmd = format!(":bwipeout! {}", buf_to_delete);
-    session.apply_ex_command(&cmd).expect("bwipeout成功");
+    session.execute_ex_command(&cmd).expect("bwipeout成功");
 
     let buffers_after = session.buffers();
     eprintln!(
@@ -219,15 +219,15 @@ fn integration_inactive_buffer_text_after_edits() {
 
     // バッファ1を編集
     session
-        .apply_ex_command(":call setline(1, 'edited line one')")
+        .execute_ex_command(":call setline(1, 'edited line one')")
         .expect("setline成功");
     let buf1_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
 
     // バッファ2を作成して編集
-    session.apply_ex_command(":split").expect("split成功");
-    session.apply_ex_command(":enew").expect("enew成功");
+    session.execute_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":enew").expect("enew成功");
     session
-        .apply_ex_command(":call setline(1, 'line two')")
+        .execute_ex_command(":call setline(1, 'line two')")
         .expect("setline成功");
 
     // バッファ1のテキストが編集後の内容であること
@@ -261,7 +261,7 @@ fn integration_buffer_dirty_flag_tracks_modifications() {
     assert!(!buf1.dirty, "初期状態のバッファはdirty=false");
 
     // 編集後: dirty=true
-    session.apply_normal_command("dd").expect("dd成功");
+    session.execute_normal_command("dd").expect("dd成功");
     let buf1 = session
         .buffers()
         .iter()
@@ -272,8 +272,8 @@ fn integration_buffer_dirty_flag_tracks_modifications() {
     assert!(buf1.dirty, "編集後のバッファはdirty=true");
 
     // 新バッファ作成して確認
-    session.apply_ex_command(":split").expect("split成功");
-    session.apply_ex_command(":enew").expect("enew成功");
+    session.execute_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":enew").expect("enew成功");
 
     // 新バッファはdirty=false
     let new_buf = session
@@ -315,8 +315,8 @@ fn integration_buffer_creation_triggers_buf_add_events() {
     // 3つのバッファを連続作成
     let mut buf_add_count = 0;
     for i in 1..=3 {
-        session.apply_ex_command(":enew").expect("enew成功");
-        let events = drain_events(&mut session);
+        let tx = session.execute_ex_command(":enew").expect("enew成功");
+        let events = tx.events;
         let buf_adds: Vec<&CoreEvent> = events
             .iter()
             .filter(|event| matches!(event, CoreEvent::BufferAdded { .. }))
@@ -348,19 +348,19 @@ fn integration_multi_buffer_text_isolation() {
     let buf_a_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
 
     // バッファBを作成（split + enew でmemlineを保持）
-    session.apply_ex_command(":split").expect("split成功");
-    session.apply_ex_command(":enew").expect("enew成功");
+    session.execute_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":enew").expect("enew成功");
     session
-        .apply_ex_command(":call setline(1, 'BBB')")
+        .execute_ex_command(":call setline(1, 'BBB')")
         .expect("setline成功");
     let buf_b_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
 
     // バッファCを作成（さらにsplit + enew で別ウィンドウに新バッファを開く）
     // enew! だとバッファBの変更が破棄されるため、split経由で別ウィンドウに新バッファを作る
-    session.apply_ex_command(":split").expect("split成功");
-    session.apply_ex_command(":enew").expect("enew成功");
+    session.execute_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":enew").expect("enew成功");
     session
-        .apply_ex_command(":call setline(1, 'CCC')")
+        .execute_ex_command(":call setline(1, 'CCC')")
         .expect("setline成功");
     let buf_c_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
 
@@ -379,7 +379,7 @@ fn integration_multi_buffer_text_isolation() {
 
     // バッファCを編集してもAとBに影響しないこと
     session
-        .apply_ex_command(":call setline(1, 'CCC modified')")
+        .execute_ex_command(":call setline(1, 'CCC modified')")
         .expect("setline成功");
 
     let text_a_after = session.buffer_text(buf_a_id);
@@ -424,7 +424,7 @@ fn integration_horizontal_split_geometry() {
             .collect::<Vec<_>>()
     );
 
-    session.apply_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":split").expect("split成功");
 
     let after = session.windows();
     eprintln!(
@@ -476,7 +476,7 @@ fn integration_vertical_split_geometry() {
 
     eprintln!("[Task 4.2] === 垂直分割後の幾何情報テスト ===");
 
-    session.apply_ex_command(":vsplit").expect("vsplit成功");
+    session.execute_ex_command(":vsplit").expect("vsplit成功");
 
     let windows = session.windows();
     eprintln!(
@@ -517,7 +517,7 @@ fn integration_resize_updates_geometry() {
 
     eprintln!("[Task 4.2] === リサイズ後の幾何情報更新テスト ===");
 
-    session.apply_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":split").expect("split成功");
 
     let before = session.windows();
     let active_win_before = before.iter().find(|w| w.is_active).unwrap().clone();
@@ -527,7 +527,7 @@ fn integration_resize_updates_geometry() {
     );
 
     // リサイズ実行
-    session.apply_ex_command(":resize 5").expect("resize成功");
+    session.execute_ex_command(":resize 5").expect("resize成功");
 
     let after = session.windows();
     let active_win_after = after.iter().find(|w| w.id == active_win_before.id).unwrap();
@@ -551,8 +551,8 @@ fn integration_focus_move_updates_active_window() {
     eprintln!("[Task 4.2] === フォーカス移動後のアクティブウィンドウ更新テスト ===");
 
     // 水平分割 + 垂直分割で3ウィンドウ
-    session.apply_ex_command(":split").expect("split成功");
-    session.apply_ex_command(":vsplit").expect("vsplit成功");
+    session.execute_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":vsplit").expect("vsplit成功");
 
     let windows = session.windows();
     eprintln!(
@@ -599,8 +599,8 @@ fn integration_split_event_sequence() {
     drain_events(&mut session);
 
     // :split 実行 → WindowCreated + LayoutChanged が発火すること
-    session.apply_ex_command(":split").expect("split成功");
-    let events = drain_events(&mut session);
+    let tx = session.execute_ex_command(":split").expect("split成功");
+    let events = tx.events;
 
     eprintln!("[Task 4.2] split後のイベント: {:?}", events);
 
@@ -626,12 +626,12 @@ fn integration_resize_event_timing() {
 
     eprintln!("[Task 4.2] === リサイズイベントのタイミングテスト ===");
 
-    session.apply_ex_command(":split").expect("split成功");
-    drain_events(&mut session);
+    let split_tx = session.execute_ex_command(":split").expect("split成功");
+    assert!(!split_tx.events.is_empty());
 
     // リサイズ → LayoutChanged が即座に発火
-    session.apply_ex_command(":resize 8").expect("resize成功");
-    let events = drain_events(&mut session);
+    let resize_tx = session.execute_ex_command(":resize 8").expect("resize成功");
+    let events = resize_tx.events;
 
     eprintln!("[Task 4.2] resize後のイベント: {:?}", events);
 
@@ -665,12 +665,12 @@ fn integration_window_close_updates_layout() {
     eprintln!("[Task 4.2] === ウィンドウクローズ後のレイアウト更新テスト ===");
 
     // 2ウィンドウに分割
-    session.apply_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":split").expect("split成功");
     assert_eq!(session.windows().len(), 2, "分割後は2ウィンドウ");
     drain_events(&mut session);
 
     // アクティブウィンドウを閉じる
-    session.apply_ex_command(":close").expect("close成功");
+    session.execute_ex_command(":close").expect("close成功");
 
     let windows = session.windows();
     eprintln!(
@@ -708,9 +708,9 @@ fn integration_multi_split_geometry_consistency() {
     eprintln!("[Task 4.2] === 複数分割後のジオメトリ一貫性テスト ===");
 
     // 水平分割 × 2 + 垂直分割 × 1 で4ウィンドウ
-    session.apply_ex_command(":split").expect("split成功");
-    session.apply_ex_command(":split").expect("split成功");
-    session.apply_ex_command(":vsplit").expect("vsplit成功");
+    session.execute_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":vsplit").expect("vsplit成功");
 
     let windows = session.windows();
     eprintln!(
@@ -757,7 +757,7 @@ fn integration_window_buffer_association_after_split_and_enew() {
     let initial_buf_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
 
     // :split → 両方同じバッファ
-    session.apply_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":split").expect("split成功");
     let windows = session.windows();
     eprintln!(
         "[Task 4.2] split後: {:?}",
@@ -772,7 +772,7 @@ fn integration_window_buffer_association_after_split_and_enew() {
     }
 
     // アクティブウィンドウで :enew → 別バッファに
-    session.apply_ex_command(":enew").expect("enew成功");
+    session.execute_ex_command(":enew").expect("enew成功");
     let new_buf_id = session.buffers().iter().find(|b| b.is_active).unwrap().id;
 
     let windows = session.windows();
@@ -802,7 +802,7 @@ fn integration_screen_resize_updates_all_window_geometry() {
 
     eprintln!("[Task 4.2] === スクリーンリサイズ後の全ウィンドウジオメトリ更新テスト ===");
 
-    session.apply_ex_command(":split").expect("split成功");
+    session.execute_ex_command(":split").expect("split成功");
     drain_events(&mut session);
 
     let before = session.windows();

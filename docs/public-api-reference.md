@@ -105,24 +105,16 @@ These methods let you inspect or update navigation state.
 
 These methods mutate editor state or inspect Vimscript-level behavior.
 
-- `apply_normal_command(&mut self, command: &str)
-  -> Result<CoreCommandOutcome, CoreCommandError>`
-  Executes a Normal-mode key sequence through the bridge layer and preserves
-  legacy queue-based integration.
-- `apply_ex_command(&mut self, command: &str)
-  -> Result<CoreCommandOutcome, CoreCommandError>`
-  Executes an Ex command. The crate intercepts key path-like commands such as
-  `:edit`, `:write`, `:update`, `:wq`, `:xit`, and `:quit` so it can route
-  file operations through VFS or host actions instead of blindly delegating to
-  native Vim file I/O.
-- `execute_normal_command_v2(&mut self, command: &str)
+- `execute_normal_command(&mut self, command: &str)
   -> Result<CoreCommandTransaction, CoreCommandError>`
   Executes a Normal-mode key sequence and returns the transaction result that
   includes the final snapshot, emitted events, and emitted host actions.
-- `execute_ex_command_v2(&mut self, command: &str)
+- `execute_ex_command(&mut self, command: &str)
   -> Result<CoreCommandTransaction, CoreCommandError>`
-  Executes an Ex command with the same routing behavior as `apply_ex_command`,
-  but returns the full transaction result instead of only a coarse outcome.
+  Executes an Ex command. The crate intercepts file-oriented commands such as
+  `:edit`, `:write`, `:update`, `:wq`, `:xit`, and `:quit` so it can route
+  file operations through VFS or host actions instead of blindly delegating to
+  native Vim file I/O.
 - `eval_string(&mut self, expr: &str) -> Option<String>`
   Evaluates a Vimscript expression and returns the result as a string if the
   bridge returns one.
@@ -136,8 +128,8 @@ These methods connect the session to the application that embeds it.
   action in FIFO order. Call this repeatedly until it returns `None`.
 - `take_pending_event(&mut self) -> Option<CoreEvent>`
   Drains newly emitted native events into the Rust queue, then pops one event
-  in FIFO order. Call this repeatedly until it returns `None` when you use the
-  queue-based integration path.
+  in FIFO order. Call this repeatedly until it returns `None` when you consume
+  events outside a transaction result.
 - `set_screen_size(&mut self, rows: i32, cols: i32)`
   Updates the runtime with the host UI dimensions.
 - `submit_vfs_response(&mut self, response: CoreVfsResponse)
@@ -471,12 +463,9 @@ These enums form the host-facing VFS protocol.
 This section captures the public behaviors that are easy to miss when you only
 read signatures.
 
-- `apply_ex_command` does not treat all Ex commands equally. File-oriented
-  commands are parsed into intents so the host can remain authoritative for
-  storage.
 - `take_pending_host_action` and `take_pending_event` are the public queue-drain
-  methods for the legacy integration path. If you do not call them, queued
-  host work and queued events remain buffered.
+  methods for asynchronous host work and out-of-band events. If you do not
+  call them, queued host work and queued events remain buffered.
 - VFS save requests are revision-aware. A `Saved` response can be rejected as
   stale if the buffer revision has advanced.
 - `snapshot().pending_host_actions` includes both already buffered Rust-side

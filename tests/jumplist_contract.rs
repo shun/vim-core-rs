@@ -18,7 +18,7 @@ fn jumplist_api_returns_empty_list_after_clearjumps() {
     let mut session = VimCoreSession::new("one\ntwo\nthree\n").expect("session should initialize");
 
     session
-        .apply_ex_command(":clearjumps")
+        .execute_ex_command(":clearjumps")
         .expect("clearjumps should succeed");
 
     assert_eq!(
@@ -44,13 +44,13 @@ fn jumplist_api_exposes_entries_for_jump_commands() {
         .id;
 
     session
-        .apply_ex_command(":clearjumps")
+        .execute_ex_command(":clearjumps")
         .expect("clearjumps should succeed");
     session
-        .apply_normal_command("4G")
+        .execute_normal_command("4G")
         .expect("4G should succeed");
     session
-        .apply_normal_command("gg")
+        .execute_normal_command("gg")
         .expect("gg should succeed");
 
     let jumplist = session.jumplist();
@@ -85,13 +85,13 @@ fn jumplist_current_index_tracks_ctrl_o_and_ctrl_i_navigation() {
         VimCoreSession::new("one\ntwo\nthree\nfour\n").expect("session should initialize");
 
     session
-        .apply_ex_command(":clearjumps")
+        .execute_ex_command(":clearjumps")
         .expect("clearjumps should succeed");
     session
-        .apply_normal_command("4G")
+        .execute_normal_command("4G")
         .expect("4G should succeed");
     session
-        .apply_normal_command("gg")
+        .execute_normal_command("gg")
         .expect("gg should succeed");
 
     let before_jump_back = session.jumplist();
@@ -101,7 +101,7 @@ fn jumplist_current_index_tracks_ctrl_o_and_ctrl_i_navigation() {
     );
 
     session
-        .apply_normal_command("\u{f}")
+        .execute_normal_command("\u{f}")
         .expect("Ctrl-O should succeed");
 
     let after_jump_back = session.jumplist();
@@ -116,7 +116,7 @@ fn jumplist_current_index_tracks_ctrl_o_and_ctrl_i_navigation() {
     );
 
     session
-        .apply_normal_command("\u{9}")
+        .execute_normal_command("\u{9}")
         .expect("Ctrl-I should succeed");
 
     let after_jump_forward = session.jumplist();

@@ -43,28 +43,28 @@ vim_core_snapshot_t vim_bridge_snapshot(const vim_bridge_state_t* state) {
     return upstream_runtime_snapshot(state != NULL ? state->runtime : NULL);
 }
 
-vim_core_command_result_t vim_bridge_apply_normal_command(
+vim_core_command_result_t vim_bridge_execute_normal_command(
     vim_bridge_state_t* state,
     const char* command,
     uintptr_t command_len
 ) {
     if (state == NULL) {
-        return upstream_runtime_apply_normal_command(NULL, command, command_len);
+        return upstream_runtime_execute_normal_command(NULL, command, command_len);
     }
 
-    return upstream_runtime_apply_normal_command(state->runtime, command, command_len);
+    return upstream_runtime_execute_normal_command(state->runtime, command, command_len);
 }
 
-vim_core_command_result_t vim_bridge_apply_ex_command(
+vim_core_command_result_t vim_bridge_execute_ex_command(
     vim_bridge_state_t* state,
     const char* command,
     uintptr_t command_len
 ) {
     if (state == NULL) {
-        return upstream_runtime_apply_ex_command(NULL, command, command_len);
+        return upstream_runtime_execute_ex_command(NULL, command, command_len);
     }
 
-    return upstream_runtime_apply_ex_command(state->runtime, command, command_len);
+    return upstream_runtime_execute_ex_command(state->runtime, command, command_len);
 }
 
 vim_host_action_t vim_bridge_take_pending_host_action(vim_bridge_state_t* state) {
@@ -140,12 +140,12 @@ vim_core_option_set_result_t vim_bridge_set_option_string(
     return upstream_runtime_set_option_string(state->runtime, name, value, scope);
 }
 
-vim_core_status_t vim_bridge_apply_buffer_commit(
+vim_core_status_t vim_bridge_commit_buffer_update(
     vim_bridge_state_t* state,
     const vim_core_buffer_commit_t* commit
 ) {
     if (state == NULL || commit == NULL) return VIM_CORE_STATUS_SESSION_ERROR;
-    return upstream_runtime_apply_buffer_commit(state->runtime, commit);
+    return upstream_runtime_commit_buffer_update(state->runtime, commit);
 }
 
 void vim_bridge_set_screen_size(vim_bridge_state_t* state, int rows, int cols) {

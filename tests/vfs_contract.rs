@@ -16,6 +16,15 @@ fn acquire_session_test_lock() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+fn take_vfs_request(actions: Vec<CoreHostAction>) -> CoreVfsRequest {
+    for action in actions {
+        if let CoreHostAction::VfsRequest(request) = action {
+            return request;
+        }
+    }
+    panic!("expected VFS request");
+}
+
 fn take_next_vfs_request(session: &mut VimCoreSession) -> CoreVfsRequest {
     loop {
         match session.take_pending_host_action() {
@@ -110,10 +119,10 @@ fn vfs_transaction_log_is_exposed_through_session_api() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
-    session
-        .apply_ex_command(":edit mem://notes/alpha")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/alpha")
         .expect("edit should queue resolve request");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected action: {other:?}"),
     };
@@ -163,10 +172,10 @@ fn vfs_transaction_log_records_quit_deferred_resumed_and_denied_events() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
-    session
-        .apply_ex_command(":edit mem://notes/alpha")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/alpha")
         .expect("edit should queue resolve request");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected action: {other:?}"),
     };
@@ -190,17 +199,17 @@ fn vfs_transaction_log_records_quit_deferred_resumed_and_denied_events() {
         .expect("load should apply");
 
     session
-        .apply_normal_command("A!")
+        .execute_normal_command("A!")
         .expect("edit should succeed");
-    session
-        .apply_ex_command(":wq")
+    let outcome = session
+        .execute_ex_command(":wq")
         .expect("wq should queue save on VFS buffer");
-    let save_id = match take_next_vfs_request(&mut session) {
+    let save_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Save { request_id, .. } => request_id,
         other => panic!("unexpected action: {other:?}"),
     };
 
-    let pending_quit = session.apply_ex_command(":quit");
+    let pending_quit = session.execute_ex_command(":quit");
     assert!(
         pending_quit.is_err(),
         "quit should be denied while save is pending"
@@ -281,15 +290,15 @@ fn edit_command_queues_resolve_request_for_vfs_locator() {
         .id;
 
     let outcome = session
-        .apply_ex_command(":edit mem://notes/alpha")
+        .execute_ex_command(":edit mem://notes/alpha")
         .expect("edit should queue resolve request");
 
     assert!(matches!(
-        outcome,
+        outcome.outcome,
         vim_core_rs::CoreCommandOutcome::HostActionQueued
     ));
     assert!(matches!(
-        take_next_vfs_request(&mut session),
+        take_vfs_request(outcome.host_actions),
         CoreVfsRequest::Resolve {
             target_buf_id,
             locator,
@@ -310,11 +319,11 @@ fn resolved_vfs_response_queues_follow_up_load_request() {
         .expect("active buffer should exist")
         .id;
 
-    session
-        .apply_ex_command(":edit mem://notes/alpha")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/alpha")
         .expect("edit should queue resolve request");
 
-    let request_id = match take_next_vfs_request(&mut session) {
+    let request_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected action: {other:?}"),
     };
@@ -347,7 +356,7 @@ fn loaded_vfs_response_commits_text_to_target_buffer_only() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     session
-        .apply_ex_command(":vnew")
+        .execute_ex_command(":vnew")
         .expect("vnew should succeed");
     let buffers = session.buffers();
     let original_buf_id = buffers
@@ -361,10 +370,10 @@ fn loaded_vfs_response_commits_text_to_target_buffer_only() {
         .expect("new active buffer should exist")
         .id;
 
-    session
-        .apply_ex_command(":edit mem://notes/alpha")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/alpha")
         .expect("edit should queue resolve request");
-    let resolve_request_id = match take_next_vfs_request(&mut session) {
+    let resolve_request_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected action: {other:?}"),
     };
@@ -411,10 +420,10 @@ fn write_command_on_vfs_buffer_queues_save_request_to_host() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備: edit -> resolve -> load
-    session
-        .apply_ex_command(":edit mem://notes/alpha")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/alpha")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -439,19 +448,19 @@ fn write_command_on_vfs_buffer_queues_save_request_to_host() {
 
     // バッファを編集して dirty にする
     session
-        .apply_ex_command(":s/original/modified/")
+        .execute_ex_command(":s/original/modified/")
         .expect("substitute should succeed");
 
     // :write を実行 -> VFS buffer なので host save flow に接続される
     let outcome = session
-        .apply_ex_command(":write")
+        .execute_ex_command(":write")
         .expect("write should queue save request");
     assert!(matches!(
-        outcome,
+        outcome.outcome,
         vim_core_rs::CoreCommandOutcome::HostActionQueued
     ));
 
-    let save_request = take_next_vfs_request(&mut session);
+    let save_request = take_vfs_request(outcome.host_actions);
     match save_request {
         CoreVfsRequest::Save {
             document_id,
@@ -473,10 +482,10 @@ fn write_with_target_on_vfs_buffer_passes_target_locator_to_host() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備
-    session
-        .apply_ex_command(":edit mem://notes/beta")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/beta")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -501,14 +510,14 @@ fn write_with_target_on_vfs_buffer_passes_target_locator_to_host() {
 
     // :write {target} を実行
     let outcome = session
-        .apply_ex_command(":write mem://backup/beta")
+        .execute_ex_command(":write mem://backup/beta")
         .expect("write with target should queue save request");
     assert!(matches!(
-        outcome,
+        outcome.outcome,
         vim_core_rs::CoreCommandOutcome::HostActionQueued
     ));
 
-    let save_request = take_next_vfs_request(&mut session);
+    let save_request = take_vfs_request(outcome.host_actions);
     match save_request {
         CoreVfsRequest::Save {
             document_id,
@@ -528,10 +537,10 @@ fn update_command_on_clean_vfs_buffer_does_not_queue_save() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備
-    session
-        .apply_ex_command(":edit mem://notes/gamma")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/gamma")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -556,9 +565,12 @@ fn update_command_on_clean_vfs_buffer_does_not_queue_save() {
 
     // clean な状態で :update -> save は発行されない
     let outcome = session
-        .apply_ex_command(":update")
+        .execute_ex_command(":update")
         .expect("update on clean buffer should succeed");
-    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::NoChange));
+    assert!(matches!(
+        outcome.outcome,
+        vim_core_rs::CoreCommandOutcome::NoChange
+    ));
 }
 
 #[test]
@@ -568,16 +580,16 @@ fn write_on_local_buffer_does_not_use_vfs_save_flow() {
 
     // local buffer に対する :write は既存フロー（Write host action）を通る
     let outcome = session
-        .apply_ex_command(":write /tmp/test-local.txt")
+        .execute_ex_command(":write /tmp/test-local.txt")
         .expect("write on local buffer should succeed");
     assert!(matches!(
-        outcome,
+        outcome.outcome,
         vim_core_rs::CoreCommandOutcome::HostActionQueued
     ));
 
     // VfsRequest ではなく Write action が出る
-    match session.take_pending_host_action() {
-        Some(CoreHostAction::Write { path, .. }) => {
+    match outcome.host_actions.as_slice() {
+        [CoreHostAction::Write { path, .. }] => {
             assert_eq!(path, "/tmp/test-local.txt");
         }
         other => panic!("expected Write host action, got {other:?}"),
@@ -590,10 +602,10 @@ fn save_success_response_clears_dirty_flag_on_vfs_buffer() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備
-    session
-        .apply_ex_command(":edit mem://notes/delta")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/delta")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -618,7 +630,7 @@ fn save_success_response_clears_dirty_flag_on_vfs_buffer() {
 
     // 編集
     session
-        .apply_ex_command(":s/delta/DELTA/")
+        .execute_ex_command(":s/delta/DELTA/")
         .expect("substitute should succeed");
     assert!(
         session.snapshot().dirty,
@@ -626,10 +638,10 @@ fn save_success_response_clears_dirty_flag_on_vfs_buffer() {
     );
 
     // :write
-    session
-        .apply_ex_command(":write")
+    let outcome = session
+        .execute_ex_command(":write")
         .expect("write should queue save");
-    let save_id = match take_next_vfs_request(&mut session) {
+    let save_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Save { request_id, .. } => request_id,
         other => panic!("expected Save, got {other:?}"),
     };
@@ -654,10 +666,10 @@ fn save_failure_response_keeps_buffer_dirty() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備
-    session
-        .apply_ex_command(":edit mem://notes/epsilon")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/epsilon")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -682,14 +694,14 @@ fn save_failure_response_keeps_buffer_dirty() {
 
     // 編集して dirty に
     session
-        .apply_ex_command(":s/epsilon/EPSILON/")
+        .execute_ex_command(":s/epsilon/EPSILON/")
         .expect("substitute should succeed");
 
     // :write
-    session
-        .apply_ex_command(":write")
+    let outcome = session
+        .execute_ex_command(":write")
         .expect("write should queue save");
-    let save_id = match take_next_vfs_request(&mut session) {
+    let save_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Save { request_id, .. } => request_id,
         other => panic!("expected Save, got {other:?}"),
     };
@@ -737,10 +749,10 @@ fn wq_on_vfs_buffer_queues_save_then_closes_on_success() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備
-    session
-        .apply_ex_command(":edit mem://notes/wq_test")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/wq_test")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -765,19 +777,19 @@ fn wq_on_vfs_buffer_queues_save_then_closes_on_success() {
 
     // 編集して dirty に
     session
-        .apply_ex_command(":s/wq/WQ/")
+        .execute_ex_command(":s/wq/WQ/")
         .expect("substitute should succeed");
 
     // :wq -> save request が発行され、deferred close が設定される
     let outcome = session
-        .apply_ex_command(":wq")
+        .execute_ex_command(":wq")
         .expect("wq should queue save request");
     assert!(matches!(
-        outcome,
+        outcome.outcome,
         vim_core_rs::CoreCommandOutcome::HostActionQueued
     ));
 
-    let save_id = match take_next_vfs_request(&mut session) {
+    let save_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Save { request_id, .. } => request_id,
         other => panic!("expected Save, got {other:?}"),
     };
@@ -823,10 +835,10 @@ fn quit_on_vfs_buffer_with_pending_save_is_rejected() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備
-    session
-        .apply_ex_command(":edit mem://notes/quit_reject")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/quit_reject")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -851,20 +863,27 @@ fn quit_on_vfs_buffer_with_pending_save_is_rejected() {
 
     // 編集して dirty に、:write で save を発行
     session
-        .apply_ex_command(":s/quit/QUIT/")
+        .execute_ex_command(":s/quit/QUIT/")
         .expect("substitute should succeed");
-    session
-        .apply_ex_command(":write")
+    let outcome = session
+        .execute_ex_command(":write")
         .expect("write should queue save");
-    let _save_id = match take_next_vfs_request(&mut session) {
+    let _save_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Save { request_id, .. } => request_id,
         other => panic!("expected Save, got {other:?}"),
     };
 
     // pending save 中の :quit は拒否される
-    let result = session.apply_ex_command(":quit");
+    let result = session.execute_ex_command(":quit");
     assert!(
-        result.is_err() || matches!(result, Ok(vim_core_rs::CoreCommandOutcome::NoChange)),
+        result.is_err()
+            || matches!(
+                result,
+                Ok(vim_core_rs::CoreCommandTransaction {
+                    outcome: vim_core_rs::CoreCommandOutcome::NoChange,
+                    ..
+                })
+            ),
         "quit during pending save should be rejected: {result:?}"
     );
 }
@@ -875,10 +894,10 @@ fn quit_force_on_vfs_buffer_with_pending_save_is_allowed() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備
-    session
-        .apply_ex_command(":edit mem://notes/quit_force")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/quit_force")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -903,29 +922,26 @@ fn quit_force_on_vfs_buffer_with_pending_save_is_allowed() {
 
     // 編集して dirty に、save 発行
     session
-        .apply_ex_command(":s/force/FORCE/")
+        .execute_ex_command(":s/force/FORCE/")
         .expect("substitute should succeed");
-    session
-        .apply_ex_command(":write")
+    let outcome = session
+        .execute_ex_command(":write")
         .expect("write should queue save");
-    let _ = take_next_vfs_request(&mut session);
+    let _ = take_vfs_request(outcome.host_actions);
 
     // :quit! は強制終了を許可
     let outcome = session
-        .apply_ex_command(":quit!")
+        .execute_ex_command(":quit!")
         .expect("quit! should be allowed even with pending save");
     assert!(matches!(
-        outcome,
+        outcome.outcome,
         vim_core_rs::CoreCommandOutcome::HostActionQueued
     ));
 
-    let mut found_quit = false;
-    while let Some(action) = session.take_pending_host_action() {
-        if matches!(action, CoreHostAction::Quit { force: true, .. }) {
-            found_quit = true;
-            break;
-        }
-    }
+    let found_quit = outcome
+        .host_actions
+        .iter()
+        .any(|action| matches!(action, CoreHostAction::Quit { force: true, .. }));
     assert!(found_quit, "forced quit should be queued");
 }
 
@@ -935,10 +951,10 @@ fn wq_save_failure_blocks_close_and_reports_error() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備
-    session
-        .apply_ex_command(":edit mem://notes/wq_fail")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/wq_fail")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -963,14 +979,14 @@ fn wq_save_failure_blocks_close_and_reports_error() {
 
     // 編集して dirty に
     session
-        .apply_ex_command(":s/wq/WQ/")
+        .execute_ex_command(":s/wq/WQ/")
         .expect("substitute should succeed");
 
     // :wq -> save request
-    session
-        .apply_ex_command(":wq")
+    let outcome = session
+        .execute_ex_command(":wq")
         .expect("wq should queue save");
-    let save_id = match take_next_vfs_request(&mut session) {
+    let save_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Save { request_id, .. } => request_id,
         other => panic!("expected Save, got {other:?}"),
     };
@@ -1038,10 +1054,10 @@ fn resolved_local_fallback_runs_existing_edit_flow() {
     fs::write(&path, "fallback text\n").expect("temp file should be written");
 
     let locator = path.to_string_lossy().to_string();
-    session
-        .apply_ex_command(&format!(":edit {locator}"))
+    let outcome = session
+        .execute_ex_command(&format!(":edit {locator}"))
         .expect("edit should queue resolve request");
-    let request_id = match take_next_vfs_request(&mut session) {
+    let request_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected action: {other:?}"),
     };
@@ -1076,10 +1092,10 @@ fn buffer_commit_applies_text_and_name_to_target_buffer_via_bridge() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備: edit -> resolve -> load
-    session
-        .apply_ex_command(":edit mem://notes/commit_test")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/commit_test")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -1130,10 +1146,10 @@ fn buffer_commit_clears_dirty_on_save_success_via_bridge() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備
-    session
-        .apply_ex_command(":edit mem://notes/dirty_clear_test")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/dirty_clear_test")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -1158,7 +1174,7 @@ fn buffer_commit_clears_dirty_on_save_success_via_bridge() {
 
     // 編集して dirty にする
     session
-        .apply_ex_command(":s/original/modified/")
+        .execute_ex_command(":s/original/modified/")
         .expect("substitute should succeed");
     assert!(
         session.snapshot().dirty,
@@ -1166,10 +1182,10 @@ fn buffer_commit_clears_dirty_on_save_success_via_bridge() {
     );
 
     // save 発行
-    session
-        .apply_ex_command(":write")
+    let outcome = session
+        .execute_ex_command(":write")
         .expect("write should queue save");
-    let save_id = match take_next_vfs_request(&mut session) {
+    let save_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Save { request_id, .. } => request_id,
         other => panic!("expected Save, got {other:?}"),
     };
@@ -1197,10 +1213,10 @@ fn snapshot_buffer_info_projects_vfs_source_kind_after_load() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備: edit -> resolve -> load
-    session
-        .apply_ex_command(":edit mem://notes/source_kind_test")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/source_kind_test")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -1250,10 +1266,10 @@ fn snapshot_buffer_info_projects_pending_operation_during_load() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // resolve まで進めて、load pending 状態を作る
-    session
-        .apply_ex_command(":edit mem://notes/pending_test")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/pending_test")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -1295,10 +1311,10 @@ fn snapshot_buffer_info_projects_deferred_close_during_save() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備
-    session
-        .apply_ex_command(":edit mem://notes/deferred_snapshot")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/deferred_snapshot")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -1323,10 +1339,10 @@ fn snapshot_buffer_info_projects_deferred_close_during_save() {
 
     // 編集して dirty にし、:wq で deferred close を設定
     session
-        .apply_ex_command(":s/deferred/DEFERRED/")
+        .execute_ex_command(":s/deferred/DEFERRED/")
         .expect("substitute should succeed");
     session
-        .apply_ex_command(":wq")
+        .execute_ex_command(":wq")
         .expect("wq should queue save");
 
     // snapshot で deferred close が投影されていることを確認
@@ -1350,10 +1366,10 @@ fn snapshot_buffer_info_projects_last_vfs_error_after_failure() {
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
 
     // VFS buffer を準備
-    session
-        .apply_ex_command(":edit mem://notes/error_snapshot")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/error_snapshot")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -1378,12 +1394,12 @@ fn snapshot_buffer_info_projects_last_vfs_error_after_failure() {
 
     // 編集して save 失敗させる
     session
-        .apply_ex_command(":s/error/ERROR/")
+        .execute_ex_command(":s/error/ERROR/")
         .expect("substitute should succeed");
-    session
-        .apply_ex_command(":write")
+    let outcome = session
+        .execute_ex_command(":write")
         .expect("write should queue save");
-    let save_id = match take_next_vfs_request(&mut session) {
+    let save_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Save { request_id, .. } => request_id,
         other => panic!("expected Save, got {other:?}"),
     };
@@ -1432,10 +1448,10 @@ fn snapshot_projects_pending_vfs_requests_count() {
     assert_eq!(initial_pending, 0, "no pending VFS requests initially");
 
     // resolve を発行して pending を作る
-    session
-        .apply_ex_command(":edit mem://notes/pending_count_test")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/pending_count_test")
         .expect("edit should succeed");
-    let _resolve_id = match take_next_vfs_request(&mut session) {
+    let _resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -1513,18 +1529,18 @@ fn bridge_buffer_info_exposes_vfs_metadata_fields() {
 }
 
 #[test]
-fn bridge_apply_buffer_commit_function_exists_in_ffi() {
-    // vim_bridge_apply_buffer_commit が FFI 境界で利用可能であることを検証する。
+fn bridge_commit_buffer_update_function_exists_in_ffi() {
+    // vim_bridge_commit_buffer_update が FFI 境界で利用可能であることを検証する。
     // 実際の呼び出しは session 経由で行うので、ここでは関数ポインタの存在確認のみ。
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("commit fn test").expect("session should initialize");
 
-    // apply_buffer_commit は内部で使うが、API として存在確認
+    // commit_buffer_update は内部で使うが、API として存在確認
     // VFS buffer を準備してコミットが実行される完全なフローを実行
-    session
-        .apply_ex_command(":edit mem://notes/fn_exists_test")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/fn_exists_test")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
@@ -1539,14 +1555,14 @@ fn bridge_apply_buffer_commit_function_exists_in_ffi() {
         CoreVfsRequest::Load { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
-    // apply_buffer_commit は load response のコミット時に内部的に呼ばれる
+    // commit_buffer_update は load response のコミット時に内部的に呼ばれる
     session
         .submit_vfs_response(CoreVfsResponse::Loaded {
             request_id: load_id,
             document_id: "doc://notes/fn_exists_test".to_string(),
             text: "committed via apply".to_string(),
         })
-        .expect("load should commit via apply_buffer_commit");
+        .expect("load should commit via commit_buffer_update");
 
     assert_eq!(
         session
@@ -1573,10 +1589,10 @@ fn bridge_buffer_commit_preserves_text_name_dirty_atomically() {
     let mut session = VimCoreSession::new("initial").expect("session should initialize");
 
     // VFS buffer を準備
-    session
-        .apply_ex_command(":edit mem://notes/atomic_test")
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/atomic_test")
         .expect("edit should succeed");
-    let resolve_id = match take_next_vfs_request(&mut session) {
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
         CoreVfsRequest::Resolve { request_id, .. } => request_id,
         other => panic!("unexpected: {other:?}"),
     };
