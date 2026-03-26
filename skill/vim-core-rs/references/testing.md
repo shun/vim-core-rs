@@ -80,7 +80,8 @@ Use these when changing data consumed by a renderer or UI shell.
 ## Messages, eval, and regressions
 
 - `tests/message_log_contract.rs`
-  `eval_string()`, message handler delivery, and message-kind routing.
+  `eval_string()`, message handler delivery, and structured message routing
+  with `CoreMessageSeverity` and `CoreMessageCategory`.
 - `tests/repro_e182.rs`
   Regression coverage for a specific Vim error path.
 - `tests/repro_prefix_conflict.rs`
@@ -111,6 +112,8 @@ Pick one narrow suite first, then expand only if the change crosses boundaries.
   `public_api_contract`
 - Ex or host-action behavior:
   `integration_contract`
+- Message delivery or Vim expression evaluation:
+  `message_log_contract`
 - VFS:
   `vfs_contract`
 - Jobs:

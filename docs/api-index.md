@@ -84,11 +84,10 @@ The public session methods are grouped by role.
 
 The internal reference breaks non-public APIs into these areas.
 
-- `src/lib.rs`: `ParsedExIntent`, `execute_native_ex_command_for_outcome`,
-  `apply_intent`,
-  `apply_write_intent`, `apply_loaded_buffer`, `drain_native_host_actions`,
-  `drain_native_events`, `get_option_value`, conversion helpers, and parser
-  helpers
+- `src/lib.rs`: `ParsedExIntent`, `invoke_native_normal_command`,
+  `invoke_native_ex_command`, `apply_intent`, `apply_write_intent`,
+  `apply_loaded_buffer`, `drain_native_host_actions`, `drain_native_events`,
+  `get_option_value`, conversion helpers, and parser helpers
 - `src/vfs.rs`: `DocumentCoordinator`, `BufferState`,
   `CoreResponseApplyOutcome`, and `CoreVfsResponse` helper methods
 - `src/vfd.rs`: `pollfd`, `POLLIN`, `POLLOUT`, `VfdState`, `JobState`,

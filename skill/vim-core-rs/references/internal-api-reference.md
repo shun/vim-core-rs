@@ -26,8 +26,10 @@ maintenance.
 
 ### Internal `VimCoreSession` helpers
 
-- `apply_native_ex_command(&mut self, command: &str)
-  -> Result<CoreCommandOutcome, CoreCommandError>`
+- `invoke_native_normal_command(&mut self, command: &str)
+  -> Result<(CoreCommandOutcome, CoreSnapshot), CoreCommandError>`
+- `invoke_native_ex_command(&mut self, command: &str)
+  -> Result<(CoreCommandOutcome, CoreSnapshot), CoreCommandError>`
 - `apply_intent(&mut self, intent: ParsedExIntent)
   -> Result<CoreCommandOutcome, CoreCommandError>`
 - `apply_write_intent(&mut self, path: String, force: bool,
@@ -36,9 +38,9 @@ maintenance.
 - `apply_loaded_buffer(&mut self, buf_id: i32, display_name: &str, text: &str)
   -> Result<(), CoreCommandError>`
 - `drain_native_host_actions(&mut self)`
+- `drain_native_events(&mut self)`
 - `get_option_value(&self, name: &str, scope: CoreOptionScope,
   expected: CoreOptionType) -> Result<ConvertedOptionValue, CoreOptionError>`
-- `poll_and_dispatch_messages(&mut self)`
 
 These helpers are the policy boundary for intercepted Ex commands, message
 polling, and host-action queue behavior.
@@ -179,8 +181,8 @@ polling, and host-action queue behavior.
 - `DocumentCoordinator` stores revisions, not text. Callers must fetch text
   from the session before issuing a save.
 - `VfdManager` is process-global state. Dropping a `VimCoreSession` clears it.
-- `poll_and_dispatch_messages` is intentionally lossy because it clears Vim
-  message history after dispatch.
+- `drain_native_events` is intentionally lossy because it clears Vim message
+  history after events are collected into a transaction.
 
 ## Reading guidance
 

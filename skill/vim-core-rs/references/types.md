@@ -182,12 +182,20 @@ pub enum MatchCountResult {
 }
 
 pub struct CoreMessageEvent {
-    pub kind: CoreMessageKind,
+    pub severity: CoreMessageSeverity,
+    pub category: CoreMessageCategory,
     pub content: String,
 }
 
-pub enum CoreMessageKind {
-    Normal, Error, // Distinguishes between standard echo and e.g., 'E487: ...'
+pub enum CoreMessageSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
+pub enum CoreMessageCategory {
+    UserVisible,
+    CommandFeedback,
 }
 ```
 

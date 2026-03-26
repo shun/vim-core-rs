@@ -10,8 +10,8 @@ use vim_core_rs::{VimCoreSession, CoreHostAction};
 
 fn main() {
     let mut session = VimCoreSession::new("Initial text").unwrap();
-    
-    session.apply_ex_command("set number").unwrap();
+
+    session.execute_ex_command("set number").unwrap();
     
     // Process pending actions from the core engine
     while let Some(action) = session.take_pending_host_action() {
@@ -52,24 +52,52 @@ fn check_mode() {
 ## Capture Vim messages
 
 ```rust
-use std::sync::{Arc, Mutex};
-use vim_core_rs::{CoreMessageEvent, CoreMessageKind, VimCoreSession};
+use vim_core_rs::{
+    CoreEvent, CoreMessageCategory, CoreMessageEvent, CoreMessageSeverity,
+    VimCoreSession,
+};
 
 fn capture_messages() {
     let mut session = VimCoreSession::new("hello").unwrap();
-    let events: Arc<Mutex<Vec<CoreMessageEvent>>> =
-        Arc::new(Mutex::new(Vec::new()));
-    let sink = events.clone();
 
-    session.set_message_handler(Box::new(move |event| {
-        sink.lock().unwrap().push(event);
-    }));
+    let tx = session.execute_ex_command("echomsg 'hello from vim'").unwrap();
 
-    let _ = session.apply_ex_command("echomsg 'hello from vim'");
+    assert!(tx.events.iter().any(|event| matches!(
+        event,
+        CoreEvent::Message(CoreMessageEvent {
+            severity: CoreMessageSeverity::Info,
+            category: CoreMessageCategory::UserVisible,
+            ref content,
+        }) if content.contains("hello from vim")
+    )));
+}
+```
 
-    assert!(events.lock().unwrap().iter().any(|event| {
-        event.kind == CoreMessageKind::Normal
-            && event.content.contains("hello from vim")
+## Inspect a command transaction
+
+```rust
+use vim_core_rs::{
+    CoreEvent, CoreMessageCategory, CoreMessageEvent, CoreMessageSeverity,
+    CoreCommandOutcome, VimCoreSession,
+};
+
+fn inspect_transaction() {
+    let mut session = VimCoreSession::new("hello").unwrap();
+
+    let tx = session.execute_normal_command("u").unwrap();
+
+    assert!(matches!(tx.outcome, CoreCommandOutcome::BufferChanged { .. }
+        | CoreCommandOutcome::NoChange));
+    assert!(tx.events.iter().all(|event| match event {
+        CoreEvent::Message(CoreMessageEvent {
+            severity,
+            category,
+            ..
+        }) => {
+            matches!(severity, CoreMessageSeverity::Info | CoreMessageSeverity::Warning | CoreMessageSeverity::Error)
+                && matches!(category, CoreMessageCategory::UserVisible | CoreMessageCategory::CommandFeedback)
+        }
+        _ => true,
     }));
 }
 ```
@@ -82,7 +110,7 @@ use vim_core_rs::{CoreHostAction, JobStatus, VimCoreSession};
 fn bridge_job_output() {
     let mut session = VimCoreSession::new("").unwrap();
     session
-        .apply_ex_command("let g:job = job_start(['echo', 'hello'])")
+        .execute_ex_command("let g:job = job_start(['echo', 'hello'])")
         .unwrap();
 
     while let Some(action) = session.take_pending_host_action() {

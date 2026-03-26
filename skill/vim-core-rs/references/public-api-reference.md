@@ -14,6 +14,13 @@ files.
 - `src/vfs.rs` contributes public types through crate-root re-exports even
   though the module itself is private.
 
+### Public root types
+
+- `CoreCommandTransaction`
+- `CoreMessageEvent`
+- `CoreMessageSeverity`
+- `CoreMessageCategory`
+
 ## `ffi` module
 
 Use the `ffi` module only for narrow interop and contract testing.
@@ -71,14 +78,14 @@ set, Rust-side debug log lines are appended to that file instead of stderr.
 
 ### Command execution methods
 
-- `apply_normal_command(&mut self, command: &str)
-  -> Result<CoreCommandOutcome, CoreCommandError>`
-- `apply_ex_command(&mut self, command: &str)
-  -> Result<CoreCommandOutcome, CoreCommandError>`
+- `execute_normal_command(&mut self, command: &str)
+  -> Result<CoreCommandTransaction, CoreCommandError>`
+- `execute_ex_command(&mut self, command: &str)
+  -> Result<CoreCommandTransaction, CoreCommandError>`
 - `eval_string(&mut self, expr: &str) -> Option<String>`
 
-Use `apply_normal_command` for modal editing semantics and
-`apply_ex_command` for Ex behavior, especially file-like commands that route
+Use `execute_normal_command` for modal editing semantics and
+`execute_ex_command` for Ex behavior, especially file-like commands that route
 through host policy.
 
 ### Host integration methods
@@ -207,9 +214,11 @@ reliable live-state queries.
 
 ### Search and message types
 
-- `CoreMessageKind`
-  `Normal`, `Error`
-- `CoreMessageEvent { kind, content }`
+- `CoreMessageSeverity`
+  `Info`, `Warning`, `Error`
+- `CoreMessageCategory`
+  `UserVisible`, `CommandFeedback`
+- `CoreMessageEvent { severity, category, content }`
 - `MessageHandler = Box<dyn FnMut(CoreMessageEvent) + Send + 'static>`
 - `CoreMatchType`
   `Regular`, `IncSearch`, `CurSearch`

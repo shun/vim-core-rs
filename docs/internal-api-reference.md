@@ -38,10 +38,13 @@ commands behave.
 
 These methods are private helpers on `VimCoreSession`.
 
-- `execute_native_ex_command_for_outcome(&mut self, command: &str)
-  -> Result<CoreCommandOutcome, CoreCommandError>`
+- `invoke_native_ex_command(&mut self, command: &str)
+  -> Result<(CoreCommandOutcome, CoreSnapshot), CoreCommandError>`
   Sends an Ex command directly to the bridge without intent interception, then
-  drains native host actions and dispatches messages.
+  returns the outcome together with a snapshot.
+- `invoke_native_normal_command(&mut self, command: &str)
+  -> Result<(CoreCommandOutcome, CoreSnapshot), CoreCommandError>`
+  Sends a Normal command directly to the bridge without extra interception.
 - `apply_intent(&mut self, intent: ParsedExIntent)
   -> Result<CoreCommandOutcome, CoreCommandError>`
   Routes intercepted Ex commands into host-driven flows. It is the main policy

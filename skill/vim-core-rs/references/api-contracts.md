@@ -36,12 +36,16 @@ You can understand the crate as a composition of four contracts.
 
 ## Command contract
 
-- `apply_normal_command` and internal `apply_native_ex_command` return one
-  `CoreCommandOutcome`, not a full diff.
+- `execute_normal_command` and `execute_ex_command` return one
+  `CoreCommandTransaction`, not a full diff.
 - `CoreCommandOutcome::HostActionQueued` means the host must drain pending
   actions. It does not mean the side effect already completed.
-- `apply_normal_command` polls and dispatches message history after execution.
-- `apply_ex_command` parses file-like Ex commands into `ParsedExIntent`.
+- The returned transaction includes the final snapshot, emitted events, and
+  emitted host actions.
+- `execute_normal_command` and `execute_ex_command` surface structured message
+  events. Hosts should filter by `CoreMessageSeverity` and
+  `CoreMessageCategory`, not by parsing content.
+- `execute_ex_command` parses file-like Ex commands into `ParsedExIntent`.
   Non-intercepted Ex commands go straight to native execution.
 
 ## Ex intent routing contract

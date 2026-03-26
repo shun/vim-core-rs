@@ -8,7 +8,7 @@ description: Comprehensive operating guide for the vim-core-rs crate and reposit
 Use this skill to work on the crate as both a library user and a repository
 maintainer. `vim-core-rs` is not a generic editor toolkit. It is a Rust-facing
 host integration layer over an embedded upstream Vim runtime, with strict
-session, host-action, and repository-contract constraints.
+session, host-action, message-routing, and repository-contract constraints.
 
 ## Start here
 
@@ -25,6 +25,8 @@ Read only the materials needed for the current task.
   relying on a method just because it exists.
 - For exhaustive public symbols and callable surface area, read
   [references/public-api-reference.md](references/public-api-reference.md).
+- For the data model behind those symbols, especially message events and
+  transaction payloads, read [references/types.md](references/types.md).
 - For private helpers, coordination layers, and implementation-only APIs, read
   [references/internal-api-reference.md](references/internal-api-reference.md).
 - For sequencing rules and invariants such as VFS save flow, message polling,
@@ -137,8 +139,10 @@ Apply these rules whenever you write or modify tests.
 
 ## Implementation heuristics
 
-- Prefer `apply_normal_command` for modal editing semantics and
-  `apply_ex_command` for command-line behaviors.
+- Prefer `execute_normal_command` for modal editing semantics and
+  `execute_ex_command` for command-line behaviors.
+  Inspect the returned `CoreCommandTransaction` when the change may emit
+  events or host actions.
 - Inspect `CoreCommandOutcome` before assuming a command changed text. Some
   commands only move the cursor, switch modes, or queue host work.
 - Use `snapshot()` when the task needs a coherent state capture; use focused
@@ -153,6 +157,8 @@ Apply these rules whenever you write or modify tests.
   and bridge stdio via VFD ids. The core does not own that process.
 - For message capture, register `set_message_handler` before the command that
   emits messages.
+  Use `CoreMessageSeverity` and `CoreMessageCategory` to filter the returned
+  events instead of parsing message text.
 
 ## Validation checklist
 

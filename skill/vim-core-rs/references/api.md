@@ -27,16 +27,17 @@ does not permit concurrent sessions in one process.
 
 ## Commands and evaluation
 
-- `apply_normal_command(&mut self, command: &str)
-  -> Result<CoreCommandOutcome, CoreCommandError>`
+- `execute_normal_command(&mut self, command: &str)
+  -> Result<CoreCommandTransaction, CoreCommandError>`
   Inject a Normal-mode key sequence. Use this for modal editing semantics,
   motions, operators, insert entry, and command sequences such as `dd`, `i`,
-  `ZZ`, or `<C-n>`.
-- `apply_ex_command(&mut self, command: &str)
-  -> Result<CoreCommandOutcome, CoreCommandError>`
+  `ZZ`, or `<C-n>`. Inspect the returned transaction when you care about
+  emitted events or host actions.
+- `execute_ex_command(&mut self, command: &str)
+  -> Result<CoreCommandTransaction, CoreCommandError>`
   Execute an Ex command. This path also translates certain commands into
   host-facing intents such as `:edit`, `:write`, `:quit`, and redraw or input
-  requests.
+  requests. The returned transaction includes emitted events and host actions.
 - `eval_string(&mut self, expr: &str) -> Option<String>`
   Evaluate a Vim expression and return its stringified value.
 
@@ -146,7 +147,8 @@ screen scraping.
 ## Messaging and diagnostics
 
 - `set_message_handler(&mut self, handler: MessageHandler)`
-  Register a callback for normal and error messages emitted by Vim.
+  Register a callback for structured messages emitted by Vim. Message events
+  include `CoreMessageSeverity` and `CoreMessageCategory` metadata.
 - `backend_identity(&self) -> CoreBackendIdentity`
   Report whether the session runs against the real upstream runtime or the
   bridge stub.

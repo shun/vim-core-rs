@@ -34,13 +34,14 @@ Read the bundled pages in this order when you need complete coverage.
 - Enums: `CoreMode`, `CorePendingInput`, `CoreCommandOutcome`,
   `CoreInputRequestKind`, `CoreBackendIdentity`, `CoreOptionScope`,
   `CoreOptionType`, `CoreOptionError`, `JobStatus`, `CoreHostAction`,
-  `CoreMessageKind`, `CoreMatchType`, `MatchCountResult`,
+  `CoreMessageSeverity`, `CoreMessageCategory`, `CoreMatchType`,
+  `MatchCountResult`,
   `CoreSearchDirection`, `CoreCommandError`, `CoreSessionError`
 - Structs: `CoreMarkPosition`, `CoreJumpListEntry`, `CoreJumpList`,
   `CoreJobStartRequest`, `CoreBufferInfo`, `CoreWindowInfo`, `CoreUndoNode`,
-  `CoreUndoTree`, `CoreSyntaxChunk`, `CoreMessageEvent`, `CorePumItem`,
-  `CorePumInfo`, `CoreMatchRange`, `CoreCursorMatchInfo`, `CoreSessionOptions`,
-  `CoreSnapshot`
+  `CoreUndoTree`, `CoreSyntaxChunk`, `CoreMessageEvent`,
+  `CoreCommandTransaction`, `CorePumItem`, `CorePumInfo`, `CoreMatchRange`,
+  `CoreCursorMatchInfo`, `CoreSessionOptions`, `CoreSnapshot`
 - Re-exported VFS items: `CoreBufferBinding`, `CoreBufferSourceKind`,
   `CoreDeferredClose`, `CorePendingVfsOperation`, `CoreRequestEntry`,
   `CoreRequestStatus`, `CoreVfsError`, `CoreVfsErrorKind`,
@@ -53,7 +54,7 @@ Read the bundled pages in this order when you need complete coverage.
   `pending_input`
 - Navigation and state writes: `mark`, `set_mark`, `jumplist`,
   `switch_to_buffer`, `switch_to_window`, `buffer_text`
-- Command execution: `apply_normal_command`, `apply_ex_command`,
+- Command execution: `execute_normal_command`, `execute_ex_command`,
   `eval_string`
 - Host integration: `take_pending_host_action`, `set_screen_size`,
   `set_message_handler`, `submit_vfs_response`
@@ -73,9 +74,10 @@ Read the bundled pages in this order when you need complete coverage.
 ### Internal-only areas
 
 - `src/lib.rs`
-  `ParsedExIntent`, `apply_native_ex_command`, `apply_intent`,
+  `ParsedExIntent`, `invoke_native_normal_command`,
+  `invoke_native_ex_command`, `apply_intent`,
   `apply_write_intent`, `apply_loaded_buffer`, `drain_native_host_actions`,
-  `get_option_value`, `poll_and_dispatch_messages`, and conversion helpers
+  `drain_native_events`, `get_option_value`, and conversion helpers
 - `src/vfs.rs`
   `DocumentCoordinator`, `BufferState`, `CoreResponseApplyOutcome`, and
   response helper methods
