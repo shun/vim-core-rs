@@ -1,14 +1,10 @@
-name: CI
+name: Upstream Vim Tests
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: upstream-tests-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -19,15 +15,10 @@ env:
   VIM_CORE_FROM_SOURCE: "1"
 
 jobs:
-  checks:
-    name: Checks (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
+  upstream-tests:
+    name: Upstream Vim Tests (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -37,8 +28,6 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
 
       - name: Cache cargo registry and build artifacts
         uses: Swatinem/rust-cache@v2
@@ -49,20 +38,8 @@ jobs:
           set -euo pipefail
           ./scripts/vendor-sync.sh apply
 
-      - name: Run formatting check
+      - name: Run upstream Vim generated tests
         shell: bash
         run: |
           set -euo pipefail
-          cargo fmt --check
-
-      - name: Run clippy
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo clippy --all-targets -- -D warnings
-
-      - name: Run tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo test -- --skip upstream_
+          cargo test --test upstream_vim_generated

@@ -219,8 +219,11 @@ The build does not fall back to a source build unless you set
 
 ## Development and release verification
 
-Repository development uses an explicit source build. Run the checks from the
-repository root with these commands:
+Repository development uses an explicit source build. This section explains
+which GitHub Actions workflow to use as you move from a local code change to a
+published crate release.
+
+Run the baseline checks from the repository root with these commands:
 
 ```bash
 VIM_CORE_FROM_SOURCE=1 cargo test
@@ -235,6 +238,78 @@ fails with a 404 by design instead of silently compiling from source.
 When you validate the default consumer path before publication, point
 `VIM_CORE_ARTIFACT_BASE_URL` at a local directory that contains the packaged
 target archives, then run a clean build with `VIM_CORE_FROM_SOURCE=0`.
+
+### GitHub Actions workflow map
+
+Use the workflows according to the scope of your change. The fast path is for
+day-to-day Rust and bridge work. The slow paths are for upstream Vim coverage
+and publication.
+
+- `CI`
+  This workflow runs on `push`, `pull_request`, and manual dispatch. It checks
+  formatting, runs clippy, and runs the repository contract tests with
+  `cargo test -- --skip upstream_`. Use it for normal development and PR
+  validation.
+- `Upstream Vim Tests`
+  This workflow runs only by manual dispatch. It runs
+  `cargo test --test upstream_vim_generated` and covers the vendored upstream
+  Vim test cases that are too expensive for every push. A successful local
+  build or a successful `CI` run does not replace this workflow because those
+  checks do not exercise the full vendored upstream Vim script suite. Use it
+  when the change could affect embedded Vim behavior relative to upstream Vim.
+- `Release Crate`
+  This workflow runs only by manual dispatch. It updates the vendored Vim
+  snapshot, verifies source builds, packages prebuilt artifacts, verifies the
+  default consumer path, and optionally publishes release assets and the crate.
+
+### When to run upstream Vim tests
+
+`Upstream Vim Tests` is not required for every code change. Use this rule:
+
+- Skip it for documentation-only changes, workflow-only changes, and Rust-only
+  changes that do not affect vendored Vim behavior.
+- Run it after changing `vendor/vim_src`, `vendor/upstream/vim`, `native/`,
+  `build.rs`, or command execution paths that could change Vim script
+  behavior, runtime discovery, message handling, job handling, or other
+  embedded Vim behavior.
+
+In short, if you can confidently explain that the change does not alter
+embedded Vim behavior, `CI` is enough. If the change could alter behavior
+relative to upstream Vim, run `Upstream Vim Tests` before release.
+
+### Development-to-publish flow
+
+Use this sequence when you change code and want to carry it through to a
+published release.
+
+1. Change the code locally and run `VIM_CORE_FROM_SOURCE=1 cargo test`.
+2. Push the branch and wait for `CI` to pass. Treat this as the required
+   baseline for ordinary Rust, VFS, VFD, and bridge-facing changes.
+3. If the change touches `vendor/vim_src`, `vendor/upstream/vim`, `native/`,
+   `build.rs`, or behavior that depends on upstream Vim scripts, run
+   `Upstream Vim Tests` manually from the Actions tab and wait for it to pass.
+   Otherwise, you can skip that workflow.
+4. Before preparing a release, run
+   `VIM_CORE_FROM_SOURCE=1 cargo publish --dry-run --allow-dirty` locally if
+   you need an immediate packaging sanity check.
+5. When you are ready to cut a release, start `Release Crate` manually and set
+   these inputs:
+   - `vim_version`: the upstream Vim tag to vendor, such as `v9.2.0131`
+   - `crate_version`: the crate version to publish, such as `0.2.0`
+   - `publish`: `false` for a full dry run without publishing, or `true` to
+     continue through the approval and publish stages
+6. Wait for `Release Crate` to finish its non-publishing stages:
+   `update_upstream`, `verify_source`, `package_prebuilt`, `verify_prebuilt`,
+   and `package_check`.
+7. If you started `Release Crate` with `publish=false`, review the produced
+   results and rerun the workflow with `publish=true` when you are ready to
+   release the same version.
+8. If you started `Release Crate` with `publish=true`, approve the
+   `crates-io-publish` environment when GitHub prompts for manual approval.
+9. Let `Release Crate` publish the GitHub release assets first, then publish
+   the crate to crates.io. This ordering is required because the default
+   consumer build expects the GitHub Releases artifact to exist before users
+   install the crate version.
 
 For a production release, publish GitHub Releases assets for every supported
 target before you publish the crate to crates.io. That ordering keeps
