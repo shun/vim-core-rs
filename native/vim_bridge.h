@@ -187,6 +187,39 @@ typedef struct vim_core_pum_info {
     size_t item_count;
 } vim_core_pum_info_t;
 
+typedef enum vim_core_message_kind {
+    VIM_CORE_MESSAGE_NORMAL = 0,
+    VIM_CORE_MESSAGE_ERROR = 1
+} vim_core_message_kind_t;
+
+typedef enum vim_core_event_kind {
+    VIM_CORE_EVENT_NONE = 0,
+    VIM_CORE_EVENT_MESSAGE = 1,
+    VIM_CORE_EVENT_BELL = 2,
+    VIM_CORE_EVENT_REDRAW = 3,
+    VIM_CORE_EVENT_BUF_ADD = 4,
+    VIM_CORE_EVENT_WIN_NEW = 5,
+    VIM_CORE_EVENT_LAYOUT_CHANGED = 6,
+    VIM_CORE_EVENT_PAGER_PROMPT = 7
+} vim_core_event_kind_t;
+
+typedef enum vim_core_pager_prompt_kind {
+    VIM_CORE_PAGER_PROMPT_MORE = 0,
+    VIM_CORE_PAGER_PROMPT_HIT_RETURN = 1
+} vim_core_pager_prompt_kind_t;
+
+typedef struct vim_core_event {
+    uint32_t kind;
+    vim_core_message_kind_t message_kind;
+    vim_core_pager_prompt_kind_t pager_prompt_kind;
+    const char* text_ptr;
+    uintptr_t text_len;
+    bool full;
+    bool clear_before_draw;
+    int buf_id;
+    int win_id;
+} vim_core_event_t;
+
 typedef struct vim_core_snapshot {
     const char* text_ptr;
     uintptr_t text_len;
@@ -275,6 +308,7 @@ vim_core_command_result_t vim_bridge_apply_ex_command(
 );
 
 vim_host_action_t vim_bridge_take_pending_host_action(vim_bridge_state_t* state);
+vim_core_event_t vim_bridge_take_pending_event(vim_bridge_state_t* state);
 
 vim_runtime_backend_identity_t vim_bridge_backend_identity(
     const vim_bridge_state_t* state
@@ -378,6 +412,14 @@ const char* vim_bridge_get_syntax_name(const vim_bridge_state_t* state, int syn_
 // Vimscript式を評価し、結果の文字列を返す。結果はvim_bridge_free_stringで解放する。
 // 評価に失敗した場合はNULLを返す。
 char* vim_bridge_eval_string(vim_bridge_state_t* state, const char* expr);
+int vim_core_bridge_embedded_mode_active(void);
+void vim_core_bridge_enqueue_message_event(
+    const char* text,
+    uintptr_t text_len,
+    vim_core_message_kind_t kind
+);
+void vim_core_bridge_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind);
+void vim_core_bridge_enqueue_bell(void);
 
 // ポップアップメニュー情報のメモリを解放する専用関数
 // 各候補の文字列フィールド→候補配列→構造体自体の順で解放する

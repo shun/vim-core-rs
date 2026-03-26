@@ -22,7 +22,7 @@ mod build_test_runner {
 use build_allowlist::{Allowlist, validate_allowlist, verify_bridge_header};
 use build_artifact::{
     emit_artifact_rerun_if_env_changed, install_prebuilt_artifact,
-    resolve_artifact_config_from_env, source_build_requested,
+    resolve_artifact_config_from_env, source_build_requested, verbose_build_requested,
 };
 use build_compile_plan::{CompilePlan, UpstreamMetadata, create_compile_plan, write_compile_proof};
 
@@ -54,15 +54,21 @@ fn run() -> Result<(), String> {
     let manifest_path = repo_root.join("vim-source-build-manifest.txt");
     let metadata_path = repo_root.join("upstream-metadata.json");
     let skiplist_path = repo_root.join("upstream-test-skiplist.txt");
+    emit_static_rerun_if_changed(&[&bridge_header, &native_dir]);
 
     if !source_build_requested() {
         let artifact_config = resolve_artifact_config_from_env()?;
         let prepared = install_prebuilt_artifact(&artifact_config, &out_dir)?;
-        println!(
-            "cargo:warning=using prebuilt vim-core-rs artifact target={} cache_key={}",
-            prepared.manifest.target_triple, prepared.cache_key
-        );
+        generate_bindings(&bridge_header, &out_dir)?;
+        compile_native_overlay_archive(&repo_root, &out_dir)?;
+        if verbose_build_requested() {
+            println!(
+                "cargo:warning=using prebuilt vim-core-rs artifact target={} cache_key={}",
+                prepared.manifest.target_triple, prepared.cache_key
+            );
+        }
         println!("cargo:rustc-link-search=native={}", out_dir.display());
+        println!("cargo:rustc-link-lib=static=vimcore_native_overlay");
         println!("cargo:rustc-link-lib=static=vimcore");
         if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
             println!("cargo:rustc-link-lib=iconv");
@@ -120,6 +126,20 @@ fn emit_static_rerun_if_changed(paths: &[&Path]) {
     for path in paths {
         println!("cargo:rerun-if-changed={}", path.display());
     }
+}
+
+fn compile_native_overlay_archive(repo_root: &Path, out_dir: &Path) -> Result<PathBuf, String> {
+    let generated_include_root = out_dir.join("vim_build");
+    let files = build_compile_plan::collect_native_sources(repo_root, &repo_root.join("native"))?;
+    compile_archive(
+        repo_root,
+        out_dir,
+        "vimcore_native_overlay",
+        &files,
+        &generated_include_root,
+        WarningPolicy::Strict,
+        &[],
+    )
 }
 
 fn emit_plan_rerun_if_changed(plan: &CompilePlan) {

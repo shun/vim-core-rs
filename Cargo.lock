@@ -628,6 +628,7 @@ dependencies = [
  "cc",
  "flate2",
  "globset",
+ "libc",
  "log",
  "regex",
  "serde",

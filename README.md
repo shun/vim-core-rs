@@ -95,7 +95,12 @@ incorrect assumptions about ownership, persistence, and concurrency.
 
 An embedding host must implement these behaviors.
 
+- Prefer `execute_normal_command_v2()` and `execute_ex_command_v2()` when you
+  need one transaction result that contains the final snapshot, emitted
+  events, and emitted host actions.
 - Drain `take_pending_host_action()` until it returns `None`.
+- Drain `take_pending_event()` until it returns `None` when you use the legacy
+  queue-based integration path.
 - Handle `CoreHostAction::Write` and `CoreHostAction::Quit`.
 - Handle every `CoreHostAction::VfsRequest` and send one matching
   `CoreVfsResponse`.
@@ -103,8 +108,10 @@ An embedding host must implement these behaviors.
 - Feed stdout and stderr bytes back through `inject_vfd_data()`.
 - Report terminal job status through `notify_job_status()`.
 - Set UI size with `set_screen_size()` when screen geometry matters.
-- Register `set_message_handler()` before a command if Vim messages are part
-  of the desired observable behavior.
+- Read `CoreEvent::Message`, `CoreEvent::PagerPrompt`, `CoreEvent::Bell`,
+  `CoreEvent::Redraw`, and layout or buffer lifecycle events from the
+  transaction result or event queue. Do not scrape `:messages` or
+  `v:errmsg`.
 
 ## Dangerous assumptions to avoid
 
@@ -140,8 +147,8 @@ observable behaviors are locked by tests rather than by Rust type signatures.
 These paths matter most for reasoning and maintenance.
 
 - `src/lib.rs`
-  Public API facade, command routing, snapshot conversion, option accessors,
-  message dispatch, and top-level VFS integration.
+  Public API facade, command routing, snapshot conversion, event and host
+  action queues, option accessors, and top-level VFS integration.
 - `src/vfs.rs`
   VFS request ledger, transaction log, buffer bindings, and deferred close.
 - `src/vfd.rs`

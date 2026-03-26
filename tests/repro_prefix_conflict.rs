@@ -1,5 +1,5 @@
 use std::sync::{Mutex, OnceLock};
-use vim_core_rs::{CoreCommandOutcome, CoreHostAction, VimCoreSession};
+use vim_core_rs::{CoreCommandOutcome, CoreEvent, CoreHostAction, VimCoreSession};
 
 fn session_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -71,10 +71,11 @@ fn bell_command_prefix_match() {
         .apply_ex_command(":bell")
         .expect("bell command should succeed");
 
-    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
+    assert!(matches!(outcome, CoreCommandOutcome::NoChange));
 
-    let action = session
-        .take_pending_host_action()
-        .expect("host action should be queued");
-    assert!(matches!(action, CoreHostAction::Bell));
+    assert!(matches!(
+        session.take_pending_event(),
+        Some(CoreEvent::Bell)
+    ));
+    assert!(session.take_pending_host_action().is_none());
 }

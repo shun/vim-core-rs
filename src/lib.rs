@@ -132,6 +132,13 @@ pub enum CoreBackendIdentity {
     UpstreamRuntime,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CoreRuntimeMode {
+    #[default]
+    Embedded,
+    Standalone,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreOptionScope {
     Default,
@@ -209,13 +216,6 @@ pub enum CoreHostAction {
         correlation_id: u64,
     },
     Bell,
-    BufAdd {
-        buf_id: i32,
-    },
-    WinNew {
-        win_id: i32,
-    },
-    LayoutChanged,
     JobStart(CoreJobStartRequest),
     JobStop {
         job_id: i32,
@@ -292,14 +292,36 @@ pub enum CoreMessageKind {
 }
 
 /// メッセージイベントのペイロード
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreMessageEvent {
     pub kind: CoreMessageKind,
     pub content: String,
 }
 
-/// メッセージハンドラの型定義
-pub type MessageHandler = Box<dyn FnMut(CoreMessageEvent) + Send + 'static>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CorePagerPromptKind {
+    More,
+    HitReturn,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreEvent {
+    Message(CoreMessageEvent),
+    PagerPrompt(CorePagerPromptKind),
+    Bell,
+    Redraw { full: bool, clear_before_draw: bool },
+    BufferAdded { buf_id: i32 },
+    WindowCreated { win_id: i32 },
+    LayoutChanged,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreCommandTransaction {
+    pub outcome: CoreCommandOutcome,
+    pub snapshot: CoreSnapshot,
+    pub events: Vec<CoreEvent>,
+    pub host_actions: Vec<CoreHostAction>,
+}
 
 /// 補完候補1件分の情報
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -402,15 +424,18 @@ pub enum CoreSessionError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CoreSessionOptions {
+    /// Runtime mode contract for this session. `Embedded` is the primary mode.
+    pub runtime_mode: CoreRuntimeMode,
     /// `None` のとき debug log は無効。指定時のみファイルへ追記する。
     pub debug_log_path: Option<PathBuf>,
 }
 
 pub struct VimCoreSession {
     state: NonNull<bindings::vim_bridge_state_t>,
+    runtime_mode: CoreRuntimeMode,
     document_coordinator: RefCell<DocumentCoordinator>,
     pending_host_actions: RefCell<VecDeque<CoreHostAction>>,
-    message_handler: Option<MessageHandler>,
+    pending_events: RefCell<VecDeque<CoreEvent>>,
     not_send_sync: PhantomData<Rc<()>>,
 }
 
@@ -433,6 +458,11 @@ impl VimCoreSession {
         initial_text: &str,
         options: CoreSessionOptions,
     ) -> Result<Self, CoreSessionError> {
+        if !matches!(options.runtime_mode, CoreRuntimeMode::Embedded) {
+            return Err(CoreSessionError::InitializationFailed {
+                reason_code: "unsupported_runtime_mode",
+            });
+        }
         if ACTIVE_SESSION
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .is_err()
@@ -473,9 +503,10 @@ impl VimCoreSession {
 
         let session = Self {
             state,
+            runtime_mode: options.runtime_mode,
             document_coordinator: RefCell::new(DocumentCoordinator::new()),
             pending_host_actions: RefCell::new(VecDeque::new()),
-            message_handler: None,
+            pending_events: RefCell::new(VecDeque::new()),
             not_send_sync: PhantomData,
         };
 
@@ -511,6 +542,10 @@ impl VimCoreSession {
 
     pub fn mode(&self) -> CoreMode {
         self.snapshot().mode
+    }
+
+    pub fn runtime_mode(&self) -> CoreRuntimeMode {
+        self.runtime_mode
     }
 
     pub fn pending_input(&self) -> CorePendingInput {
@@ -576,16 +611,12 @@ impl VimCoreSession {
         &mut self,
         command: &str,
     ) -> Result<CoreCommandOutcome, CoreCommandError> {
-        let result = unsafe {
-            bindings::vim_bridge_apply_normal_command(
-                self.state.as_ptr(),
-                command.as_ptr().cast(),
-                command.len(),
-            )
-        };
-        let outcome = convert_command_result(result);
-        self.poll_and_dispatch_messages();
-        outcome
+        let (outcome, _) = self.invoke_native_normal_command(command)?;
+        self.drain_native_host_actions();
+        Ok(normalize_legacy_command_outcome(
+            outcome,
+            &self.pending_host_actions.borrow(),
+        ))
     }
 
     pub fn apply_ex_command(
@@ -790,17 +821,12 @@ impl VimCoreSession {
         &mut self,
         command: &str,
     ) -> Result<CoreCommandOutcome, CoreCommandError> {
-        let result = unsafe {
-            bindings::vim_bridge_apply_ex_command(
-                self.state.as_ptr(),
-                command.as_ptr().cast(),
-                command.len(),
-            )
-        };
-        let outcome = convert_command_result(result)?;
+        let (outcome, _) = self.invoke_native_ex_command(command)?;
         self.drain_native_host_actions();
-        self.poll_and_dispatch_messages();
-        Ok(outcome)
+        Ok(normalize_legacy_command_outcome(
+            outcome,
+            &self.pending_host_actions.borrow(),
+        ))
     }
 
     fn apply_intent(
@@ -1046,6 +1072,32 @@ impl VimCoreSession {
         self.pending_host_actions.borrow_mut().pop_front()
     }
 
+    pub fn take_pending_event(&mut self) -> Option<CoreEvent> {
+        self.drain_native_events();
+        self.pending_events.borrow_mut().pop_front()
+    }
+
+    pub fn execute_normal_command_v2(
+        &mut self,
+        command: &str,
+    ) -> Result<CoreCommandTransaction, CoreCommandError> {
+        let (outcome, snapshot) = self.invoke_native_normal_command(command)?;
+        Ok(self.collect_transaction(outcome, snapshot))
+    }
+
+    pub fn execute_ex_command_v2(
+        &mut self,
+        command: &str,
+    ) -> Result<CoreCommandTransaction, CoreCommandError> {
+        if let Some(intent) = parse_ex_intent(command) {
+            let outcome = self.apply_intent(intent)?;
+            return Ok(self.collect_transaction(outcome, self.snapshot()));
+        }
+
+        let (outcome, snapshot) = self.invoke_native_ex_command(command)?;
+        Ok(self.collect_transaction(outcome, snapshot))
+    }
+
     pub fn get_undo_tree(&self, buf_id: i32) -> Result<CoreUndoTree, CoreCommandError> {
         let mut tree = unsafe { std::mem::zeroed() };
         let result =
@@ -1159,16 +1211,6 @@ impl VimCoreSession {
         Ok(chunks)
     }
 
-    /// メッセージイベントを受信するハンドラを登録する
-    pub fn set_message_handler(&mut self, handler: MessageHandler) {
-        /* println debug removed */
-        // ハンドラ登録前に蓄積されたメッセージ履歴と v:errmsg をクリアする
-        let _ = self.eval_string("execute('messages clear')");
-        let _ = self.eval_string("execute('let v:errmsg = \"\"')");
-        /* println debug removed */
-        self.message_handler = Some(handler);
-    }
-
     /// Vimscript式を評価し、結果を文字列として返す
     pub fn eval_string(&mut self, expr: &str) -> Option<String> {
         /* println debug removed */
@@ -1185,67 +1227,54 @@ impl VimCoreSession {
         Some(s)
     }
 
-    /// 内部利用: コマンド実行後にメッセージ履歴をポーリングし、ハンドラへディスパッチする
-    pub(crate) fn poll_and_dispatch_messages(&mut self) {
-        // ハンドラが未登録の場合はポーリング自体をスキップする
-        if self.message_handler.is_none() {
-            /* println debug removed */
-            return;
-        }
-
-        // v:errmsg を取得してエラーメッセージの検出に使用する
-        let errmsg = self.eval_string("v:errmsg").unwrap_or_default();
-        debug_log!("[DEBUG] poll_and_dispatch_messages: v:errmsg={}", errmsg);
-
-        // execute('messages') でメッセージ履歴を取得
-        let messages_output = self.eval_string("execute('messages')");
-        debug_log!(
-            "[DEBUG] poll_and_dispatch_messages: messages_output={:?}",
-            messages_output
-        );
-
-        // 履歴をクリア
-        let _ = self.eval_string("execute('messages clear')");
-        // v:errmsg もクリア
-        let _ = self.eval_string("execute('let v:errmsg = \"\"')");
-
-        // ハンドラが未登録なら終了（再チェック）
-        let handler = match &mut self.message_handler {
-            Some(h) => h,
-            None => return,
+    fn invoke_native_normal_command(
+        &mut self,
+        command: &str,
+    ) -> Result<(CoreCommandOutcome, CoreSnapshot), CoreCommandError> {
+        let result = unsafe {
+            bindings::vim_bridge_apply_normal_command(
+                self.state.as_ptr(),
+                command.as_ptr().cast(),
+                command.len(),
+            )
         };
+        convert_command_result_with_snapshot(result)
+    }
 
-        // 出力が空なら終了
-        let output = match messages_output {
-            Some(ref s) if !s.trim().is_empty() => s.clone(),
-            _ => return,
+    fn invoke_native_ex_command(
+        &mut self,
+        command: &str,
+    ) -> Result<(CoreCommandOutcome, CoreSnapshot), CoreCommandError> {
+        let result = unsafe {
+            bindings::vim_bridge_apply_ex_command(
+                self.state.as_ptr(),
+                command.as_ptr().cast(),
+                command.len(),
+            )
         };
+        convert_command_result_with_snapshot(result)
+    }
 
-        // 行ごとに分割してパース
-        // エラー判定: E[0-9]+: パターン、または v:errmsg に含まれるメッセージ
-        for line in output.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
+    fn collect_transaction(
+        &mut self,
+        outcome: CoreCommandOutcome,
+        mut snapshot: CoreSnapshot,
+    ) -> CoreCommandTransaction {
+        self.drain_native_host_actions();
+        self.drain_native_events();
 
-            let kind =
-                if is_error_message(trimmed) || (!errmsg.is_empty() && trimmed.contains(&errmsg)) {
-                    CoreMessageKind::Error
-                } else {
-                    CoreMessageKind::Normal
-                };
+        let drained_host_actions: Vec<CoreHostAction> =
+            self.pending_host_actions.borrow_mut().drain(..).collect();
+        let events: Vec<CoreEvent> = self.pending_events.borrow_mut().drain(..).collect();
+        let host_actions = drained_host_actions;
+        let outcome = normalize_transaction_outcome(outcome, &host_actions);
+        snapshot.pending_host_actions = host_actions.len();
 
-            debug_log!(
-                "[DEBUG] poll_and_dispatch_messages: dispatching kind={:?} content={}",
-                kind,
-                trimmed
-            );
-
-            handler(CoreMessageEvent {
-                kind,
-                content: trimmed.to_string(),
-            });
+        CoreCommandTransaction {
+            outcome,
+            snapshot,
+            events,
+            host_actions,
         }
     }
 
@@ -1349,7 +1378,19 @@ impl VimCoreSession {
             let Some(action) = convert_host_action(action) else {
                 break;
             };
-            self.pending_host_actions.borrow_mut().push_back(action);
+            if should_expose_legacy_host_action(&action) {
+                self.pending_host_actions.borrow_mut().push_back(action);
+            }
+        }
+    }
+
+    fn drain_native_events(&mut self) {
+        loop {
+            let event = unsafe { bindings::vim_bridge_take_pending_event(self.state.as_ptr()) };
+            let Some(event) = convert_event(event) else {
+                break;
+            };
+            self.pending_events.borrow_mut().push_back(event);
         }
     }
 
@@ -1616,46 +1657,56 @@ impl Drop for VimCoreSession {
     }
 }
 
-fn convert_command_result(
+fn convert_command_result_with_snapshot(
     result: bindings::vim_core_command_result_t,
-) -> Result<CoreCommandOutcome, CoreCommandError> {
+) -> Result<(CoreCommandOutcome, CoreSnapshot), CoreCommandError> {
+    let snapshot = convert_snapshot(result.snapshot);
     match result.status {
         value if value == bindings::vim_core_status_VIM_CORE_STATUS_OK => Ok(match result.outcome {
             outcome if outcome == bindings::vim_core_command_outcome_kind_VIM_CORE_COMMAND_OUTCOME_NO_CHANGE => {
-                CoreCommandOutcome::NoChange
+                (CoreCommandOutcome::NoChange, snapshot)
             }
             outcome
                 if outcome
                     == bindings::vim_core_command_outcome_kind_VIM_CORE_COMMAND_OUTCOME_BUFFER_CHANGED =>
             {
-                CoreCommandOutcome::BufferChanged {
-                    revision: result.snapshot.revision,
-                }
+                (
+                    CoreCommandOutcome::BufferChanged {
+                        revision: snapshot.revision,
+                    },
+                    snapshot,
+                )
             }
             outcome
                 if outcome
                     == bindings::vim_core_command_outcome_kind_VIM_CORE_COMMAND_OUTCOME_CURSOR_CHANGED =>
             {
-                CoreCommandOutcome::CursorChanged {
-                    row: result.snapshot.cursor_row,
-                    col: result.snapshot.cursor_col,
-                }
+                (
+                    CoreCommandOutcome::CursorChanged {
+                        row: snapshot.cursor_row,
+                        col: snapshot.cursor_col,
+                    },
+                    snapshot,
+                )
             }
             outcome
                 if outcome
                     == bindings::vim_core_command_outcome_kind_VIM_CORE_COMMAND_OUTCOME_MODE_CHANGED =>
             {
-                CoreCommandOutcome::ModeChanged {
-                    mode: convert_mode(result.snapshot.mode),
-                }
+                (
+                    CoreCommandOutcome::ModeChanged {
+                        mode: snapshot.mode,
+                    },
+                    snapshot,
+                )
             }
             outcome
                 if outcome
                     == bindings::vim_core_command_outcome_kind_VIM_CORE_COMMAND_OUTCOME_HOST_ACTION_QUEUED =>
             {
-                CoreCommandOutcome::HostActionQueued
+                (CoreCommandOutcome::HostActionQueued, snapshot)
             }
-            _ => CoreCommandOutcome::NoChange,
+            _ => (CoreCommandOutcome::NoChange, snapshot),
         }),
         value if value == bindings::vim_core_status_VIM_CORE_STATUS_COMMAND_ERROR => {
             Err(CoreCommandError::OperationFailed {
@@ -2062,15 +2113,9 @@ fn convert_host_action(action: bindings::vim_host_action_t) -> Option<CoreHostAc
             })
         }
         value if value == bindings::VIM_HOST_ACTION_BELL => Some(CoreHostAction::Bell),
-        value if value == bindings::VIM_HOST_ACTION_BUF_ADD => Some(CoreHostAction::BufAdd {
-            buf_id: action.event_buf_id,
-        }),
-        value if value == bindings::VIM_HOST_ACTION_WIN_NEW => Some(CoreHostAction::WinNew {
-            win_id: action.event_win_id,
-        }),
-        value if value == bindings::VIM_HOST_ACTION_LAYOUT_CHANGED => {
-            Some(CoreHostAction::LayoutChanged)
-        }
+        value if value == bindings::VIM_HOST_ACTION_BUF_ADD => None,
+        value if value == bindings::VIM_HOST_ACTION_WIN_NEW => None,
+        value if value == bindings::VIM_HOST_ACTION_LAYOUT_CHANGED => None,
         value if value == bindings::VIM_HOST_ACTION_JOB_START => {
             let req = action.job_start_request;
             crate::vfd::get_manager().register_job(
@@ -2113,6 +2158,85 @@ fn convert_host_action(action: bindings::vim_host_action_t) -> Option<CoreHostAc
         value if value == bindings::VIM_HOST_ACTION_JOB_STOP => Some(CoreHostAction::JobStop {
             job_id: action.job_start_request.job_id,
         }),
+        _ => None,
+    }
+}
+
+fn should_expose_legacy_host_action(action: &CoreHostAction) -> bool {
+    !matches!(action, CoreHostAction::Redraw { .. } | CoreHostAction::Bell)
+}
+
+fn normalize_legacy_command_outcome(
+    outcome: CoreCommandOutcome,
+    pending_host_actions: &VecDeque<CoreHostAction>,
+) -> CoreCommandOutcome {
+    if matches!(outcome, CoreCommandOutcome::HostActionQueued) && pending_host_actions.is_empty() {
+        CoreCommandOutcome::NoChange
+    } else {
+        outcome
+    }
+}
+
+fn normalize_transaction_outcome(
+    outcome: CoreCommandOutcome,
+    host_actions: &[CoreHostAction],
+) -> CoreCommandOutcome {
+    if matches!(outcome, CoreCommandOutcome::HostActionQueued) && host_actions.is_empty() {
+        CoreCommandOutcome::NoChange
+    } else {
+        outcome
+    }
+}
+
+fn convert_event(event: bindings::vim_core_event_t) -> Option<CoreEvent> {
+    match event.kind {
+        value if value == bindings::vim_core_event_kind_VIM_CORE_EVENT_NONE => None,
+        value if value == bindings::vim_core_event_kind_VIM_CORE_EVENT_MESSAGE => {
+            let kind = match event.message_kind {
+                value if value == bindings::vim_core_message_kind_VIM_CORE_MESSAGE_ERROR => {
+                    CoreMessageKind::Error
+                }
+                _ => CoreMessageKind::Normal,
+            };
+            Some(CoreEvent::Message(CoreMessageEvent {
+                kind,
+                content: string_from_parts(event.text_ptr, event.text_len),
+            }))
+        }
+        value if value == bindings::vim_core_event_kind_VIM_CORE_EVENT_PAGER_PROMPT => {
+            let kind = match event.pager_prompt_kind {
+                value
+                    if value
+                        == bindings::vim_core_pager_prompt_kind_VIM_CORE_PAGER_PROMPT_HIT_RETURN =>
+                {
+                    CorePagerPromptKind::HitReturn
+                }
+                _ => CorePagerPromptKind::More,
+            };
+            Some(CoreEvent::PagerPrompt(kind))
+        }
+        value if value == bindings::vim_core_event_kind_VIM_CORE_EVENT_BELL => {
+            Some(CoreEvent::Bell)
+        }
+        value if value == bindings::vim_core_event_kind_VIM_CORE_EVENT_REDRAW => {
+            Some(CoreEvent::Redraw {
+                full: event.full,
+                clear_before_draw: event.clear_before_draw,
+            })
+        }
+        value if value == bindings::vim_core_event_kind_VIM_CORE_EVENT_BUF_ADD => {
+            Some(CoreEvent::BufferAdded {
+                buf_id: event.buf_id,
+            })
+        }
+        value if value == bindings::vim_core_event_kind_VIM_CORE_EVENT_WIN_NEW => {
+            Some(CoreEvent::WindowCreated {
+                win_id: event.win_id,
+            })
+        }
+        value if value == bindings::vim_core_event_kind_VIM_CORE_EVENT_LAYOUT_CHANGED => {
+            Some(CoreEvent::LayoutChanged)
+        }
         _ => None,
     }
 }
@@ -2282,24 +2406,6 @@ fn convert_option_set_result(
             detail: format!("unknown option set status: {}", status),
         }),
     }
-}
-
-/// エラーメッセージパターン（E[0-9]+: 形式）を判定する
-fn is_error_message(line: &str) -> bool {
-    let bytes = line.as_bytes();
-    if bytes.is_empty() || bytes[0] != b'E' {
-        return false;
-    }
-    let mut i = 1;
-    // 少なくとも1桁の数字が必要
-    if i >= bytes.len() || !bytes[i].is_ascii_digit() {
-        return false;
-    }
-    while i < bytes.len() && bytes[i].is_ascii_digit() {
-        i += 1;
-    }
-    // コロンが続くこと
-    i < bytes.len() && bytes[i] == b':'
 }
 
 fn string_from_parts(ptr: *const ::std::os::raw::c_char, len: usize) -> String {

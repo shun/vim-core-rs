@@ -33,6 +33,9 @@ vim_core_snapshot_t upstream_runtime_snapshot(
 vim_host_action_t upstream_runtime_take_pending_host_action(
     upstream_runtime_session_t* session
 );
+vim_core_event_t upstream_runtime_take_pending_event(
+    upstream_runtime_session_t* session
+);
 
 vim_runtime_backend_identity_t upstream_runtime_backend_identity(
     const upstream_runtime_session_t* session
@@ -114,5 +117,13 @@ int upstream_runtime_get_line_syntax(int win_id, long lnum, int* out_ids, int ma
 const char* upstream_runtime_get_syntax_name(int syn_id);
 
 char* upstream_runtime_eval_string(upstream_runtime_session_t* session, const char* expr);
+int upstream_runtime_embedded_mode_active(void);
+void upstream_runtime_enqueue_message_event(
+    const char* text,
+    uintptr_t text_len,
+    vim_core_message_kind_t kind
+);
+void upstream_runtime_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind);
+void upstream_runtime_enqueue_bell_for_active_session(void);
 
 #endif

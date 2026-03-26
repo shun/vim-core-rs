@@ -10,8 +10,8 @@ The public surface is intentionally concentrated in one place.
 
 - The crate root exposes `VimCoreSession` as the main stateful facade.
 - The crate root also exposes plain data types that describe snapshots,
-  commands, host actions, VFS contracts, options, undo trees, and rendering
-  data.
+  transactions, events, host actions, VFS contracts, options, undo trees,
+  and rendering data.
 - The `ffi` module exposes a small FFI-facing contract for POD structs and
   VFS-related constants.
 - `src/vfs.rs` contributes public types through crate-root re-exports. The
@@ -65,6 +65,11 @@ These methods create the session and extract high-level state.
 - `new(initial_text: &str) -> Result<Self, CoreSessionError>`
   Creates a new embedded Vim session seeded with `initial_text`. It fails with
   `CoreSessionError::SessionAlreadyActive` if another session is still alive.
+- `new_with_options(initial_text: &str, options: CoreSessionOptions)
+  -> Result<Self, CoreSessionError>`
+  Creates a session with explicit runtime and debug-log options. The current
+  implementation supports `CoreRuntimeMode::Embedded` and rejects
+  `Standalone`.
 - `snapshot(&self) -> CoreSnapshot`
   Returns a coherent state capture. It includes text, revision, dirty state,
   mode, pending input, cursor position, pending host-action count, buffer
@@ -72,6 +77,8 @@ These methods create the session and extract high-level state.
 - `mode(&self) -> CoreMode`
   Returns the current mode. It is equivalent to `snapshot().mode` but cheaper
   to consume conceptually.
+- `runtime_mode(&self) -> CoreRuntimeMode`
+  Returns the active runtime-mode contract for the session.
 - `pending_input(&self) -> CorePendingInput`
   Returns whether Vim is waiting for another keystroke category, such as a
   register name or a mark target.
@@ -100,15 +107,22 @@ These methods mutate editor state or inspect Vimscript-level behavior.
 
 - `apply_normal_command(&mut self, command: &str)
   -> Result<CoreCommandOutcome, CoreCommandError>`
-  Executes a Normal-mode key sequence through the bridge layer. After the
-  command runs, the session polls queued messages and dispatches them to the
-  registered message handler, if one exists.
+  Executes a Normal-mode key sequence through the bridge layer and preserves
+  legacy queue-based integration.
 - `apply_ex_command(&mut self, command: &str)
   -> Result<CoreCommandOutcome, CoreCommandError>`
   Executes an Ex command. The crate intercepts key path-like commands such as
   `:edit`, `:write`, `:update`, `:wq`, `:xit`, and `:quit` so it can route
   file operations through VFS or host actions instead of blindly delegating to
   native Vim file I/O.
+- `execute_normal_command_v2(&mut self, command: &str)
+  -> Result<CoreCommandTransaction, CoreCommandError>`
+  Executes a Normal-mode key sequence and returns the transaction result that
+  includes the final snapshot, emitted events, and emitted host actions.
+- `execute_ex_command_v2(&mut self, command: &str)
+  -> Result<CoreCommandTransaction, CoreCommandError>`
+  Executes an Ex command with the same routing behavior as `apply_ex_command`,
+  but returns the full transaction result instead of only a coarse outcome.
 - `eval_string(&mut self, expr: &str) -> Option<String>`
   Evaluates a Vimscript expression and returns the result as a string if the
   bridge returns one.
@@ -120,12 +134,12 @@ These methods connect the session to the application that embeds it.
 - `take_pending_host_action(&mut self) -> Option<CoreHostAction>`
   Drains newly emitted native host actions into the Rust queue, then pops one
   action in FIFO order. Call this repeatedly until it returns `None`.
+- `take_pending_event(&mut self) -> Option<CoreEvent>`
+  Drains newly emitted native events into the Rust queue, then pops one event
+  in FIFO order. Call this repeatedly until it returns `None` when you use the
+  queue-based integration path.
 - `set_screen_size(&mut self, rows: i32, cols: i32)`
   Updates the runtime with the host UI dimensions.
-- `set_message_handler(&mut self, handler: MessageHandler)`
-  Registers a callback that receives `CoreMessageEvent` values. During
-  registration, the session clears existing message history and `v:errmsg` so
-  the handler starts from a clean boundary.
 - `submit_vfs_response(&mut self, response: CoreVfsResponse)
   -> Result<CoreCommandOutcome, CoreCommandError>`
   Applies one host-produced VFS response. A `Resolved` response automatically
@@ -249,6 +263,27 @@ These enums describe the editor input state.
   `OperatorPending`
 - `CorePendingInput`: `None`, `Char`, `Replace`, `MarkSet`, `MarkJump`,
   `Register`
+- `CoreRuntimeMode`: `Embedded`, `Standalone`
+
+### Transaction, event, and host-action types
+
+These types describe the observable result surface for embedded execution.
+
+- `CoreCommandTransaction { outcome, snapshot, events, host_actions }`
+- `CoreEvent`: `Message(CoreMessageEvent)`,
+  `PagerPrompt(CorePagerPromptKind)`, `Bell`,
+  `Redraw { full, clear_before_draw }`, `BufferAdded { buf_id }`,
+  `WindowCreated { win_id }`, `LayoutChanged`
+- `CoreMessageKind`: `Normal`, `Error`
+- `CorePagerPromptKind`: `More`, `HitReturn`
+- `CoreHostAction`: `VfsRequest`, `Write`, `Quit`, `Redraw`,
+  `RequestInput`, `Bell`, `JobStart`, `JobStop`
+
+### Session configuration types
+
+These types configure session startup behavior.
+
+- `CoreSessionOptions { runtime_mode, debug_log_path }`
 
 ### Position and navigation structs
 
@@ -355,7 +390,6 @@ These types capture message and search metadata.
 
 - `CoreMessageKind`: `Normal`, `Error`
 - `CoreMessageEvent { kind, content }`
-- `MessageHandler = Box<dyn FnMut(CoreMessageEvent) + Send + 'static>`
 - `CoreMatchType`: `Regular`, `IncSearch`, `CurSearch`
 - `CoreMatchRange { start_row, start_col, end_row, end_col, match_type }`
 - `MatchCountResult`: `Calculated(usize)`, `MaxReached(usize)`, `TimedOut`
@@ -443,12 +477,11 @@ read signatures.
 - `apply_ex_command` does not treat all Ex commands equally. File-oriented
   commands are parsed into intents so the host can remain authoritative for
   storage.
-- `take_pending_host_action` is the only public queue-drain method. If you do
-  not call it, host-required side effects remain queued.
+- `take_pending_host_action` and `take_pending_event` are the public queue-drain
+  methods for the legacy integration path. If you do not call them, queued
+  host work and queued events remain buffered.
 - VFS save requests are revision-aware. A `Saved` response can be rejected as
   stale if the buffer revision has advanced.
-- `set_message_handler` clears prior messages at registration time. This gives
-  you a clean message stream boundary.
 - `snapshot().pending_host_actions` includes both already buffered Rust-side
   actions and actions that native host draining would add later in the turn.
 

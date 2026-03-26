@@ -37,16 +37,17 @@ The crate root exports these user-facing symbols.
 
 - Module: `ffi`
 - Session type: `VimCoreSession`
-- Type alias: `MessageHandler`
 - Enums: `CoreMode`, `CorePendingInput`, `CoreCommandOutcome`,
-  `CoreInputRequestKind`, `CoreBackendIdentity`, `CoreOptionScope`,
-  `CoreOptionType`, `CoreOptionError`, `JobStatus`, `CoreHostAction`,
-  `CoreMessageKind`, `CoreMatchType`, `MatchCountResult`,
-  `CoreSearchDirection`, `CoreCommandError`, `CoreSessionError`
+  `CoreInputRequestKind`, `CoreBackendIdentity`, `CoreRuntimeMode`,
+  `CoreOptionScope`, `CoreOptionType`, `CoreOptionError`, `JobStatus`,
+  `CoreHostAction`, `CoreMessageKind`, `CorePagerPromptKind`, `CoreEvent`,
+  `CoreMatchType`, `MatchCountResult`, `CoreSearchDirection`,
+  `CoreCommandError`, `CoreSessionError`
 - Structs: `CoreMarkPosition`, `CoreJumpListEntry`, `CoreJumpList`,
   `CoreJobStartRequest`, `CoreBufferInfo`, `CoreWindowInfo`, `CoreUndoNode`,
-  `CoreUndoTree`, `CoreSyntaxChunk`, `CoreMessageEvent`, `CorePumItem`,
-  `CorePumInfo`, `CoreMatchRange`, `CoreCursorMatchInfo`, `CoreSnapshot`
+  `CoreUndoTree`, `CoreSyntaxChunk`, `CoreMessageEvent`,
+  `CoreCommandTransaction`, `CoreSessionOptions`, `CorePumItem`, `CorePumInfo`,
+  `CoreMatchRange`, `CoreCursorMatchInfo`, `CoreSnapshot`
 - Re-exported VFS enums and structs: `CoreBufferBinding`,
   `CoreBufferSourceKind`, `CoreDeferredClose`, `CorePendingVfsOperation`,
   `CoreRequestEntry`, `CoreRequestStatus`, `CoreVfsError`,
@@ -57,13 +58,14 @@ The crate root exports these user-facing symbols.
 
 The public session methods are grouped by role.
 
-- Lifecycle and snapshots: `new`, `snapshot`, `mode`, `pending_input`
+- Lifecycle and snapshots: `new`, `new_with_options`, `snapshot`, `mode`,
+  `runtime_mode`, `pending_input`
 - Navigation and state writes: `mark`, `set_mark`, `jumplist`,
   `switch_to_buffer`, `switch_to_window`, `buffer_text`
 - Command execution: `apply_normal_command`, `apply_ex_command`,
-  `eval_string`
-- Host integration: `take_pending_host_action`, `set_screen_size`,
-  `set_message_handler`, `submit_vfs_response`
+  `execute_normal_command_v2`, `execute_ex_command_v2`, `eval_string`
+- Host integration: `take_pending_host_action`, `take_pending_event`,
+  `set_screen_size`, `submit_vfs_response`
 - Buffer and window inspection: `buffers`, `windows`, `buffer_binding`,
   `vfs_request_ledger`, `vfs_transaction_log`
 - Registers and options: `register`, `set_register`, `get_option_number`,
@@ -83,8 +85,8 @@ The internal reference breaks non-public APIs into these areas.
 
 - `src/lib.rs`: `ParsedExIntent`, `apply_native_ex_command`, `apply_intent`,
   `apply_write_intent`, `apply_loaded_buffer`, `drain_native_host_actions`,
-  `get_option_value`, `poll_and_dispatch_messages`, conversion helpers, and
-  parser helpers
+  `drain_native_events`, `get_option_value`, conversion helpers, and parser
+  helpers
 - `src/vfs.rs`: `DocumentCoordinator`, `BufferState`,
   `CoreResponseApplyOutcome`, and `CoreVfsResponse` helper methods
 - `src/vfd.rs`: `pollfd`, `POLLIN`, `POLLOUT`, `VfdState`, `JobState`,

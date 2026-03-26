@@ -1,7 +1,5 @@
 use std::sync::{Mutex, OnceLock};
-use vim_core_rs::{
-    CoreBufferInfo, CoreCommandError, CoreHostAction, CoreWindowInfo, VimCoreSession,
-};
+use vim_core_rs::{CoreBufferInfo, CoreCommandError, CoreEvent, CoreWindowInfo, VimCoreSession};
 
 fn session_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -12,6 +10,14 @@ fn acquire_session_test_lock() -> std::sync::MutexGuard<'static, ()> {
     session_test_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn drain_events(session: &mut VimCoreSession) -> Vec<CoreEvent> {
+    let mut events = Vec::new();
+    while let Some(event) = session.take_pending_event() {
+        events.push(event);
+    }
+    events
 }
 
 // =============================================================================
@@ -958,7 +964,7 @@ fn switch_window_preserves_buffer_association() {
 // =============================================================================
 
 #[test]
-fn enew_triggers_buf_add_host_action() {
+fn enew_triggers_buffer_added_event() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("initial").expect("session should initialize");
     session.set_screen_size(24, 80);
@@ -970,26 +976,21 @@ fn enew_triggers_buf_add_host_action() {
 
     eprintln!("[Task 3.1] enew outcome: {:?}", outcome);
 
-    // HostAction キューにバッファ追加イベントが含まれること
-    let mut found_buf_add = false;
-    let mut actions = Vec::new();
-    while let Some(action) = session.take_pending_host_action() {
-        eprintln!("[Task 3.1] pending action: {:?}", action);
-        actions.push(action.clone());
-        if matches!(action, CoreHostAction::BufAdd { .. }) {
-            found_buf_add = true;
-        }
-    }
+    let events = drain_events(&mut session);
+    let found_buf_add = events
+        .iter()
+        .any(|event| matches!(event, CoreEvent::BufferAdded { .. }));
 
     assert!(
         found_buf_add,
-        ":enew 後に BufAdd HostAction が発火されること。取得されたアクション: {:?}",
-        actions
+        ":enew 後に BufferAdded event が発火されること。取得されたイベント: {:?}",
+        events
     );
+    assert!(session.take_pending_host_action().is_none());
 }
 
 #[test]
-fn split_triggers_win_new_host_action() {
+fn split_triggers_window_created_event() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("split event test").expect("session should initialize");
     session.set_screen_size(24, 80);
@@ -1001,26 +1002,21 @@ fn split_triggers_win_new_host_action() {
 
     eprintln!("[Task 3.1] split outcome: {:?}", outcome);
 
-    // HostAction キューにウィンドウ生成イベントが含まれること
-    let mut found_win_new = false;
-    let mut actions = Vec::new();
-    while let Some(action) = session.take_pending_host_action() {
-        eprintln!("[Task 3.1] pending action: {:?}", action);
-        actions.push(action.clone());
-        if matches!(action, CoreHostAction::WinNew { .. }) {
-            found_win_new = true;
-        }
-    }
+    let events = drain_events(&mut session);
+    let found_win_new = events
+        .iter()
+        .any(|event| matches!(event, CoreEvent::WindowCreated { .. }));
 
     assert!(
         found_win_new,
-        ":split 後に WinNew HostAction が発火されること。取得されたアクション: {:?}",
-        actions
+        ":split 後に WindowCreated event が発火されること。取得されたイベント: {:?}",
+        events
     );
+    assert!(session.take_pending_host_action().is_none());
 }
 
 #[test]
-fn buf_add_action_contains_buffer_id() {
+fn buffer_added_event_contains_buffer_id() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buf id test").expect("session should initialize");
     session.set_screen_size(24, 80);
@@ -1030,9 +1026,9 @@ fn buf_add_action_contains_buffer_id() {
         .apply_ex_command(":enew")
         .expect("enew should succeed");
 
-    // BufAdd アクションに有効なバッファIDが含まれること
-    while let Some(action) = session.take_pending_host_action() {
-        if let CoreHostAction::BufAdd { buf_id } = action {
+    // BufferAdded event に有効なバッファIDが含まれること
+    while let Some(event) = session.take_pending_event() {
+        if let CoreEvent::BufferAdded { buf_id } = event {
             eprintln!("[Task 3.1] BufAdd buf_id: {}", buf_id);
             assert!(
                 buf_id > 0,
@@ -1050,11 +1046,11 @@ fn buf_add_action_contains_buffer_id() {
             return;
         }
     }
-    panic!("BufAdd アクションが見つからなかった");
+    panic!("BufferAdded event が見つからなかった");
 }
 
 #[test]
-fn win_new_action_contains_window_id() {
+fn window_created_event_contains_window_id() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("win id test").expect("session should initialize");
     session.set_screen_size(24, 80);
@@ -1064,9 +1060,9 @@ fn win_new_action_contains_window_id() {
         .apply_ex_command(":split")
         .expect("split should succeed");
 
-    // WinNew アクションに有効なウィンドウIDが含まれること
-    while let Some(action) = session.take_pending_host_action() {
-        if let CoreHostAction::WinNew { win_id } = action {
+    // WindowCreated event に有効なウィンドウIDが含まれること
+    while let Some(event) = session.take_pending_event() {
+        if let CoreEvent::WindowCreated { win_id } = event {
             eprintln!("[Task 3.1] WinNew win_id: {}", win_id);
             assert!(
                 win_id > 0,
@@ -1084,11 +1080,11 @@ fn win_new_action_contains_window_id() {
             return;
         }
     }
-    panic!("WinNew アクションが見つからなかった");
+    panic!("WindowCreated event が見つからなかった");
 }
 
 #[test]
-fn vsplit_also_triggers_win_new_host_action() {
+fn vsplit_also_triggers_window_created_event() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("vsplit event test").expect("session should initialize");
     session.set_screen_size(24, 80);
@@ -1098,18 +1094,16 @@ fn vsplit_also_triggers_win_new_host_action() {
         .apply_ex_command(":vsplit")
         .expect("vsplit should succeed");
 
-    let mut found_win_new = false;
-    while let Some(action) = session.take_pending_host_action() {
-        eprintln!("[Task 3.1] vsplit pending action: {:?}", action);
-        if matches!(action, CoreHostAction::WinNew { .. }) {
-            found_win_new = true;
-        }
-    }
+    let events = drain_events(&mut session);
+    let found_win_new = events
+        .iter()
+        .any(|event| matches!(event, CoreEvent::WindowCreated { .. }));
 
     assert!(
         found_win_new,
-        ":vsplit 後に WinNew HostAction が発火されること"
+        ":vsplit 後に WindowCreated event が発火されること"
     );
+    assert!(session.take_pending_host_action().is_none());
 }
 
 // =============================================================================
@@ -1118,7 +1112,7 @@ fn vsplit_also_triggers_win_new_host_action() {
 // =============================================================================
 
 #[test]
-fn window_resize_triggers_layout_changed_action() {
+fn window_resize_triggers_layout_changed_event() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("layout change test").expect("session should initialize");
     session.set_screen_size(24, 80);
@@ -1128,7 +1122,7 @@ fn window_resize_triggers_layout_changed_action() {
         .apply_ex_command(":split")
         .expect("split should succeed");
 
-    // 分割で発生したアクションを消費
+    while session.take_pending_event().is_some() {}
     while session.take_pending_host_action().is_some() {}
 
     // ウィンドウサイズを変更（:resize でアクティブウィンドウの高さを変更）
@@ -1136,26 +1130,21 @@ fn window_resize_triggers_layout_changed_action() {
         .apply_ex_command(":resize 5")
         .expect("resize should succeed");
 
-    // LayoutChanged アクションが発火されること
-    let mut found_layout_changed = false;
-    let mut actions = Vec::new();
-    while let Some(action) = session.take_pending_host_action() {
-        eprintln!("[Task 3.2] resize pending action: {:?}", action);
-        actions.push(action.clone());
-        if matches!(action, CoreHostAction::LayoutChanged) {
-            found_layout_changed = true;
-        }
-    }
+    let events = drain_events(&mut session);
+    let found_layout_changed = events
+        .iter()
+        .any(|event| matches!(event, CoreEvent::LayoutChanged));
 
     assert!(
         found_layout_changed,
-        ":resize 後に LayoutChanged HostAction が発火されること。取得されたアクション: {:?}",
-        actions
+        ":resize 後に LayoutChanged event が発火されること。取得されたイベント: {:?}",
+        events
     );
+    assert!(session.take_pending_host_action().is_none());
 }
 
 #[test]
-fn vertical_resize_triggers_layout_changed_action() {
+fn vertical_resize_triggers_layout_changed_event() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("vresize test").expect("session should initialize");
     session.set_screen_size(24, 80);
@@ -1165,7 +1154,7 @@ fn vertical_resize_triggers_layout_changed_action() {
         .apply_ex_command(":vsplit")
         .expect("vsplit should succeed");
 
-    // 分割で発生したアクションを消費
+    while session.take_pending_event().is_some() {}
     while session.take_pending_host_action().is_some() {}
 
     // 垂直サイズ変更
@@ -1173,26 +1162,21 @@ fn vertical_resize_triggers_layout_changed_action() {
         .apply_ex_command(":vertical resize 30")
         .expect("vertical resize should succeed");
 
-    // LayoutChanged アクションが発火されること
-    let mut found_layout_changed = false;
-    let mut actions = Vec::new();
-    while let Some(action) = session.take_pending_host_action() {
-        eprintln!("[Task 3.2] vertical resize pending action: {:?}", action);
-        actions.push(action.clone());
-        if matches!(action, CoreHostAction::LayoutChanged) {
-            found_layout_changed = true;
-        }
-    }
+    let events = drain_events(&mut session);
+    let found_layout_changed = events
+        .iter()
+        .any(|event| matches!(event, CoreEvent::LayoutChanged));
 
     assert!(
         found_layout_changed,
-        ":vertical resize 後に LayoutChanged HostAction が発火されること。取得されたアクション: {:?}",
-        actions
+        ":vertical resize 後に LayoutChanged event が発火されること。取得されたイベント: {:?}",
+        events
     );
+    assert!(session.take_pending_host_action().is_none());
 }
 
 #[test]
-fn screen_size_change_triggers_layout_changed_action() {
+fn screen_size_change_triggers_layout_changed_event() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("screen resize test").expect("session should initialize");
     session.set_screen_size(24, 80);
@@ -1202,32 +1186,27 @@ fn screen_size_change_triggers_layout_changed_action() {
         .apply_ex_command(":split")
         .expect("split should succeed");
 
-    // 分割で発生したアクションを消費
+    while session.take_pending_event().is_some() {}
     while session.take_pending_host_action().is_some() {}
 
     // スクリーンサイズの変更
     session.set_screen_size(40, 120);
 
-    // LayoutChanged アクションが発火されること
-    let mut found_layout_changed = false;
-    let mut actions = Vec::new();
-    while let Some(action) = session.take_pending_host_action() {
-        eprintln!("[Task 3.2] screen resize pending action: {:?}", action);
-        actions.push(action.clone());
-        if matches!(action, CoreHostAction::LayoutChanged) {
-            found_layout_changed = true;
-        }
-    }
+    let events = drain_events(&mut session);
+    let found_layout_changed = events
+        .iter()
+        .any(|event| matches!(event, CoreEvent::LayoutChanged));
 
     assert!(
         found_layout_changed,
-        "スクリーンサイズ変更後に LayoutChanged HostAction が発火されること。取得されたアクション: {:?}",
-        actions
+        "スクリーンサイズ変更後に LayoutChanged event が発火されること。取得されたイベント: {:?}",
+        events
     );
+    assert!(session.take_pending_host_action().is_none());
 }
 
 #[test]
-fn split_triggers_both_win_new_and_layout_changed() {
+fn split_triggers_both_window_created_and_layout_changed_events() {
     let _guard = acquire_session_test_lock();
     let mut session =
         VimCoreSession::new("combined event test").expect("session should initialize");
@@ -1238,27 +1217,23 @@ fn split_triggers_both_win_new_and_layout_changed() {
         .apply_ex_command(":split")
         .expect("split should succeed");
 
-    let mut found_win_new = false;
-    let mut found_layout_changed = false;
-    let mut actions = Vec::new();
-    while let Some(action) = session.take_pending_host_action() {
-        eprintln!("[Task 3.2] combined pending action: {:?}", action);
-        actions.push(action.clone());
-        match action {
-            CoreHostAction::WinNew { .. } => found_win_new = true,
-            CoreHostAction::LayoutChanged => found_layout_changed = true,
-            _ => {}
-        }
-    }
+    let events = drain_events(&mut session);
+    let found_win_new = events
+        .iter()
+        .any(|event| matches!(event, CoreEvent::WindowCreated { .. }));
+    let found_layout_changed = events
+        .iter()
+        .any(|event| matches!(event, CoreEvent::LayoutChanged));
 
     assert!(
         found_win_new,
-        ":split 後に WinNew が発火されること。取得されたアクション: {:?}",
-        actions
+        ":split 後に WindowCreated が発火されること。取得されたイベント: {:?}",
+        events
     );
     assert!(
         found_layout_changed,
-        ":split 後に LayoutChanged が発火されること。取得されたアクション: {:?}",
-        actions
+        ":split 後に LayoutChanged が発火されること。取得されたイベント: {:?}",
+        events
     );
+    assert!(session.take_pending_host_action().is_none());
 }

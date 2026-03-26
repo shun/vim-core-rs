@@ -1,6 +1,6 @@
 use std::fs;
 use std::sync::{Mutex, OnceLock};
-use vim_core_rs::{CoreCommandOutcome, CoreHostAction, VimCoreSession};
+use vim_core_rs::{CoreCommandOutcome, CoreEvent, CoreHostAction, VimCoreSession};
 
 fn session_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -171,7 +171,7 @@ fn ex_xit_is_intercepted_as_quit_action() {
 }
 
 #[test]
-fn ex_redraw_bang_queues_correct_action() {
+fn ex_redraw_bang_surfaces_event_without_host_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
 
@@ -179,22 +179,23 @@ fn ex_redraw_bang_queues_correct_action() {
         .apply_ex_command(":redraw!")
         .expect("redraw! command should succeed");
 
-    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
+    assert!(matches!(outcome, CoreCommandOutcome::NoChange));
 
-    let action = session
-        .take_pending_host_action()
-        .expect("host action should be queued");
+    let event = session
+        .take_pending_event()
+        .expect("redraw event should be queued");
     assert_eq!(
-        action,
-        CoreHostAction::Redraw {
+        event,
+        CoreEvent::Redraw {
             full: true,
             clear_before_draw: true,
         }
     );
+    assert!(session.take_pending_host_action().is_none());
 }
 
 #[test]
-fn ex_redraw_short_form_queues_action() {
+fn ex_redraw_short_form_surfaces_event_without_host_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
 
@@ -202,18 +203,19 @@ fn ex_redraw_short_form_queues_action() {
         .apply_ex_command(":redr")
         .expect("redr command should succeed");
 
-    assert!(matches!(outcome, CoreCommandOutcome::HostActionQueued));
+    assert!(matches!(outcome, CoreCommandOutcome::NoChange));
 
-    let action = session
-        .take_pending_host_action()
-        .expect("host action should be queued");
+    let event = session
+        .take_pending_event()
+        .expect("redraw event should be queued");
     assert_eq!(
-        action,
-        CoreHostAction::Redraw {
+        event,
+        CoreEvent::Redraw {
             full: true,
             clear_before_draw: false,
         }
     );
+    assert!(session.take_pending_host_action().is_none());
 }
 
 #[test]
@@ -225,15 +227,15 @@ fn multiple_ex_commands_can_queue_multiple_actions() {
     session.apply_ex_command(":redraw").unwrap();
     session.apply_ex_command(":quit").unwrap();
 
-    assert_eq!(session.snapshot().pending_host_actions, 3);
+    assert_eq!(session.snapshot().pending_host_actions, 2);
 
     assert!(matches!(
         session.take_pending_host_action(),
         Some(CoreHostAction::Write { .. })
     ));
     assert!(matches!(
-        session.take_pending_host_action(),
-        Some(CoreHostAction::Redraw { .. })
+        session.take_pending_event(),
+        Some(CoreEvent::Redraw { .. })
     ));
     assert!(matches!(
         session.take_pending_host_action(),

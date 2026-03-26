@@ -1,8 +1,15 @@
 use std::fs;
 use std::sync::{Mutex, OnceLock};
+#[cfg(unix)]
+use std::{
+    fs::File,
+    io::Read,
+    os::fd::{FromRawFd, RawFd},
+};
 use vim_core_rs::{
-    CoreHostAction, CoreInputRequestKind, CoreMode, CoreOptionError, CoreOptionScope,
-    CoreOptionType, CoreSessionError, CoreSessionOptions, VimCoreSession,
+    CoreCommandOutcome, CoreEvent, CoreHostAction, CoreInputRequestKind, CoreMessageKind, CoreMode,
+    CoreOptionError, CoreOptionScope, CoreOptionType, CoreRuntimeMode, CoreSessionError,
+    CoreSessionOptions, VimCoreSession,
 };
 
 fn session_test_lock() -> &'static Mutex<()> {
@@ -14,6 +21,81 @@ fn acquire_session_test_lock() -> std::sync::MutexGuard<'static, ()> {
     session_test_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[cfg(unix)]
+fn capture_standard_streams<T>(f: impl FnOnce() -> T) -> (T, String, String) {
+    unsafe fn capture_fd(fd: RawFd) -> (RawFd, RawFd) {
+        let saved = unsafe { libc::dup(fd) };
+        assert!(saved >= 0, "dup failed for fd={fd}");
+
+        let mut pipefds = [0; 2];
+        assert_eq!(
+            unsafe { libc::pipe(pipefds.as_mut_ptr()) },
+            0,
+            "pipe failed for fd={fd}"
+        );
+        assert!(
+            unsafe { libc::dup2(pipefds[1], fd) } >= 0,
+            "dup2 failed for fd={fd}"
+        );
+        assert_eq!(
+            unsafe { libc::close(pipefds[1]) },
+            0,
+            "close failed for write pipe fd={fd}"
+        );
+        (saved, pipefds[0])
+    }
+
+    unsafe fn restore_fd(fd: RawFd, saved: RawFd) {
+        assert!(
+            unsafe { libc::dup2(saved, fd) } >= 0,
+            "restore dup2 failed for fd={fd}"
+        );
+        assert_eq!(
+            unsafe { libc::close(saved) },
+            0,
+            "close failed for saved fd={fd}"
+        );
+    }
+
+    unsafe fn read_pipe(read_fd: RawFd) -> String {
+        let mut file = unsafe { File::from_raw_fd(read_fd) };
+        let mut output = String::new();
+        file.read_to_string(&mut output)
+            .expect("pipe output should be readable");
+        output
+    }
+
+    unsafe {
+        let (saved_stdout, stdout_read) = capture_fd(libc::STDOUT_FILENO);
+        let (saved_stderr, stderr_read) = capture_fd(libc::STDERR_FILENO);
+
+        let result = f();
+
+        libc::fflush(std::ptr::null_mut());
+        restore_fd(libc::STDOUT_FILENO, saved_stdout);
+        restore_fd(libc::STDERR_FILENO, saved_stderr);
+
+        let stdout = read_pipe(stdout_read);
+        let stderr = read_pipe(stderr_read);
+        (result, stdout, stderr)
+    }
+}
+
+#[cfg(unix)]
+fn sanitize_harness_output(output: &str) -> String {
+    output
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim();
+            !trimmed.is_empty()
+                && !trimmed.starts_with("test ")
+                && !trimmed.contains(" ... ok")
+                && !trimmed.contains(" ... FAILED")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[test]
@@ -31,6 +113,7 @@ fn session_exposes_initial_snapshot_contract() {
     assert!(!snapshot.dirty);
     assert_eq!(snapshot.mode, CoreMode::Normal);
     assert_eq!(snapshot.pending_host_actions, 0);
+    assert_eq!(session.runtime_mode(), CoreRuntimeMode::Embedded);
 }
 
 #[test]
@@ -56,6 +139,7 @@ fn session_options_route_debug_log_output_to_file() {
     let tempdir = tempfile::tempdir().expect("tempdir should be created");
     let log_path = tempdir.path().join("vim-core-rs-debug.log");
     let options = CoreSessionOptions {
+        runtime_mode: CoreRuntimeMode::Embedded,
         debug_log_path: Some(log_path.clone()),
     };
     let mut session = VimCoreSession::new_with_options("buffer", options)
@@ -71,7 +155,8 @@ fn session_options_route_debug_log_output_to_file() {
     assert!(tabstop > 0, "tabstop should be a positive number");
     let log_output = fs::read_to_string(&log_path).expect("debug log file should be readable");
     assert!(
-        log_output.contains("[DEBUG] apply_write_intent: local write buf_id=1 path=output.txt"),
+        log_output.contains("[DEBUG] apply_write_intent: local write")
+            && log_output.contains("path=output.txt"),
         "debug log should be written to the configured file: {}",
         log_output
     );
@@ -80,6 +165,32 @@ fn session_options_route_debug_log_output_to_file() {
         "native debug log should be written to the configured file: {}",
         log_output
     );
+}
+
+#[test]
+fn session_options_default_to_embedded_runtime_mode() {
+    let options = CoreSessionOptions::default();
+    assert_eq!(options.runtime_mode, CoreRuntimeMode::Embedded);
+}
+
+#[test]
+fn standalone_runtime_mode_is_explicit_but_not_supported_yet() {
+    let _guard = acquire_session_test_lock();
+
+    let result = VimCoreSession::new_with_options(
+        "buffer",
+        CoreSessionOptions {
+            runtime_mode: CoreRuntimeMode::Standalone,
+            debug_log_path: None,
+        },
+    );
+
+    assert!(matches!(
+        result,
+        Err(CoreSessionError::InitializationFailed {
+            reason_code: "unsupported_runtime_mode",
+        })
+    ));
 }
 
 #[test]
@@ -120,6 +231,231 @@ fn host_action_queue_is_empty_by_default() {
     assert!(matches!(session.mode(), CoreMode::Normal));
     let bell = CoreHostAction::Bell;
     assert!(matches!(bell, CoreHostAction::Bell));
+}
+
+#[test]
+fn event_queue_is_empty_by_default() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    assert!(session.take_pending_event().is_none());
+}
+
+#[test]
+fn execute_ex_command_v2_returns_transaction_with_events_and_host_actions() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    let tx = session
+        .execute_ex_command_v2(":redraw!")
+        .expect("redraw command should succeed");
+
+    assert!(matches!(tx.outcome, CoreCommandOutcome::NoChange));
+    assert_eq!(tx.snapshot.text.trim_end_matches('\n'), "buffer");
+    assert!(
+        tx.events.iter().any(|event| matches!(
+            event,
+            CoreEvent::Redraw {
+                full: true,
+                clear_before_draw: true
+            }
+        )),
+        "redraw should be surfaced as an event: {:?}",
+        tx.events
+    );
+    assert!(
+        tx.host_actions.is_empty(),
+        "v2 transaction should not duplicate UI-like signals as host actions: {:?}",
+        tx.host_actions
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn embedded_redraw_event_does_not_leak_terminal_sequences_or_message_events() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    let (tx, stdout, stderr) = capture_standard_streams(|| {
+        session
+            .execute_ex_command_v2(":redraw!")
+            .expect("redraw command should succeed")
+    });
+
+    assert_eq!(
+        sanitize_harness_output(&stdout),
+        "",
+        "embedded redraw must not write to stdout"
+    );
+    assert_eq!(
+        sanitize_harness_output(&stderr),
+        "",
+        "embedded redraw must not write to stderr"
+    );
+    assert!(
+        tx.events.iter().any(|event| matches!(
+            event,
+            CoreEvent::Redraw {
+                full: true,
+                clear_before_draw: true
+            }
+        )),
+        "redraw should be surfaced as an event: {:?}",
+        tx.events
+    );
+    assert!(
+        tx.events
+            .iter()
+            .all(|event| !matches!(event, CoreEvent::Message(_))),
+        "embedded redraw should not synthesize terminal control output as message events: {:?}",
+        tx.events
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn embedded_screen_resize_emits_layout_event_without_terminal_leak() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    while session.take_pending_event().is_some() {}
+    while session.take_pending_host_action().is_some() {}
+
+    let ((), stdout, stderr) = capture_standard_streams(|| {
+        session.set_screen_size(40, 120);
+    });
+
+    assert_eq!(
+        sanitize_harness_output(&stdout),
+        "",
+        "embedded resize must not write to stdout"
+    );
+    assert_eq!(
+        sanitize_harness_output(&stderr),
+        "",
+        "embedded resize must not write to stderr"
+    );
+    assert!(matches!(
+        session.take_pending_event(),
+        Some(CoreEvent::LayoutChanged)
+    ));
+    assert!(session.take_pending_host_action().is_none());
+    assert!(
+        session.take_pending_event().is_none(),
+        "screen resize should not enqueue extra message-like events"
+    );
+}
+
+#[test]
+fn execute_ex_command_v2_surfaces_split_as_events_without_ui_host_action_duplication() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+    session.set_screen_size(24, 80);
+
+    let tx = session
+        .execute_ex_command_v2(":split")
+        .expect("split command should succeed");
+
+    assert!(
+        tx.events
+            .iter()
+            .any(|event| matches!(event, CoreEvent::WindowCreated { .. })),
+        "split should surface window creation as an event: {:?}",
+        tx.events
+    );
+    assert!(
+        tx.events
+            .iter()
+            .any(|event| matches!(event, CoreEvent::LayoutChanged)),
+        "split should surface layout change as an event: {:?}",
+        tx.events
+    );
+    assert!(
+        tx.host_actions.is_empty(),
+        "v2 split should not duplicate UI-like signals as host actions: {:?}",
+        tx.host_actions
+    );
+}
+
+#[test]
+fn execute_ex_command_v2_surfaces_enew_as_event_without_ui_host_action_duplication() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    let tx = session
+        .execute_ex_command_v2(":enew")
+        .expect("enew command should succeed");
+
+    assert!(
+        tx.events
+            .iter()
+            .any(|event| matches!(event, CoreEvent::BufferAdded { .. })),
+        "enew should surface buffer creation as an event: {:?}",
+        tx.events
+    );
+    assert!(
+        tx.host_actions.is_empty(),
+        "v2 enew should not duplicate UI-like signals as host actions: {:?}",
+        tx.host_actions
+    );
+}
+
+#[test]
+fn snapshot_does_not_drain_pending_event_queue() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    session
+        .apply_ex_command("echomsg 'queued event'")
+        .expect("echomsg should succeed");
+
+    let snapshot = session.snapshot();
+    assert_eq!(snapshot.text.trim_end_matches('\n'), "buffer");
+    assert!(matches!(
+        session.take_pending_event(),
+        Some(CoreEvent::Message(message))
+            if message.kind == CoreMessageKind::Normal
+                && message.content.contains("queued event")
+    ));
+}
+
+#[test]
+fn legacy_host_action_queue_no_longer_duplicates_redraw_events() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    session
+        .apply_ex_command(":redraw!")
+        .expect("redraw command should succeed");
+
+    assert!(matches!(
+        session.take_pending_event(),
+        Some(CoreEvent::Redraw {
+            full: true,
+            clear_before_draw: true,
+        })
+    ));
+    assert!(
+        session.take_pending_host_action().is_none(),
+        "legacy queue should no longer duplicate redraw once event delivery exists"
+    );
+}
+
+#[test]
+fn legacy_host_action_queue_no_longer_retains_layout_changed() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    while session.take_pending_event().is_some() {}
+    while session.take_pending_host_action().is_some() {}
+
+    session.set_screen_size(40, 120);
+
+    assert!(matches!(
+        session.take_pending_event(),
+        Some(CoreEvent::LayoutChanged)
+    ));
+    assert!(session.take_pending_host_action().is_none());
 }
 
 #[test]
@@ -671,7 +1007,7 @@ fn ex_quit_command_queues_quit_action() {
 }
 
 #[test]
-fn ex_redraw_command_queues_redraw_action() {
+fn ex_redraw_command_surfaces_redraw_event() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
@@ -679,17 +1015,15 @@ fn ex_redraw_command_queues_redraw_action() {
         .apply_ex_command(":redraw!")
         .expect("redraw command should succeed");
 
+    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::NoChange));
     assert!(matches!(
-        outcome,
-        vim_core_rs::CoreCommandOutcome::HostActionQueued
-    ));
-    assert_eq!(
-        session.take_pending_host_action(),
-        Some(CoreHostAction::Redraw {
+        session.take_pending_event(),
+        Some(CoreEvent::Redraw {
             full: true,
             clear_before_draw: true,
         })
-    );
+    ));
+    assert!(session.take_pending_host_action().is_none());
 }
 
 #[test]
@@ -716,7 +1050,33 @@ fn ex_input_command_queues_input_request_action() {
 }
 
 #[test]
-fn ex_bell_command_queues_bell_action() {
+fn execute_ex_command_v2_keeps_input_flow_as_host_action_not_pager_prompt() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    let tx = session
+        .execute_ex_command_v2(":input Enter filename")
+        .expect("input command should succeed");
+
+    assert_eq!(
+        tx.host_actions,
+        vec![CoreHostAction::RequestInput {
+            prompt: "Enter filename".to_string(),
+            input_kind: CoreInputRequestKind::CommandLine,
+            correlation_id: 1,
+        }]
+    );
+    assert!(
+        tx.events
+            .iter()
+            .all(|event| !matches!(event, CoreEvent::PagerPrompt(_))),
+        "input prompt should stay a host action rather than a pager prompt: {:?}",
+        tx.events
+    );
+}
+
+#[test]
+fn ex_bell_command_surfaces_bell_event() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
@@ -724,14 +1084,12 @@ fn ex_bell_command_queues_bell_action() {
         .apply_ex_command(":bell")
         .expect("bell command should succeed");
 
+    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::NoChange));
     assert!(matches!(
-        outcome,
-        vim_core_rs::CoreCommandOutcome::HostActionQueued
+        session.take_pending_event(),
+        Some(CoreEvent::Bell)
     ));
-    assert_eq!(
-        session.take_pending_host_action(),
-        Some(CoreHostAction::Bell)
-    );
+    assert!(session.take_pending_host_action().is_none());
 }
 
 #[test]
@@ -857,26 +1215,24 @@ fn pathdef_provides_vim_dir_for_runtime_discovery() {
 }
 
 #[test]
-fn ex_redraw_without_bang_queues_non_clearing_action() {
+fn ex_redraw_without_bang_surfaces_non_clearing_event() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");
 
-    // :redraw（! なし）は clear_before_draw: false の host action を生成する
+    // :redraw（! なし）は clear_before_draw: false の redraw event を生成する
     let outcome = session
         .apply_ex_command(":redraw")
         .expect("redraw command should succeed");
 
+    assert!(matches!(outcome, vim_core_rs::CoreCommandOutcome::NoChange));
     assert!(matches!(
-        outcome,
-        vim_core_rs::CoreCommandOutcome::HostActionQueued
-    ));
-    assert_eq!(
-        session.take_pending_host_action(),
-        Some(CoreHostAction::Redraw {
+        session.take_pending_event(),
+        Some(CoreEvent::Redraw {
             full: true,
             clear_before_draw: false,
         })
-    );
+    ));
+    assert!(session.take_pending_host_action().is_none());
 }
 
 #[test]

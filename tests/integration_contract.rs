@@ -1,5 +1,7 @@
 use std::sync::{Mutex, OnceLock};
-use vim_core_rs::{CoreCommandOutcome, CoreHostAction, CoreMode, CorePendingInput, VimCoreSession};
+use vim_core_rs::{
+    CoreCommandOutcome, CoreEvent, CoreHostAction, CoreMode, CorePendingInput, VimCoreSession,
+};
 
 fn session_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -86,31 +88,38 @@ fn side_effect_convergence_matrix() {
         assert_quit_action(&mut session, command, command.ends_with('!'));
     }
 
-    assert_host_action(&mut session, "redraw", |action| {
-        if let CoreHostAction::Redraw {
-            clear_before_draw, ..
-        } = action
-        {
-            assert!(!clear_before_draw);
-        } else {
-            panic!("Expected Redraw action, got {:?}", action);
-        }
-    });
+    session
+        .apply_ex_command("redraw")
+        .expect("redraw should succeed");
+    assert!(matches!(
+        session.take_pending_event(),
+        Some(CoreEvent::Redraw {
+            clear_before_draw: false,
+            ..
+        })
+    ));
+    assert!(session.take_pending_host_action().is_none());
 
-    assert_host_action(&mut session, "redraw!", |action| {
-        if let CoreHostAction::Redraw {
-            clear_before_draw, ..
-        } = action
-        {
-            assert!(clear_before_draw);
-        } else {
-            panic!("Expected Redraw action, got {:?}", action);
-        }
-    });
+    session
+        .apply_ex_command("redraw!")
+        .expect("redraw! should succeed");
+    assert!(matches!(
+        session.take_pending_event(),
+        Some(CoreEvent::Redraw {
+            clear_before_draw: true,
+            ..
+        })
+    ));
+    assert!(session.take_pending_host_action().is_none());
 
-    assert_host_action(&mut session, "bell", |action| {
-        assert!(matches!(action, CoreHostAction::Bell));
-    });
+    session
+        .apply_ex_command("bell")
+        .expect("bell should succeed");
+    assert!(matches!(
+        session.take_pending_event(),
+        Some(CoreEvent::Bell)
+    ));
+    assert!(session.take_pending_host_action().is_none());
 
     assert_host_action(&mut session, "input Hello", |action| {
         if let CoreHostAction::RequestInput { prompt, .. } = action {

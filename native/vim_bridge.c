@@ -71,6 +71,10 @@ vim_host_action_t vim_bridge_take_pending_host_action(vim_bridge_state_t* state)
     return upstream_runtime_take_pending_host_action(state != NULL ? state->runtime : NULL);
 }
 
+vim_core_event_t vim_bridge_take_pending_event(vim_bridge_state_t* state) {
+    return upstream_runtime_take_pending_event(state != NULL ? state->runtime : NULL);
+}
+
 vim_runtime_backend_identity_t vim_bridge_backend_identity(
     const vim_bridge_state_t* state
 ) {
@@ -253,6 +257,26 @@ const char* vim_bridge_get_syntax_name(const vim_bridge_state_t* state, int syn_
 char* vim_bridge_eval_string(vim_bridge_state_t* state, const char* expr) {
     if (state == NULL || state->runtime == NULL || expr == NULL) return NULL;
     return upstream_runtime_eval_string(state->runtime, expr);
+}
+
+int vim_core_bridge_embedded_mode_active(void) {
+    return upstream_runtime_embedded_mode_active();
+}
+
+void vim_core_bridge_enqueue_message_event(
+    const char* text,
+    uintptr_t text_len,
+    vim_core_message_kind_t kind
+) {
+    upstream_runtime_enqueue_message_event(text, text_len, kind);
+}
+
+void vim_core_bridge_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind) {
+    upstream_runtime_enqueue_pager_prompt_event(kind);
+}
+
+void vim_core_bridge_enqueue_bell(void) {
+    upstream_runtime_enqueue_bell_for_active_session();
 }
 
 void vim_bridge_free_pum_info(vim_core_pum_info_t* pum) {

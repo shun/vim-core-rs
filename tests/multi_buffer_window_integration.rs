@@ -4,7 +4,7 @@
 // =============================================================================
 
 use std::sync::{Mutex, OnceLock};
-use vim_core_rs::{CoreHostAction, VimCoreSession};
+use vim_core_rs::{CoreEvent, VimCoreSession};
 
 fn session_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -17,13 +17,13 @@ fn acquire_session_test_lock() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// HostAction キューをすべて消費してVecとして返すヘルパー
-fn drain_host_actions(session: &mut VimCoreSession) -> Vec<CoreHostAction> {
-    let mut actions = Vec::new();
-    while let Some(action) = session.take_pending_host_action() {
-        actions.push(action);
+/// Event キューをすべて消費してVecとして返すヘルパー
+fn drain_events(session: &mut VimCoreSession) -> Vec<CoreEvent> {
+    let mut events = Vec::new();
+    while let Some(event) = session.take_pending_event() {
+        events.push(event);
     }
-    actions
+    events
 }
 
 // =============================================================================
@@ -310,17 +310,16 @@ fn integration_buffer_creation_triggers_buf_add_events() {
 
     eprintln!("[Task 4.1] === バッファ作成時のBufAddイベント発火テスト ===");
 
-    // 初期アクションを消費
-    drain_host_actions(&mut session);
+    drain_events(&mut session);
 
     // 3つのバッファを連続作成
     let mut buf_add_count = 0;
     for i in 1..=3 {
         session.apply_ex_command(":enew").expect("enew成功");
-        let actions = drain_host_actions(&mut session);
-        let buf_adds: Vec<&CoreHostAction> = actions
+        let events = drain_events(&mut session);
+        let buf_adds: Vec<&CoreEvent> = events
             .iter()
-            .filter(|a| matches!(a, CoreHostAction::BufAdd { .. }))
+            .filter(|event| matches!(event, CoreEvent::BufferAdded { .. }))
             .collect();
         eprintln!(
             "[Task 4.1] バッファ{}作成後のBufAddイベント数: {}",
@@ -597,21 +596,20 @@ fn integration_split_event_sequence() {
 
     eprintln!("[Task 4.2] === 分割時のイベントシーケンステスト ===");
 
-    // 初期アクションを消費
-    drain_host_actions(&mut session);
+    drain_events(&mut session);
 
-    // :split 実行 → WinNew + LayoutChanged が発火すること
+    // :split 実行 → WindowCreated + LayoutChanged が発火すること
     session.apply_ex_command(":split").expect("split成功");
-    let actions = drain_host_actions(&mut session);
+    let events = drain_events(&mut session);
 
-    eprintln!("[Task 4.2] split後のアクション: {:?}", actions);
+    eprintln!("[Task 4.2] split後のイベント: {:?}", events);
 
-    let has_win_new = actions
+    let has_win_new = events
         .iter()
-        .any(|a| matches!(a, CoreHostAction::WinNew { .. }));
-    let has_layout_changed = actions
+        .any(|event| matches!(event, CoreEvent::WindowCreated { .. }));
+    let has_layout_changed = events
         .iter()
-        .any(|a| matches!(a, CoreHostAction::LayoutChanged));
+        .any(|event| matches!(event, CoreEvent::LayoutChanged));
 
     assert!(has_win_new, ":split後にWinNewイベントが発火されること");
     assert!(
@@ -629,17 +627,17 @@ fn integration_resize_event_timing() {
     eprintln!("[Task 4.2] === リサイズイベントのタイミングテスト ===");
 
     session.apply_ex_command(":split").expect("split成功");
-    drain_host_actions(&mut session);
+    drain_events(&mut session);
 
     // リサイズ → LayoutChanged が即座に発火
     session.apply_ex_command(":resize 8").expect("resize成功");
-    let actions = drain_host_actions(&mut session);
+    let events = drain_events(&mut session);
 
-    eprintln!("[Task 4.2] resize後のアクション: {:?}", actions);
+    eprintln!("[Task 4.2] resize後のイベント: {:?}", events);
 
-    let has_layout_changed = actions
+    let has_layout_changed = events
         .iter()
-        .any(|a| matches!(a, CoreHostAction::LayoutChanged));
+        .any(|event| matches!(event, CoreEvent::LayoutChanged));
     assert!(
         has_layout_changed,
         ":resize後にLayoutChangedイベントが即座に発火されること"
@@ -669,7 +667,7 @@ fn integration_window_close_updates_layout() {
     // 2ウィンドウに分割
     session.apply_ex_command(":split").expect("split成功");
     assert_eq!(session.windows().len(), 2, "分割後は2ウィンドウ");
-    drain_host_actions(&mut session);
+    drain_events(&mut session);
 
     // アクティブウィンドウを閉じる
     session.apply_ex_command(":close").expect("close成功");
@@ -805,7 +803,7 @@ fn integration_screen_resize_updates_all_window_geometry() {
     eprintln!("[Task 4.2] === スクリーンリサイズ後の全ウィンドウジオメトリ更新テスト ===");
 
     session.apply_ex_command(":split").expect("split成功");
-    drain_host_actions(&mut session);
+    drain_events(&mut session);
 
     let before = session.windows();
     eprintln!(
@@ -839,11 +837,11 @@ fn integration_screen_resize_updates_all_window_geometry() {
     }
 
     // LayoutChangedイベントが発火されていること
-    let actions = drain_host_actions(&mut session);
-    let has_layout_changed = actions
+    let events = drain_events(&mut session);
+    let has_layout_changed = events
         .iter()
-        .any(|a| matches!(a, CoreHostAction::LayoutChanged));
-    eprintln!("[Task 4.2] スクリーンリサイズ後のアクション: {:?}", actions);
+        .any(|event| matches!(event, CoreEvent::LayoutChanged));
+    eprintln!("[Task 4.2] スクリーンリサイズ後のイベント: {:?}", events);
     assert!(
         has_layout_changed,
         "スクリーンリサイズ後にLayoutChangedイベントが発火されること"

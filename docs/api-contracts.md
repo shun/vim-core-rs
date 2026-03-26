@@ -42,9 +42,11 @@ The command contract explains how mutations report outcomes.
 
 - `apply_normal_command` and `apply_native_ex_command` return one
   `CoreCommandOutcome`, not a full diff.
+- `execute_normal_command_v2` and `execute_ex_command_v2` return one
+  `CoreCommandTransaction` that contains the outcome, final snapshot, emitted
+  events, and emitted host actions.
 - `CoreCommandOutcome::HostActionQueued` means the host must drain pending
   actions. It does not mean the side effect already completed.
-- `apply_normal_command` polls and dispatches message history after execution.
 - `apply_ex_command` first parses command text into a `ParsedExIntent` for
   file-like commands. Other Ex commands go straight to native execution.
 
@@ -79,19 +81,23 @@ application.
   `VfsRequest` are requests to the host. The crate does not complete them by
   itself.
 
-## Message delivery contract
+## Event delivery contract
 
-The message contract explains how `set_message_handler` and command execution
-interact.
+The event contract explains how embedded-mode observability works.
 
-- Registering a message handler clears existing `:messages` output and
-  `v:errmsg`.
-- Message polling is skipped entirely when no handler is registered.
-- After command execution, the session captures `v:errmsg`, captures message
-  history with `execute('messages')`, clears both sources, then emits one
-  `CoreMessageEvent` per non-empty line.
-- Error classification uses both pattern detection such as `E123:` and
-  substring matching against the captured `v:errmsg`.
+- Native code enqueues `CoreEvent` values directly at the source of the Vim
+  side effect.
+- `take_pending_event()` drains the native event queue into a Rust FIFO and
+  returns one event at a time.
+- `execute_normal_command_v2()` and `execute_ex_command_v2()` drain both the
+  event queue and the host-action queue before returning the transaction.
+- Message delivery does not depend on `execute('messages')`, `v:errmsg`, or a
+  registered callback.
+- `CoreSnapshot` is state-only. Reading a snapshot does not drain pending
+  events.
+- UI-like notifications such as bell, redraw, buffer creation, window
+  creation, and layout changes are modeled as `CoreEvent`, not duplicated
+  host actions in v2 transactions.
 
 ## VFS request contract
 

@@ -12,6 +12,7 @@ use tar::Archive;
 pub const VIM_CORE_FROM_SOURCE_ENV: &str = "VIM_CORE_FROM_SOURCE";
 pub const VIM_CORE_ARTIFACT_BASE_URL_ENV: &str = "VIM_CORE_ARTIFACT_BASE_URL";
 pub const VIM_CORE_ARTIFACT_DIR_ENV: &str = "VIM_CORE_ARTIFACT_DIR";
+pub const VIM_CORE_VERBOSE_BUILD_ENV: &str = "VIM_CORE_VERBOSE_BUILD";
 pub const ARTIFACT_MANIFEST_FILE: &str = "artifact-manifest.json";
 pub const PREBUILT_ABI_VERSION: u32 = 1;
 pub const SUPPORTED_TARGETS: [&str; 2] = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"];
@@ -48,6 +49,7 @@ pub fn emit_artifact_rerun_if_env_changed() {
         VIM_CORE_FROM_SOURCE_ENV,
         VIM_CORE_ARTIFACT_BASE_URL_ENV,
         VIM_CORE_ARTIFACT_DIR_ENV,
+        VIM_CORE_VERBOSE_BUILD_ENV,
         "TARGET",
         "PROFILE",
     ] {
@@ -57,6 +59,13 @@ pub fn emit_artifact_rerun_if_env_changed() {
 
 pub fn source_build_requested() -> bool {
     match env::var(VIM_CORE_FROM_SOURCE_ENV) {
+        Ok(value) => matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"),
+        Err(_) => false,
+    }
+}
+
+pub fn verbose_build_requested() -> bool {
+    match env::var(VIM_CORE_VERBOSE_BUILD_ENV) {
         Ok(value) => matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"),
         Err(_) => false,
     }

@@ -39,6 +39,10 @@ typedef struct upstream_runtime_pending_action {
     vim_host_action_t action;
 } upstream_runtime_pending_action_t;
 
+typedef struct upstream_runtime_pending_event {
+    vim_core_event_t event;
+} upstream_runtime_pending_event_t;
+
 #ifndef UPSTREAM_RUNTIME_MAX_TRACKED_WINDOWS
 #define UPSTREAM_RUNTIME_MAX_TRACKED_WINDOWS 64
 #endif
@@ -64,6 +68,9 @@ struct upstream_runtime_session {
     upstream_runtime_pending_action_t queue[UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS];
     size_t queue_head;
     size_t queue_len;
+    upstream_runtime_pending_event_t event_queue[UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS];
+    size_t event_queue_head;
+    size_t event_queue_len;
 
     /* Task 3.2: Track window geometry for layout change detection */
     upstream_runtime_window_geometry_t tracked_windows[UPSTREAM_RUNTIME_MAX_TRACKED_WINDOWS];
@@ -134,6 +141,37 @@ int set_ref_in_im_funcs(int copyID) { (void)copyID; return 0; }
 static void upstream_runtime_capture_window_geometry(upstream_runtime_session_t* session);
 static int upstream_runtime_detect_layout_change(upstream_runtime_session_t* session);
 static void upstream_runtime_drain_vcr_events(upstream_runtime_session_t* session);
+static int upstream_runtime_enqueue_event(
+    upstream_runtime_session_t* session,
+    const vim_core_event_t* event
+);
+static int upstream_runtime_enqueue_message_event_for_session(
+    upstream_runtime_session_t* session,
+    const char* text,
+    uintptr_t text_len,
+    vim_core_message_kind_t kind
+);
+static void upstream_runtime_queue_bell_event(upstream_runtime_session_t* session);
+static void upstream_runtime_queue_redraw_event(
+    upstream_runtime_session_t* session,
+    int full,
+    int clear_before_draw
+);
+static void upstream_runtime_queue_buf_add_event(
+    upstream_runtime_session_t* session,
+    int buf_id
+);
+static void upstream_runtime_queue_win_new_event(
+    upstream_runtime_session_t* session,
+    int win_id
+);
+static void upstream_runtime_queue_layout_changed_event(
+    upstream_runtime_session_t* session
+);
+static void upstream_runtime_queue_pager_prompt_event(
+    upstream_runtime_session_t* session,
+    vim_core_pager_prompt_kind_t kind
+);
 static int upstream_runtime_dispatch_core_quit(upstream_runtime_session_t* session, int force);
 static int upstream_runtime_cb_redraw(exarg_T *eap_ptr);
 static vim_core_mode_t upstream_runtime_get_mode(const upstream_runtime_session_t* session);
@@ -361,6 +399,7 @@ static int upstream_runtime_cb_buf_add(exarg_T *eap) {
         upstream_runtime_active_session->queue[tail].action.kind = VIM_HOST_ACTION_BUF_ADD;
         upstream_runtime_active_session->queue[tail].action.event_buf_id = buf_id;
         upstream_runtime_active_session->queue_len++;
+        upstream_runtime_queue_buf_add_event(upstream_runtime_active_session, buf_id);
     }
 
     return TRUE;
@@ -379,6 +418,7 @@ static int upstream_runtime_cb_win_new(exarg_T *eap) {
         upstream_runtime_active_session->queue[tail].action.kind = VIM_HOST_ACTION_WIN_NEW;
         upstream_runtime_active_session->queue[tail].action.event_win_id = win_id;
         upstream_runtime_active_session->queue_len++;
+        upstream_runtime_queue_win_new_event(upstream_runtime_active_session, win_id);
     }
 
     return TRUE;
@@ -394,6 +434,7 @@ static int upstream_runtime_cb_layout_changed(exarg_T *eap) {
     if (upstream_runtime_active_session->queue_len < UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) {
         upstream_runtime_active_session->queue[tail].action.kind = VIM_HOST_ACTION_LAYOUT_CHANGED;
         upstream_runtime_active_session->queue_len++;
+        upstream_runtime_queue_layout_changed_event(upstream_runtime_active_session);
     }
 
     return TRUE;
@@ -408,6 +449,11 @@ static int upstream_runtime_cb_redraw(exarg_T *eap_ptr) {
         upstream_runtime_active_session->queue[tail].action.kind = VIM_HOST_ACTION_REDRAW;
         upstream_runtime_active_session->queue[tail].action.redraw_force = (eap.forceit != 0);
         upstream_runtime_active_session->queue_len++;
+        upstream_runtime_queue_redraw_event(
+            upstream_runtime_active_session,
+            TRUE,
+            eap.forceit != 0
+        );
     }
     
     return TRUE;
@@ -707,6 +753,8 @@ upstream_runtime_session_t* upstream_runtime_session_new(const char* initial_tex
     /* Drain any actions queued during autocommand setup */
     session->queue_head = 0;
     session->queue_len = 0;
+    session->event_queue_head = 0;
+    session->event_queue_len = 0;
     /* autocommand 登録中に蓄積されたイベントもクリア */
     do_cmdline_cmd((char_u*)"let g:_vcr_events = []");
 
@@ -716,8 +764,15 @@ upstream_runtime_session_t* upstream_runtime_session_new(const char* initial_tex
     return session;
     }
 void upstream_runtime_session_free(upstream_runtime_session_t* session) {
+    size_t idx;
     if (upstream_runtime_active_session == session) {
         upstream_runtime_active_session = NULL;
+    }
+    for (idx = 0; idx < session->event_queue_len; ++idx) {
+        size_t pos = (session->event_queue_head + idx) % UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS;
+        if (session->event_queue[pos].event.text_ptr != NULL) {
+            free((char*)session->event_queue[pos].event.text_ptr);
+        }
     }
     if (session->leased_snapshot_text) free(session->leased_snapshot_text);
     free(session);
@@ -861,7 +916,7 @@ static int upstream_runtime_try_intercept_ex(
             session->queue[tail].action.kind = VIM_HOST_ACTION_REDRAW;
             session->queue[tail].action.redraw_force = (force != 0);
             session->queue_len++;
-            
+            upstream_runtime_queue_redraw_event(session, TRUE, force != 0);
         }
         return TRUE;
     }
@@ -923,7 +978,7 @@ vim_core_command_result_t upstream_runtime_apply_ex_command(
         if (session->queue_len < UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) {
             session->queue[tail].action.kind = VIM_HOST_ACTION_LAYOUT_CHANGED;
             session->queue_len++;
-            
+            upstream_runtime_queue_layout_changed_event(session);
         }
         /* Update tracked geometry to current state */
         upstream_runtime_capture_window_geometry(session);
@@ -1023,7 +1078,7 @@ vim_core_command_result_t upstream_runtime_apply_normal_command(
         if (session->queue_len < UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) {
             session->queue[tail].action.kind = VIM_HOST_ACTION_LAYOUT_CHANGED;
             session->queue_len++;
-            
+            upstream_runtime_queue_layout_changed_event(session);
         }
         upstream_runtime_capture_window_geometry(session);
     }
@@ -1735,17 +1790,32 @@ static vim_core_command_result_t upstream_runtime_detect_outcome(upstream_runtim
 }
 
 vim_host_action_t upstream_runtime_take_pending_host_action(upstream_runtime_session_t* session) {
-    if (session->queue_len == 0) {
+    if (session == NULL || session->queue_len == 0) {
         vim_host_action_t action;
         memset(&action, 0, sizeof(action));
         return action;
     }
-    
+
     vim_host_action_t action = session->queue[session->queue_head].action;
     session->queue_head = (session->queue_head + 1) % UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS;
     session->queue_len--;
-    
+
     return action;
+}
+
+vim_core_event_t upstream_runtime_take_pending_event(upstream_runtime_session_t* session) {
+    vim_core_event_t event;
+    memset(&event, 0, sizeof(event));
+    if (session == NULL || session->event_queue_len == 0) {
+        return event;
+    }
+
+    event = session->event_queue[session->event_queue_head].event;
+    session->event_queue_head =
+        (session->event_queue_head + 1) % UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS;
+    session->event_queue_len--;
+
+    return event;
 }
 
 vim_runtime_backend_identity_t upstream_runtime_backend_identity(const upstream_runtime_session_t* session) {
@@ -1758,6 +1828,7 @@ void upstream_runtime_queue_bell_action(upstream_runtime_session_t* session) {
     if (session->queue_len < UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) {
         session->queue[tail].action.kind = VIM_HOST_ACTION_BELL;
         session->queue_len++;
+        upstream_runtime_queue_bell_event(session);
     }
 }
 
@@ -2074,7 +2145,7 @@ void upstream_runtime_set_screen_size(upstream_runtime_session_t* session, int r
         if (session->queue_len < UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) {
             session->queue[tail].action.kind = VIM_HOST_ACTION_LAYOUT_CHANGED;
             session->queue_len++;
-            
+            upstream_runtime_queue_layout_changed_event(session);
         }
     }
 }
@@ -2495,7 +2566,7 @@ static void upstream_runtime_drain_vcr_events(upstream_runtime_session_t* sessio
                 session->queue[tail].action.kind = VIM_HOST_ACTION_BUF_ADD;
                 session->queue[tail].action.event_buf_id = buf_id;
                 session->queue_len++;
-                
+                upstream_runtime_queue_buf_add_event(session, buf_id);
             }
         } else if (strncmp(event, "WinNew:", 7) == 0) { /* AUDIT-ALLOW: event type dispatch (zero-patch design) */
             int win_id = atoi(event + 7);
@@ -2504,20 +2575,151 @@ static void upstream_runtime_drain_vcr_events(upstream_runtime_session_t* sessio
                 session->queue[tail].action.kind = VIM_HOST_ACTION_WIN_NEW;
                 session->queue[tail].action.event_win_id = win_id;
                 session->queue_len++;
-                
+                upstream_runtime_queue_win_new_event(session, win_id);
             }
         } else if (strncmp(event, "LayoutChanged", 13) == 0) { /* AUDIT-ALLOW: event type dispatch (zero-patch design) */
             size_t tail = (session->queue_head + session->queue_len) % UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS;
             if (session->queue_len < UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) {
                 session->queue[tail].action.kind = VIM_HOST_ACTION_LAYOUT_CHANGED;
                 session->queue_len++;
-                
+                upstream_runtime_queue_layout_changed_event(session);
             }
         }
     }
 
     /* リストをクリア（do_cmdline_cmd で安全にリセット） */
     do_cmdline_cmd((char_u*)"let g:_vcr_events = []");
+}
+
+static int upstream_runtime_enqueue_event(
+    upstream_runtime_session_t* session,
+    const vim_core_event_t* event
+) {
+    size_t tail;
+    if (session == NULL || event == NULL) return FALSE;
+    if (session->event_queue_len >= UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS) return FALSE;
+
+    tail =
+        (session->event_queue_head + session->event_queue_len) % UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS;
+    session->event_queue[tail].event = *event;
+    session->event_queue_len++;
+    return TRUE;
+}
+
+static int upstream_runtime_enqueue_message_event_for_session(
+    upstream_runtime_session_t* session,
+    const char* text,
+    uintptr_t text_len,
+    vim_core_message_kind_t kind
+) {
+    vim_core_event_t event;
+    char* copy;
+    if (session == NULL || text == NULL || text_len == 0) return FALSE;
+
+    copy = (char*)malloc((size_t)text_len + 1U);
+    if (copy == NULL) return FALSE;
+    memcpy(copy, text, (size_t)text_len);
+    copy[text_len] = '\0';
+
+    memset(&event, 0, sizeof(event));
+    event.kind = VIM_CORE_EVENT_MESSAGE;
+    event.message_kind = kind;
+    event.text_ptr = copy;
+    event.text_len = text_len;
+    if (!upstream_runtime_enqueue_event(session, &event)) {
+        free(copy);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static void upstream_runtime_queue_bell_event(upstream_runtime_session_t* session) {
+    vim_core_event_t event;
+    memset(&event, 0, sizeof(event));
+    event.kind = VIM_CORE_EVENT_BELL;
+    (void)upstream_runtime_enqueue_event(session, &event);
+}
+
+static void upstream_runtime_queue_redraw_event(
+    upstream_runtime_session_t* session,
+    int full,
+    int clear_before_draw
+) {
+    vim_core_event_t event;
+    memset(&event, 0, sizeof(event));
+    event.kind = VIM_CORE_EVENT_REDRAW;
+    event.full = (full != 0);
+    event.clear_before_draw = (clear_before_draw != 0);
+    (void)upstream_runtime_enqueue_event(session, &event);
+}
+
+static void upstream_runtime_queue_buf_add_event(
+    upstream_runtime_session_t* session,
+    int buf_id
+) {
+    vim_core_event_t event;
+    memset(&event, 0, sizeof(event));
+    event.kind = VIM_CORE_EVENT_BUF_ADD;
+    event.buf_id = buf_id;
+    (void)upstream_runtime_enqueue_event(session, &event);
+}
+
+static void upstream_runtime_queue_win_new_event(
+    upstream_runtime_session_t* session,
+    int win_id
+) {
+    vim_core_event_t event;
+    memset(&event, 0, sizeof(event));
+    event.kind = VIM_CORE_EVENT_WIN_NEW;
+    event.win_id = win_id;
+    (void)upstream_runtime_enqueue_event(session, &event);
+}
+
+static void upstream_runtime_queue_layout_changed_event(
+    upstream_runtime_session_t* session
+) {
+    vim_core_event_t event;
+    memset(&event, 0, sizeof(event));
+    event.kind = VIM_CORE_EVENT_LAYOUT_CHANGED;
+    (void)upstream_runtime_enqueue_event(session, &event);
+}
+
+static void upstream_runtime_queue_pager_prompt_event(
+    upstream_runtime_session_t* session,
+    vim_core_pager_prompt_kind_t kind
+) {
+    vim_core_event_t event;
+    memset(&event, 0, sizeof(event));
+    event.kind = VIM_CORE_EVENT_PAGER_PROMPT;
+    event.pager_prompt_kind = kind;
+    (void)upstream_runtime_enqueue_event(session, &event);
+}
+
+int upstream_runtime_embedded_mode_active(void) {
+    return upstream_runtime_active_session != NULL;
+}
+
+void upstream_runtime_enqueue_message_event(
+    const char* text,
+    uintptr_t text_len,
+    vim_core_message_kind_t kind
+) {
+    (void)upstream_runtime_enqueue_message_event_for_session(
+        upstream_runtime_active_session,
+        text,
+        text_len,
+        kind
+    );
+}
+
+void upstream_runtime_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind) {
+    if (upstream_runtime_active_session == NULL) return;
+    upstream_runtime_queue_pager_prompt_event(upstream_runtime_active_session, kind);
+}
+
+void upstream_runtime_enqueue_bell_for_active_session(void) {
+    if (upstream_runtime_active_session == NULL) return;
+    upstream_runtime_queue_bell_action(upstream_runtime_active_session);
 }
 
 /* 

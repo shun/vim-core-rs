@@ -60,13 +60,13 @@ These methods are private helpers on `VimCoreSession`.
 - `drain_native_host_actions(&mut self)`
   Pulls native bridge host actions into the Rust-side FIFO queue until the
   bridge reports no more actions.
+- `drain_native_events(&mut self)`
+  Pulls native bridge events into the Rust-side FIFO queue until the bridge
+  reports no more events.
 - `get_option_value(&self, name: &str, scope: CoreOptionScope,
   expected: CoreOptionType) -> Result<ConvertedOptionValue, CoreOptionError>`
   Performs the typed option read before the public typed accessors unpack the
   internal enum.
-- `poll_and_dispatch_messages(&mut self)`
-  Collects Vim message history, classifies each line as normal or error, clears
-  the underlying Vim message state, and invokes the registered callback.
 
 ### Free helper functions in `src/lib.rs`
 
@@ -341,8 +341,8 @@ represented by Rust signatures alone.
   text from the session before issuing a save.
 - `VfdManager` is global process state. A dropped `VimCoreSession` clears it to
   avoid leakage across tests or subsequent sessions.
-- `poll_and_dispatch_messages` is a lossy boundary by design. It clears Vim's
-  message history after dispatch.
+- `drain_native_events` preserves native event ordering as the Rust layer moves
+  events into the session-local FIFO queue.
 
 ## Next steps
 
