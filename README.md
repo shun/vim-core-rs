@@ -226,9 +226,15 @@ published crate release.
 Run the baseline checks from the repository root with these commands:
 
 ```bash
+./scripts/setup-git-hooks.sh
 VIM_CORE_FROM_SOURCE=1 cargo test
 VIM_CORE_FROM_SOURCE=1 cargo publish --dry-run --allow-dirty
 ```
+
+After you run `./scripts/setup-git-hooks.sh` once, the repository installs a
+`pre-commit` hook through `core.hooksPath`. That hook runs `rustfmt` on staged
+`.rs` files before each commit, then re-stages those formatted Rust files so
+the commit includes the formatted result.
 
 Do not treat a bare `cargo test` in this repository as the development
 baseline. The default build path looks for a GitHub Releases asset whose tag
