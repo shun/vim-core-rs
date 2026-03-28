@@ -76,7 +76,11 @@ fn sequential_dispatch_handles_ciw_and_reports_each_pending_transition() {
     session.dispatch_key("i").expect("i should succeed");
     assert_pending_state(
         &session,
-        pending("ci", None, Some(CorePendingArgumentKind::MotionOrTextObject)),
+        pending(
+            "ci",
+            None,
+            Some(CorePendingArgumentKind::MotionOrTextObject),
+        ),
     );
 
     session.dispatch_key("w").expect("w should succeed");
@@ -141,16 +145,22 @@ fn sequential_dispatch_respects_insert_mode_literal_prefix_keys() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("").expect("session should initialize");
 
-    session.dispatch_key("i").expect("i should enter insert mode");
+    session
+        .dispatch_key("i")
+        .expect("i should enter insert mode");
     assert_eq!(session.snapshot().mode, CoreMode::Insert);
     assert_eq!(session.pending_input(), CorePendingInput::none());
 
-    session.dispatch_key("g").expect("g should insert literally");
+    session
+        .dispatch_key("g")
+        .expect("g should insert literally");
     assert_eq!(session.snapshot().mode, CoreMode::Insert);
     assert_eq!(session.snapshot().text, "g\n");
     assert_eq!(session.pending_input(), CorePendingInput::none());
 
-    session.dispatch_key("\u{1b}").expect("escape should succeed");
+    session
+        .dispatch_key("\u{1b}")
+        .expect("escape should succeed");
     assert_eq!(session.snapshot().mode, CoreMode::Normal);
     assert_eq!(session.snapshot().text, "g\n");
     assert_eq!(session.pending_input(), CorePendingInput::none());
@@ -161,8 +171,12 @@ fn sequential_dispatch_respects_insert_mode_literal_digits() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("").expect("session should initialize");
 
-    session.dispatch_key("i").expect("i should enter insert mode");
-    session.dispatch_key("2").expect("2 should insert literally");
+    session
+        .dispatch_key("i")
+        .expect("i should enter insert mode");
+    session
+        .dispatch_key("2")
+        .expect("2 should insert literally");
 
     assert_eq!(session.snapshot().mode, CoreMode::Insert);
     assert_eq!(session.snapshot().text, "2\n");
@@ -203,13 +217,17 @@ fn sequential_dispatch_supports_counted_gg_prefix_sequences() {
     let _guard = acquire_session_test_lock();
     let mut session =
         VimCoreSession::new("one\ntwo\nthree\nfour\n").expect("session should initialize");
-    session.execute_normal_command("G").expect("move to last line");
+    session
+        .execute_normal_command("G")
+        .expect("move to last line");
     assert_eq!(session.snapshot().cursor_row, 3);
 
     session.dispatch_key("2").expect("count should succeed");
     assert_pending_state(&session, pending("2", Some(2), None));
 
-    session.dispatch_key("g").expect("prefix should stay pending");
+    session
+        .dispatch_key("g")
+        .expect("prefix should stay pending");
     assert_pending_state(&session, pending("2g", Some(2), None));
 
     session.dispatch_key("g").expect("sequence should execute");
@@ -226,7 +244,9 @@ fn sequential_dispatch_supports_counted_operator_sequences() {
     session.dispatch_key("2").expect("count should succeed");
     assert_pending_state(&session, pending("2", Some(2), None));
 
-    session.dispatch_key("d").expect("operator should stay pending");
+    session
+        .dispatch_key("d")
+        .expect("operator should stay pending");
     assert_pending_state(
         &session,
         pending(

@@ -1168,7 +1168,8 @@ impl VimCoreSession {
             let (outcome, snapshot) = self.invoke_native_normal_command(key)?;
             let native_pending = self.read_native_pending_argument();
             let mut transaction = self.collect_transaction(outcome, snapshot);
-            let pending_input = derive_direct_pending_input(key, transaction.snapshot.mode, native_pending);
+            let pending_input =
+                derive_direct_pending_input(key, transaction.snapshot.mode, native_pending);
 
             debug_log!(
                 "[DEBUG] dispatch_key:finish key={:?} outcome={:?} mode={:?} native_pending={:?} next_pending={:?} command_completed={} remains_pending={}",
@@ -1219,7 +1220,8 @@ impl VimCoreSession {
         let (outcome, snapshot) = self.invoke_native_normal_command(&command)?;
         let native_pending = self.read_native_pending_argument();
         let mut transaction = self.collect_transaction(outcome, snapshot);
-        let pending_input = derive_direct_pending_input(&command, transaction.snapshot.mode, native_pending);
+        let pending_input =
+            derive_direct_pending_input(&command, transaction.snapshot.mode, native_pending);
 
         debug_log!(
             "[DEBUG] dispatch_key:finish key={:?} outcome={:?} mode={:?} native_pending={:?} next_pending={:?} command_completed={} remains_pending={}",
@@ -2240,7 +2242,11 @@ fn pending_for_register_prefixed_sequence(
     let _register_name = rest_chars.next();
     let command_tail = rest_chars.as_str();
     if command_tail.is_empty() {
-        return pending_input_with_state(sequence, count, Some(CorePendingArgumentKind::NormalCommand));
+        return pending_input_with_state(
+            sequence,
+            count,
+            Some(CorePendingArgumentKind::NormalCommand),
+        );
     }
 
     let (tail_count, tail_command, _) = parse_count_prefix(command_tail);
@@ -2414,7 +2420,11 @@ fn derive_sequential_pending_input(
     };
 
     let next = if let Some(awaited_argument) = native_pending {
-        pending_input_with_state(next_pending_keys.clone(), next_count, Some(awaited_argument))
+        pending_input_with_state(
+            next_pending_keys.clone(),
+            next_count,
+            Some(awaited_argument),
+        )
     } else if mode == CoreMode::OperatorPending {
         pending_input_with_state(
             next_pending_keys.clone(),
@@ -2424,7 +2434,11 @@ fn derive_sequential_pending_input(
     } else if mode_uses_normal_sequence_grammar(mode) {
         let predicted = pending_for_dispatch_sequence(&next_pending_keys);
         if predicted.is_pending() {
-            pending_input_with_state(next_pending_keys.clone(), next_count, predicted.awaited_argument)
+            pending_input_with_state(
+                next_pending_keys.clone(),
+                next_count,
+                predicted.awaited_argument,
+            )
         } else if key_was_count {
             pending_input_with_state(
                 next_pending_keys.clone(),
@@ -2482,12 +2496,7 @@ fn parse_count_prefix(sequence: &str) -> (Option<usize>, &str, usize) {
             break;
         }
 
-        count = Some(
-            count
-                .unwrap_or(0)
-                .saturating_mul(10)
-                .saturating_add(digit),
-        );
+        count = Some(count.unwrap_or(0).saturating_mul(10).saturating_add(digit));
         consumed_bytes = index + ch.len_utf8();
     }
 
@@ -2503,7 +2512,11 @@ fn combine_counts(left: Option<usize>, right: Option<usize>) -> Option<usize> {
     }
 }
 
-fn next_count_state(previous_pending: &CorePendingInput, key: &str, mode: CoreMode) -> Option<usize> {
+fn next_count_state(
+    previous_pending: &CorePendingInput,
+    key: &str,
+    mode: CoreMode,
+) -> Option<usize> {
     if !mode_uses_normal_sequence_grammar(mode) {
         return previous_pending.count;
     }
