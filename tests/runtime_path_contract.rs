@@ -186,10 +186,12 @@ fn runtimepath_contract_supports_path_discovery_and_fnameescape() {
 
     edit_with_fnameescape(&mut session, &note_path);
     assert_eq!(eval_required(&mut session, "expand('%:t')"), "notes.txt");
-    assert_eq!(eval_required(&mut session, "fnamemodify(expand('%'), ':t')"), "notes.txt");
+    assert_eq!(
+        eval_required(&mut session, "fnamemodify(expand('%'), ':t')"),
+        "notes.txt"
+    );
     assert!(
-        eval_required(&mut session, "fnamemodify(expand('%'), ':h')")
-            .contains("dir with spaces"),
+        eval_required(&mut session, "fnamemodify(expand('%'), ':h')").contains("dir with spaces"),
         "escaped edit should preserve the directory name with spaces"
     );
 }

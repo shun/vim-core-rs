@@ -15,8 +15,7 @@ fn acquire_session_test_lock() -> std::sync::MutexGuard<'static, ()> {
 #[test]
 fn visual_inner_word_selection_exposes_exact_core_coordinates() {
     let _guard = acquire_session_test_lock();
-    let mut session =
-        VimCoreSession::new("alpha beta gamma\n").expect("session should initialize");
+    let mut session = VimCoreSession::new("alpha beta gamma\n").expect("session should initialize");
 
     session
         .execute_normal_command("wviw")

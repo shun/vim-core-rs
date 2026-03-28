@@ -167,7 +167,9 @@ fn dd_after_inserted_text_deletes_the_current_line_semantics() {
     let mut session =
         VimCoreSession::new("line1\nline2\nline3\n").expect("session should initialize");
 
-    session.execute_normal_command("jiXY\x1b").expect("edit second line");
+    session
+        .execute_normal_command("jiXY\x1b")
+        .expect("edit second line");
     assert_eq!(session.snapshot().text, "line1\nXYline2\nline3\n");
     assert_eq!(session.snapshot().revision, 1);
     assert_eq!(session.snapshot().mode, CoreMode::Normal);

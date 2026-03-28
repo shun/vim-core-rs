@@ -544,8 +544,8 @@ mod build_test_runner {
 
 mod build_test_runner_contract_tests {
     use super::build_test_runner::{
-        GeneratedSelectionStatus, GeneratedUpstreamTestManifest,
-        UpstreamTestClassification, generate_upstream_tests_from, parse_skiplist,
+        GeneratedSelectionStatus, GeneratedUpstreamTestManifest, UpstreamTestClassification,
+        generate_upstream_tests_from, parse_skiplist,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -801,7 +801,10 @@ mod build_test_runner_contract_tests {
             .iter()
             .find(|case| case.name == "test_gui.vim")
             .expect("gui case should exist");
-        assert_eq!(gui_case.selection_status, GeneratedSelectionStatus::ExcludedByPolicy);
+        assert_eq!(
+            gui_case.selection_status,
+            GeneratedSelectionStatus::ExcludedByPolicy
+        );
         assert!(
             gui_case
                 .exclusion_reason
