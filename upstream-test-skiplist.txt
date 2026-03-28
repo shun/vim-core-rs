@@ -4,7 +4,6 @@
 test_autochdir.vim | Non-UTF-8 encoding (Non-ISO extended-ASCII)
 test_gettext_cp1251.vim | Non-UTF-8 encoding (CP1251)
 test_increment_dbcs.vim | Non-UTF-8 encoding (DBCS)
-test_mksession.vim | Non-UTF-8 encoding in some parts
 test_regex_char_classes.vim | Non-UTF-8 encoding in some parts
 test_regexp_latin.vim | Non-UTF-8 encoding (Latin1)
 test_regexp_utf8.vim | Non-UTF-8 encoding in some parts

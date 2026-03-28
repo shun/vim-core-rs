@@ -54,13 +54,21 @@ fn run() -> Result<(), String> {
     let manifest_path = repo_root.join("vim-source-build-manifest.txt");
     let metadata_path = repo_root.join("upstream-metadata.json");
     let skiplist_path = repo_root.join("upstream-test-skiplist.txt");
+    let classification_manifest_path = repo_root.join("upstream-test-classification.json");
+    let upstream_testdir_path = repo_root.join("vendor/vim_src/src/testdir");
     emit_static_rerun_if_changed(&[&bridge_header, &native_dir]);
 
     if !source_build_requested() {
+        emit_static_rerun_if_changed(&[
+            &skiplist_path,
+            &classification_manifest_path,
+            &upstream_testdir_path,
+        ]);
         let artifact_config = resolve_artifact_config_from_env()?;
         let prepared = install_prebuilt_artifact(&artifact_config, &out_dir)?;
         generate_bindings(&bridge_header, &out_dir)?;
         compile_native_overlay_archive(&repo_root, &out_dir)?;
+        build_test_runner::generate_upstream_tests(&out_dir)?;
         if verbose_build_requested() {
             println!(
                 "cargo:warning=using prebuilt vim-core-rs artifact target={} cache_key={}",
@@ -82,6 +90,7 @@ fn run() -> Result<(), String> {
         &manifest_path,
         &metadata_path,
         &skiplist_path,
+        &classification_manifest_path,
         &native_dir,
         &vendor_dir,
     ]);

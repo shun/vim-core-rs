@@ -544,7 +544,8 @@ mod build_test_runner {
 
 mod build_test_runner_contract_tests {
     use super::build_test_runner::{
-        GeneratedUpstreamTestManifest, generate_upstream_tests_from, parse_skiplist,
+        GeneratedSelectionStatus, GeneratedUpstreamTestManifest,
+        UpstreamTestClassification, generate_upstream_tests_from, parse_skiplist,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -599,7 +600,7 @@ mod build_test_runner_contract_tests {
         let repo_root = dir.join("repo");
         let out_dir = dir.join("out");
         write_file(
-            &repo_root.join("vendor/vim_src/src/testdir/test_beta.vim"),
+            &repo_root.join("vendor/vim_src/src/testdir/test_gamma.vim"),
             "quit!\n",
         );
         write_file(
@@ -607,8 +608,43 @@ mod build_test_runner_contract_tests {
             "quit!\n",
         );
         write_file(
+            &repo_root.join("vendor/vim_src/src/testdir/test_beta.vim"),
+            "quit!\n",
+        );
+        write_file(
             &repo_root.join("upstream-test-skiplist.txt"),
             "test_beta.vim | requires terminal UI\n",
+        );
+        write_file(
+            &repo_root.join("upstream-test-classification.json"),
+            r#"{
+  "metadata": { "version": 1 },
+  "counts": {
+    "total_cases": 3,
+    "preserve_directly": 1,
+    "preserve_through_adaptation": 1,
+    "out_of_scope": 0,
+    "temporarily_excluded": 1
+  },
+  "cases": [
+    {
+      "name": "test_alpha.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_alpha.vim",
+      "classification": "preserve_directly"
+    },
+    {
+      "name": "test_beta.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_beta.vim",
+      "classification": "temporarily_excluded"
+    },
+    {
+      "name": "test_gamma.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_gamma.vim",
+      "classification": "preserve_through_adaptation"
+    }
+  ]
+}
+"#,
         );
         fs::create_dir_all(&out_dir).expect("should create out dir");
 
@@ -619,18 +655,52 @@ mod build_test_runner_contract_tests {
             .expect("manifest should be written");
         let manifest: GeneratedUpstreamTestManifest =
             serde_json::from_str(&manifest).expect("manifest should deserialize");
-        assert_eq!(manifest.cases.len(), 2);
+        assert_eq!(manifest.cases.len(), 3);
         assert_eq!(manifest.cases[0].name, "test_alpha.vim");
         assert_eq!(
             manifest.cases[0].relative_path,
             "vendor/vim_src/src/testdir/test_alpha.vim"
         );
-        assert!(!manifest.cases[0].ignored);
-        assert_eq!(manifest.cases[1].name, "test_beta.vim");
-        assert!(manifest.cases[1].ignored);
         assert_eq!(
-            manifest.cases[1].ignore_reason.as_deref(),
+            manifest.cases[0].classification,
+            UpstreamTestClassification::PreserveDirectly
+        );
+        assert_eq!(
+            manifest.cases[0].selection_status,
+            GeneratedSelectionStatus::Included
+        );
+        assert!(manifest.cases[0].selected_for_generated_runner);
+        assert_eq!(manifest.cases[0].exclusion_reason, None);
+        assert_eq!(manifest.cases[1].name, "test_beta.vim");
+        assert_eq!(
+            manifest.cases[1].classification,
+            UpstreamTestClassification::TemporarilyExcluded
+        );
+        assert_eq!(
+            manifest.cases[1].selection_status,
+            GeneratedSelectionStatus::TemporarilyExcluded
+        );
+        assert!(!manifest.cases[1].selected_for_generated_runner);
+        assert_eq!(
+            manifest.cases[1].exclusion_reason.as_deref(),
             Some("requires terminal UI")
+        );
+        assert_eq!(manifest.cases[2].name, "test_gamma.vim");
+        assert_eq!(
+            manifest.cases[2].classification,
+            UpstreamTestClassification::PreserveThroughAdaptation
+        );
+        assert_eq!(
+            manifest.cases[2].selection_status,
+            GeneratedSelectionStatus::ExcludedByPolicy
+        );
+        assert!(!manifest.cases[2].selected_for_generated_runner);
+        assert!(
+            manifest.cases[2]
+                .exclusion_reason
+                .as_deref()
+                .expect("policy exclusion reason should exist")
+                .contains("repository contract tests")
         );
 
         let generated = fs::read_to_string(out_dir.join("upstream_vim_tests.rs"))
@@ -645,8 +715,12 @@ mod build_test_runner_contract_tests {
             "expected alpha subprocess entry in generated runner: {generated}"
         );
         assert!(
-            generated.contains("#[ignore = \"requires terminal UI\"]"),
-            "expected ignored beta test entry in generated runner: {generated}"
+            !generated.contains("upstream_test_beta_vim"),
+            "temporarily excluded case must not be generated: {generated}"
+        );
+        assert!(
+            !generated.contains("upstream_test_gamma_vim"),
+            "adaptation case must not be generated: {generated}"
         );
     }
 
@@ -669,8 +743,155 @@ mod build_test_runner_contract_tests {
         let generated = fs::read_to_string(out_dir.join("upstream_vim_tests.rs"))
             .expect("generated runner should be written");
         assert!(
-            generated.contains("No upstream Vim test cases were vendored"),
+            generated.contains("No upstream Vim test cases were selected"),
             "expected empty-runner marker: {generated}"
+        );
+    }
+
+    #[test]
+    fn generate_upstream_tests_excludes_out_of_scope_cases_with_reason() {
+        let dir = create_temp_dir("out_of_scope_runner");
+        let repo_root = dir.join("repo");
+        let out_dir = dir.join("out");
+        write_file(
+            &repo_root.join("vendor/vim_src/src/testdir/test_alpha.vim"),
+            "quit!\n",
+        );
+        write_file(
+            &repo_root.join("vendor/vim_src/src/testdir/test_gui.vim"),
+            "quit!\n",
+        );
+        write_file(
+            &repo_root.join("upstream-test-classification.json"),
+            r#"{
+  "metadata": { "version": 1 },
+  "counts": {
+    "total_cases": 2,
+    "preserve_directly": 1,
+    "preserve_through_adaptation": 0,
+    "out_of_scope": 1,
+    "temporarily_excluded": 0
+  },
+  "cases": [
+    {
+      "name": "test_alpha.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_alpha.vim",
+      "classification": "preserve_directly"
+    },
+    {
+      "name": "test_gui.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_gui.vim",
+      "classification": "out_of_scope"
+    }
+  ]
+}
+"#,
+        );
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        generate_upstream_tests_from(&repo_root, &out_dir)
+            .expect("runner generation should succeed");
+
+        let manifest = fs::read_to_string(out_dir.join("upstream_test_manifest.json"))
+            .expect("manifest should be written");
+        let manifest: GeneratedUpstreamTestManifest =
+            serde_json::from_str(&manifest).expect("manifest should deserialize");
+        let gui_case = manifest
+            .cases
+            .iter()
+            .find(|case| case.name == "test_gui.vim")
+            .expect("gui case should exist");
+        assert_eq!(gui_case.selection_status, GeneratedSelectionStatus::ExcludedByPolicy);
+        assert!(
+            gui_case
+                .exclusion_reason
+                .as_deref()
+                .expect("out_of_scope reason should exist")
+                .contains("docs/adr/0002-define-compatibility-boundaries.md")
+        );
+    }
+
+    #[test]
+    fn generate_upstream_tests_fails_when_vendored_case_is_missing_from_classification_manifest() {
+        let dir = create_temp_dir("missing_classification");
+        let repo_root = dir.join("repo");
+        let out_dir = dir.join("out");
+        write_file(
+            &repo_root.join("vendor/vim_src/src/testdir/test_alpha.vim"),
+            "quit!\n",
+        );
+        write_file(
+            &repo_root.join("vendor/vim_src/src/testdir/test_beta.vim"),
+            "quit!\n",
+        );
+        write_file(
+            &repo_root.join("upstream-test-classification.json"),
+            r#"{
+  "metadata": { "version": 1 },
+  "counts": {
+    "total_cases": 1,
+    "preserve_directly": 1,
+    "preserve_through_adaptation": 0,
+    "out_of_scope": 0,
+    "temporarily_excluded": 0
+  },
+  "cases": [
+    {
+      "name": "test_alpha.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_alpha.vim",
+      "classification": "preserve_directly"
+    }
+  ]
+}
+"#,
+        );
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        let error = generate_upstream_tests_from(&repo_root, &out_dir)
+            .expect_err("runner generation should fail");
+        assert!(
+            error.contains("missing from classification manifest"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn generate_upstream_tests_fails_when_temporarily_excluded_case_lacks_skip_reason() {
+        let dir = create_temp_dir("missing_skip_reason");
+        let repo_root = dir.join("repo");
+        let out_dir = dir.join("out");
+        write_file(
+            &repo_root.join("vendor/vim_src/src/testdir/test_beta.vim"),
+            "quit!\n",
+        );
+        write_file(
+            &repo_root.join("upstream-test-classification.json"),
+            r#"{
+  "metadata": { "version": 1 },
+  "counts": {
+    "total_cases": 1,
+    "preserve_directly": 0,
+    "preserve_through_adaptation": 0,
+    "out_of_scope": 0,
+    "temporarily_excluded": 1
+  },
+  "cases": [
+    {
+      "name": "test_beta.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_beta.vim",
+      "classification": "temporarily_excluded"
+    }
+  ]
+}
+"#,
+        );
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        let error = generate_upstream_tests_from(&repo_root, &out_dir)
+            .expect_err("runner generation should fail");
+        assert!(
+            error.contains("missing a skiplist reason"),
+            "unexpected error: {error}"
         );
     }
 }

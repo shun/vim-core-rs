@@ -59,6 +59,11 @@ The embedded upstream Vim is compiled with explicit feature reductions.
 Do not infer "missing tests" from those skips. They are repository-declared
 feature boundaries.
 
+When an upstream case is marked as `temporarily_excluded`, treat that as a
+test-infrastructure or encoding gap, not as a scope decision. Policy
+exclusions belong in the upstream classification manifest as `out_of_scope`
+or `preserve_through_adaptation`, not in the skiplist.
+
 ## Architecture limits
 
 These are intentional design constraints, not temporary bugs.
