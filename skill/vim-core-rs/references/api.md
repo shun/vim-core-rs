@@ -9,6 +9,18 @@ If you are inside the original repository, you can supplement this file with
 the shorter, task-oriented companion that still works when the skill is copied
 standalone.
 
+## Table of contents
+
+- Session lifecycle
+- Commands and evaluation
+- State inspection
+- Navigation, marks, registers, and windows
+- Options
+- Host-action queue, events, and VFS inspection
+- Jobs and VFD integration
+- Undo, search, syntax, completion, and UI-facing extraction
+- Messaging and diagnostics
+
 ## Session lifecycle
 
 - `VimCoreSession::new(initial_text: &str) -> Result<Self, CoreSessionError>`
@@ -50,6 +62,8 @@ Check `CoreCommandOutcome` instead of assuming that a command changed text.
   buffers, windows, pending host actions, mode, and optional completion popup.
 - `mode(&self) -> CoreMode`
   Return the current mode.
+- `runtime_mode(&self) -> CoreRuntimeMode`
+  Return the runtime-mode contract for the active session.
 - `pending_input(&self) -> CorePendingInput`
   Return whether Vim is waiting for a char, mark, register, replace target, or
   no additional input.
@@ -94,10 +108,13 @@ simulating every action through Vimscript.
 The API is typed and scope-aware. It can report unknown options, type mismatch,
 unsupported local scope, and Vim validation failures.
 
-## Host-action queue and VFS inspection
+## Host-action queue, events, and VFS inspection
 
 - `take_pending_host_action(&mut self) -> Option<CoreHostAction>`
   Drain the next host-facing action from the queue.
+- `take_pending_event(&mut self) -> Option<CoreEvent>`
+  Drain the next queued event from the Rust-side FIFO after synchronizing with
+  the native event queue.
 - `submit_vfs_response(&mut self, response: CoreVfsResponse)
   -> Result<CoreCommandOutcome, CoreCommandError>`
   Feed the result of a host-side VFS operation back into the core.

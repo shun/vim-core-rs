@@ -44,6 +44,8 @@ creates wrong assumptions about persistence, ownership, and concurrency.
 ## Host responsibilities
 
 - Drain `take_pending_host_action()` until it returns `None`.
+- Drain `take_pending_event()` until it returns `None` when you consume
+  events outside transaction results.
 - Handle `CoreHostAction::Write` and `CoreHostAction::Quit`.
 - Handle every `CoreHostAction::VfsRequest` and send one matching
   `CoreVfsResponse`.
@@ -67,6 +69,14 @@ creates wrong assumptions about persistence, ownership, and concurrency.
   rejected as stale when revisions advance.
 - Do not assume the embedded runtime owns process execution. It only requests
   host action.
+
+## Build and release facts
+
+- Repository development should usually run with `VIM_CORE_FROM_SOURCE=1`.
+- A bare `cargo test` follows the default consumer path and expects a released
+  prebuilt artifact for the current crate version.
+- Read the repository `README.md` before changing packaging, prebuilt artifact
+  resolution, or release workflow behavior.
 
 ## Source-of-truth hierarchy
 

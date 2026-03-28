@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vim Core RS"
+  short_description: "Guide vim-core-rs development and integration work"
+  default_prompt: "Use $vim-core-rs to inspect the crate, choose the right contract tests, and update vim-core-rs safely."

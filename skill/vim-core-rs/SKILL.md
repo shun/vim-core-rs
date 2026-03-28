@@ -20,6 +20,9 @@ Read only the materials needed for the current task.
   [references/api-index.md](references/api-index.md).
 - For repository purpose, hard invariants, host obligations, and dangerous
   assumptions, read [references/readme-summary.md](references/readme-summary.md).
+- For project scope and non-goals, read `docs/SCOPE.md` when you are inside
+  the repository. Keep those boundaries in mind before adding host-owned
+  orchestration, terminal behavior, semantic parsing, or plugin-surface work.
 - For current implementation gaps and exposed-but-incomplete APIs, read
   [references/known-limitations.md](references/known-limitations.md) before
   relying on a method just because it exists.
@@ -37,6 +40,10 @@ Read only the materials needed for the current task.
   `README.md`, `docs/SCOPE.md`, `docs/known-limitations.md`,
   `docs/api-index.md`, `docs/public-api-reference.md`,
   `docs/internal-api-reference.md`, and `docs/api-contracts.md`.
+- If the task touches packaging, prebuilt artifacts, release sequencing, or
+  GitHub Actions workflow choice, read the repository `README.md` even when the
+  bundled references seem sufficient. That operational detail intentionally
+  lives in the repository docs.
 - When you need those repository docs, discover them from the repository root
   instead of relying on links embedded in this skill. For example, use
   `rg --files docs` or open the files directly after confirming they exist.
@@ -68,6 +75,10 @@ Read only the materials needed for the current task.
   forwarded into the native bridge.
 - Keep host responsibilities outside the core. VFS responses, process spawning,
   screen sizing, message handling, and redraw behavior belong to the host.
+- For repository development, default to `VIM_CORE_FROM_SOURCE=1`. A bare
+  `cargo test` follows the consumer path, expects a released prebuilt artifact
+  for the crate version in `Cargo.toml`, and can fail with a 404 before a
+  matching GitHub Release exists.
 - Respect the documented project non-goals. In the repository, they live in
   `docs/SCOPE.md`. Do not extend the crate toward full Vimscript embedding,
   rich terminal emulation, or modern semantic highlighting that should stay in
@@ -114,10 +125,12 @@ Choose the workflow that matches the user task instead of reading everything.
 ### Update vendored Vim or build pipeline behavior
 
 1. Read [references/architecture.md](references/architecture.md) first.
-2. Inspect `build.rs`, the `build_*.rs` audit helpers, and
+2. Read the release and workflow sections in `README.md` so you choose the
+   right local verification path and the right GitHub Actions workflow.
+3. Inspect `build.rs`, the `build_*.rs` audit helpers, and
    `scripts/vendor-sync.sh`.
-3. Run targeted quality-gate tests before broad feature suites.
-4. Preserve allowlist and traceability artifacts. The repository treats them as
+4. Run targeted quality-gate tests before broad feature suites.
+5. Preserve allowlist and traceability artifacts. The repository treats them as
    required evidence, not optional metadata.
 
 ## Testing rules that matter
@@ -163,6 +176,11 @@ Apply these rules whenever you write or modify tests.
 ## Validation checklist
 
 Before finishing, check the smallest relevant set below.
+
+- Repository development baseline:
+  `VIM_CORE_FROM_SOURCE=1 cargo test`
+  Use this when the task crosses multiple behavior areas or when you need the
+  standard repository path instead of the default prebuilt-consumer path.
 
 - Public API or session semantics:
   `cargo test --test public_api_contract`

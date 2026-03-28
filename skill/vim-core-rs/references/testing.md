@@ -6,6 +6,16 @@ If you are inside the original repository, read `docs/api-contracts.md`
 alongside this map for the higher-level sequencing rules behind the tests.
 Do not rely on that file being present when this skill is used standalone.
 
+## Baseline rules
+
+- For repository development, prefer `VIM_CORE_FROM_SOURCE=1 cargo test`.
+- Do not treat a bare `cargo test` as the repository default unless you are
+  intentionally validating the prebuilt-consumer path.
+- Run `cargo test --test upstream_vim_generated` when the change could alter
+  embedded Vim behavior relative to upstream Vim, especially after touching
+  `vendor/upstream/vim`, `vendor/vim_src`, `native/`, `build.rs`, or command
+  execution paths with Vimscript-visible effects.
+
 ## Session and public API contracts
 
 - `tests/public_api_contract.rs`
