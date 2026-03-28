@@ -1,5 +1,6 @@
 use std::sync::{Mutex, OnceLock};
-use vim_core_rs::VimCoreSession;
+use std::time::{SystemTime, UNIX_EPOCH};
+use vim_core_rs::{CoreSessionOptions, VimCoreSession};
 
 fn session_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -60,6 +61,42 @@ fn vertical_scroll_updates_viewport_boundaries() {
 }
 
 #[test]
+fn page_scroll_back_restores_previous_topline() {
+    let _guard = acquire_session_test_lock();
+
+    let text = (1..=40)
+        .map(|i| format!("line {}", i))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut session = VimCoreSession::new(&text).expect("session should initialize");
+    session.set_screen_size(12, 80);
+
+    let initial_snapshot = session.snapshot();
+    let initial_win = &initial_snapshot.windows[0];
+    assert_eq!(initial_win.topline, 1, "Initial topline should be 1");
+
+    session
+        .dispatch_key("\u{6}")
+        .expect("Ctrl-F should succeed");
+    let forward_snapshot = session.snapshot();
+    let forward_win = &forward_snapshot.windows[0];
+    assert!(
+        forward_win.topline > initial_win.topline,
+        "Ctrl-F should advance topline"
+    );
+
+    session
+        .dispatch_key("\u{2}")
+        .expect("Ctrl-B should succeed");
+    let backward_snapshot = session.snapshot();
+    let backward_win = &backward_snapshot.windows[0];
+    assert_eq!(
+        backward_win.topline, initial_win.topline,
+        "Ctrl-B should restore the previous topline"
+    );
+}
+
+#[test]
 fn horizontal_scroll_updates_viewport_boundaries() {
     let _guard = acquire_session_test_lock();
 
@@ -96,5 +133,63 @@ fn horizontal_scroll_updates_viewport_boundaries() {
     assert!(
         far_scrolled_win.leftcol > 0,
         "leftcol should increase after moving cursor far right with nowrap"
+    );
+}
+
+#[test]
+fn ctrl_f_and_ctrl_b_restore_the_previous_page_viewport() {
+    let _guard = acquire_session_test_lock();
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time should move forward")
+        .as_nanos();
+    let debug_log_path =
+        std::env::temp_dir().join(format!("vim-core-rs-scroll-viewport-{nanos}.log"));
+
+    let text = (1..=100)
+        .map(|i| format!("line {}", i))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut session = VimCoreSession::new_with_options(
+        &text,
+        CoreSessionOptions {
+            debug_log_path: Some(debug_log_path.clone()),
+            ..Default::default()
+        },
+    )
+    .expect("session should initialize");
+
+    let initial_snapshot = session.snapshot();
+    let initial_window = &initial_snapshot.windows[0];
+    let initial_topline = initial_window.topline;
+
+    session
+        .execute_normal_command("\x06")
+        .expect("Ctrl+F should succeed");
+
+    let forward_snapshot = session.snapshot();
+    let forward_window = &forward_snapshot.windows[0];
+    assert!(
+        forward_window.topline > initial_topline,
+        "Ctrl+F should advance topline: initial={}, forward={}",
+        initial_topline,
+        forward_window.topline
+    );
+
+    session
+        .execute_normal_command("\x02")
+        .expect("Ctrl+B should succeed");
+
+    let backward_snapshot = session.snapshot();
+    let backward_window = &backward_snapshot.windows[0];
+
+    let debug_log = std::fs::read_to_string(&debug_log_path)
+        .unwrap_or_else(|error| panic!("debug log should be readable: {error}"));
+    eprintln!("[test] native log:\n{debug_log}");
+
+    assert_eq!(
+        backward_window.topline, initial_topline,
+        "Ctrl+B should restore the original topline after a page forward"
     );
 }

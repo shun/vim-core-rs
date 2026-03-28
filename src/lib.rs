@@ -600,6 +600,22 @@ impl VimCoreSession {
         self.pending_input_state.borrow().clone()
     }
 
+    fn ctrl_b_workaround_command(&self) -> Option<String> {
+        let snapshot = self.snapshot();
+        let page_height = snapshot
+            .windows
+            .iter()
+            .find(|window| window.is_active)
+            .or_else(|| snapshot.windows.first())
+            .map(|window| window.height.max(1))
+            .unwrap_or(1);
+        if page_height == 0 {
+            return None;
+        }
+
+        Some("k".repeat(page_height))
+    }
+
     pub fn mark(&self, mark_name: char) -> Option<CoreMarkPosition> {
         let mark_name_c = mark_name as std::os::raw::c_char;
         let mut mark = unsafe { std::mem::zeroed::<bindings::vim_core_mark_position_t>() };
@@ -1129,6 +1145,26 @@ impl VimCoreSession {
         command: &str,
     ) -> Result<CoreCommandTransaction, CoreCommandError> {
         let previous_pending = self.pending_input();
+        if command == "\x02" && !previous_pending.is_pending() {
+            let synthesized = self.ctrl_b_workaround_command();
+            debug_log!(
+                "[DEBUG] execute_normal_command: ctrl-b workaround -> {:?}",
+                synthesized
+            );
+            if let Some(synthesized) = synthesized {
+                let (outcome, snapshot) = self.invoke_native_normal_command(&synthesized)?;
+                let native_pending = self.read_native_pending_argument();
+                let mut transaction = self.collect_transaction(outcome, snapshot);
+                let pending_input = derive_direct_pending_input(
+                    &synthesized,
+                    transaction.snapshot.mode,
+                    native_pending,
+                );
+                self.store_pending_input(pending_input.clone());
+                transaction.snapshot.pending_input = pending_input;
+                return Ok(transaction);
+            }
+        }
         let (outcome, snapshot) = self.invoke_native_normal_command(command)?;
         let native_pending = self.read_native_pending_argument();
         let mut transaction = self.collect_transaction(outcome, snapshot);
@@ -1156,6 +1192,15 @@ impl VimCoreSession {
         let previous_pending = self.pending_input();
         let interprets_sequential_input =
             previous_pending.is_pending() || mode_uses_normal_sequence_grammar(mode_at_dispatch);
+        if key == "\x02" && !previous_pending.is_pending() {
+            let synthesized = self.ctrl_b_workaround_command().unwrap_or_default();
+            debug_log!(
+                "[DEBUG] dispatch_key: ctrl-b workaround -> synthesizing {:?} (page_height={})",
+                synthesized,
+                synthesized.len()
+            );
+            return self.execute_normal_command(&synthesized);
+        }
         debug_log!(
             "[DEBUG] dispatch_key:start key={:?} mode_at_dispatch={:?} previous_pending={:?} interprets_sequential_input={}",
             key,
