@@ -2367,7 +2367,8 @@ fn derive_direct_pending_input(
         return predicted_pending;
     }
 
-    if let Some(awaited_argument) = native_pending.filter(|_| pending_command.chars().count() == 1) {
+    if let Some(awaited_argument) = native_pending.filter(|_| pending_command.chars().count() == 1)
+    {
         debug_log!(
             "[DEBUG] derive_direct_pending_input: native_pending command={:?} mode={:?} awaited={:?}",
             pending_command,

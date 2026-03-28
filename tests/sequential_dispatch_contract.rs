@@ -75,7 +75,10 @@ fn assert_sessions_match(direct_snapshot: &CoreSnapshot, sequential: &VimCoreSes
     assert_eq!(sequential_snapshot.cursor_row, direct_snapshot.cursor_row);
     assert_eq!(sequential_snapshot.cursor_col, direct_snapshot.cursor_col);
     assert_eq!(sequential_snapshot.mode, direct_snapshot.mode);
-    assert_eq!(sequential_snapshot.pending_input, direct_snapshot.pending_input);
+    assert_eq!(
+        sequential_snapshot.pending_input,
+        direct_snapshot.pending_input
+    );
     assert_eq!(sequential_snapshot.revision, direct_snapshot.revision);
     assert_eq!(sequential.pending_input(), CorePendingInput::none());
 }
@@ -318,13 +321,17 @@ fn sequential_dispatch_supports_operator_followed_by_counted_motion() {
     let mut session =
         VimCoreSession::new("one two three four\n").expect("session should initialize");
 
-    session.dispatch_key("d").expect("operator should stay pending");
+    session
+        .dispatch_key("d")
+        .expect("operator should stay pending");
     assert_pending_state(
         &session,
         pending("d", None, Some(CorePendingArgumentKind::MotionOrTextObject)),
     );
 
-    session.dispatch_key("2").expect("motion count should stay pending");
+    session
+        .dispatch_key("2")
+        .expect("motion count should stay pending");
     assert_pending_state(
         &session,
         pending(
@@ -346,7 +353,9 @@ fn sequential_dispatch_supports_register_prefixed_counted_operator_sequences() {
         VimCoreSession::new("one two three four\n").expect("session should initialize");
     session.set_register('a', "baseline");
 
-    session.dispatch_key("\"").expect("quote should stay pending");
+    session
+        .dispatch_key("\"")
+        .expect("quote should stay pending");
     assert_pending_state(
         &session,
         pending("\"", None, Some(CorePendingArgumentKind::Register)),
@@ -365,10 +374,16 @@ fn sequential_dispatch_supports_register_prefixed_counted_operator_sequences() {
         .expect("counted normal command should stay pending");
     assert_pending_state(
         &session,
-        pending("\"a2", Some(2), Some(CorePendingArgumentKind::NormalCommand)),
+        pending(
+            "\"a2",
+            Some(2),
+            Some(CorePendingArgumentKind::NormalCommand),
+        ),
     );
 
-    session.dispatch_key("d").expect("delete should stay pending");
+    session
+        .dispatch_key("d")
+        .expect("delete should stay pending");
     assert_pending_state(
         &session,
         pending(
@@ -389,7 +404,9 @@ fn sequential_dispatch_supports_counted_find_sequences() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("xaxax\n").expect("session should initialize");
 
-    session.dispatch_key("2").expect("count should stay pending");
+    session
+        .dispatch_key("2")
+        .expect("count should stay pending");
     assert_pending_state(&session, pending("2", Some(2), None));
 
     session.dispatch_key("f").expect("find should await target");
@@ -398,7 +415,9 @@ fn sequential_dispatch_supports_counted_find_sequences() {
         pending("2f", Some(2), Some(CorePendingArgumentKind::Char)),
     );
 
-    session.dispatch_key("a").expect("find target should execute");
+    session
+        .dispatch_key("a")
+        .expect("find target should execute");
     assert_eq!(session.snapshot().cursor_col, 3);
     assert_eq!(session.pending_input(), CorePendingInput::none());
 }
@@ -459,19 +478,35 @@ fn sequential_dispatch_reports_all_g_prefixed_pending_families() {
         ("g", pending("g", None, None)),
         (
             "gq",
-            pending("gq", None, Some(CorePendingArgumentKind::MotionOrTextObject)),
+            pending(
+                "gq",
+                None,
+                Some(CorePendingArgumentKind::MotionOrTextObject),
+            ),
         ),
         (
             "gu",
-            pending("gu", None, Some(CorePendingArgumentKind::MotionOrTextObject)),
+            pending(
+                "gu",
+                None,
+                Some(CorePendingArgumentKind::MotionOrTextObject),
+            ),
         ),
         (
             "gU",
-            pending("gU", None, Some(CorePendingArgumentKind::MotionOrTextObject)),
+            pending(
+                "gU",
+                None,
+                Some(CorePendingArgumentKind::MotionOrTextObject),
+            ),
         ),
         (
             "g~",
-            pending("g~", None, Some(CorePendingArgumentKind::MotionOrTextObject)),
+            pending(
+                "g~",
+                None,
+                Some(CorePendingArgumentKind::MotionOrTextObject),
+            ),
         ),
     ];
 
@@ -491,16 +526,22 @@ fn sequential_dispatch_supports_counted_replace_target_with_digit_argument() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("abc\n").expect("session should initialize");
 
-    session.dispatch_key("2").expect("count should stay pending");
+    session
+        .dispatch_key("2")
+        .expect("count should stay pending");
     assert_pending_state(&session, pending("2", Some(2), None));
 
-    session.dispatch_key("r").expect("replace should await target");
+    session
+        .dispatch_key("r")
+        .expect("replace should await target");
     assert_pending_state(
         &session,
         pending("2r", Some(2), Some(CorePendingArgumentKind::ReplaceChar)),
     );
 
-    session.dispatch_key("9").expect("replace target should execute");
+    session
+        .dispatch_key("9")
+        .expect("replace target should execute");
     assert_eq!(session.snapshot().text, "99c\n");
     assert_eq!(session.pending_input(), CorePendingInput::none());
 }
@@ -515,7 +556,9 @@ fn sequential_dispatch_supports_counted_mark_jump_sequences() {
         .set_mark('a', current_buf_id, 2, 0)
         .expect("mark setup should succeed");
 
-    session.dispatch_key("2").expect("count should stay pending");
+    session
+        .dispatch_key("2")
+        .expect("count should stay pending");
     assert_pending_state(&session, pending("2", Some(2), None));
 
     session
@@ -526,7 +569,9 @@ fn sequential_dispatch_supports_counted_mark_jump_sequences() {
         pending("2'", Some(2), Some(CorePendingArgumentKind::MarkJump)),
     );
 
-    session.dispatch_key("a").expect("mark jump target should execute");
+    session
+        .dispatch_key("a")
+        .expect("mark jump target should execute");
     assert_eq!(session.snapshot().cursor_row, 2);
     assert_eq!(session.pending_input(), CorePendingInput::none());
 }
@@ -636,12 +681,16 @@ fn sequential_dispatch_matches_upstream_goto_line_variants() {
     // Derived from vendor/upstream/vim/src/testdir/test_goto.vim and
     // vendor/upstream/vim/src/testdir/test_normal.vim goto-line cases.
     for sequence in ["gg", "2gg"] {
-        let (direct_snapshot, (), sequential) =
-            run_direct_and_sequential_with_setup(initial_text, sequence, |session| {
+        let (direct_snapshot, (), sequential) = run_direct_and_sequential_with_setup(
+            initial_text,
+            sequence,
+            |session| {
                 session
                     .execute_normal_command("G")
                     .expect("setup move to end should succeed");
-            }, |_| ());
+            },
+            |_| (),
+        );
         assert_sessions_match(&direct_snapshot, &sequential);
     }
 
@@ -677,13 +726,12 @@ fn sequential_dispatch_matches_upstream_word_textobject_variants() {
 
     // Derived from vendor/upstream/vim/src/testdir/test_textobjects.vim.
     for sequence in ["wciw", "diw", "yiw"] {
-        let (direct_snapshot, direct_register, sequential) =
-            run_direct_and_sequential_with_setup(
-                initial_text,
-                sequence,
-                |_| {},
-                |session| session.register('"'),
-            );
+        let (direct_snapshot, direct_register, sequential) = run_direct_and_sequential_with_setup(
+            initial_text,
+            sequence,
+            |_| {},
+            |session| session.register('"'),
+        );
         assert_sessions_match(&direct_snapshot, &sequential);
         assert_eq!(sequential.register('"'), direct_register);
     }
@@ -708,15 +756,14 @@ fn sequential_dispatch_matches_upstream_register_prefixed_variants() {
     }
 
     {
-        let (direct_snapshot, direct_register, sequential) =
-            run_direct_and_sequential_with_setup(
-                "one two three four\n",
-                "\"a2dw",
-                |s| {
-                    s.set_register('a', "baseline");
-                },
-                |session| session.register('a'),
-            );
+        let (direct_snapshot, direct_register, sequential) = run_direct_and_sequential_with_setup(
+            "one two three four\n",
+            "\"a2dw",
+            |s| {
+                s.set_register('a', "baseline");
+            },
+            |session| session.register('a'),
+        );
         assert_sessions_match(&direct_snapshot, &sequential);
         assert_eq!(sequential.register('a'), direct_register);
     }
@@ -729,8 +776,10 @@ fn sequential_dispatch_matches_upstream_mark_jump_variants() {
 
     // Derived from vendor/upstream/vim/src/testdir/test_marks.vim.
     for sequence in ["'a", "`a"] {
-        let (direct_snapshot, (), sequential) =
-            run_direct_and_sequential_with_setup(initial_text, sequence, |session| {
+        let (direct_snapshot, (), sequential) = run_direct_and_sequential_with_setup(
+            initial_text,
+            sequence,
+            |session| {
                 let current_buf_id = session.buffers()[0].id;
                 session
                     .set_mark('a', current_buf_id, 2, 2)
@@ -738,7 +787,9 @@ fn sequential_dispatch_matches_upstream_mark_jump_variants() {
                 session
                     .execute_normal_command("gg0")
                     .expect("setup reset should succeed");
-            }, |_| ());
+            },
+            |_| (),
+        );
         assert_sessions_match(&direct_snapshot, &sequential);
     }
 }
@@ -748,11 +799,7 @@ fn sequential_dispatch_matches_upstream_charsearch_variants() {
     let _guard = acquire_session_test_lock();
 
     // Derived from vendor/upstream/vim/src/testdir/test_charsearch.vim.
-    let charsearch_cases = [
-        ("xaxax\n", "fa"),
-        ("xaxax\n", "2fa"),
-        ("xxaxax\n", "ta"),
-    ];
+    let charsearch_cases = [("xaxax\n", "fa"), ("xaxax\n", "2fa"), ("xxaxax\n", "ta")];
 
     for (initial_text, sequence) in charsearch_cases {
         let (direct_snapshot, (), sequential) =
@@ -799,7 +846,9 @@ fn sequential_dispatch_keeps_normal_prefix_keys_literal_in_insert_mode() {
         .expect("i should enter insert mode");
 
     for key in ["g", "2"] {
-        session.dispatch_key(key).expect("key should insert literally");
+        session
+            .dispatch_key(key)
+            .expect("key should insert literally");
     }
 
     assert_eq!(session.snapshot().mode, CoreMode::Insert);
