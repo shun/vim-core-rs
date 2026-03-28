@@ -81,13 +81,30 @@ pub enum CoreMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CorePendingInput {
-    None,
+pub enum CorePendingArgumentKind {
     Char,
-    Replace,
+    ReplaceChar,
     MarkSet,
     MarkJump,
     Register,
+    MotionOrTextObject,
+    NormalCommand,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CorePendingInput {
+    pub pending_keys: String,
+    pub awaited_argument: Option<CorePendingArgumentKind>,
+}
+
+impl CorePendingInput {
+    pub fn none() -> Self {
+        Self::default()
+    }
+
+    pub fn is_pending(&self) -> bool {
+        !self.pending_keys.is_empty() || self.awaited_argument.is_some()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -461,6 +478,7 @@ pub struct VimCoreSession {
     state: NonNull<bindings::vim_bridge_state_t>,
     runtime_mode: CoreRuntimeMode,
     document_coordinator: RefCell<DocumentCoordinator>,
+    pending_input_state: RefCell<CorePendingInput>,
     pending_host_actions: RefCell<VecDeque<CoreHostAction>>,
     pending_events: RefCell<VecDeque<CoreEvent>>,
     not_send_sync: PhantomData<Rc<()>>,
@@ -532,6 +550,7 @@ impl VimCoreSession {
             state,
             runtime_mode: options.runtime_mode,
             document_coordinator: RefCell::new(DocumentCoordinator::new()),
+            pending_input_state: RefCell::new(CorePendingInput::none()),
             pending_host_actions: RefCell::new(VecDeque::new()),
             pending_events: RefCell::new(VecDeque::new()),
             not_send_sync: PhantomData,
@@ -563,6 +582,7 @@ impl VimCoreSession {
         }
 
         snapshot.pending_host_actions += self.pending_host_actions.borrow().len();
+        snapshot.pending_input = self.pending_input();
 
         snapshot
     }
@@ -576,8 +596,7 @@ impl VimCoreSession {
     }
 
     pub fn pending_input(&self) -> CorePendingInput {
-        let pending_input = unsafe { bindings::vim_bridge_get_pending_input(self.state.as_ptr()) };
-        convert_pending_input(pending_input)
+        self.pending_input_state.borrow().clone()
     }
 
     pub fn mark(&self, mark_name: char) -> Option<CoreMarkPosition> {
@@ -1108,8 +1127,70 @@ impl VimCoreSession {
         &mut self,
         command: &str,
     ) -> Result<CoreCommandTransaction, CoreCommandError> {
+        let previous_pending = self.pending_input();
         let (outcome, snapshot) = self.invoke_native_normal_command(command)?;
-        Ok(self.collect_transaction(outcome, snapshot))
+        let native_pending = self.read_native_pending_argument();
+        let mut transaction = self.collect_transaction(outcome, snapshot);
+        let pending_input = if command.chars().count() == 1 {
+            derive_sequential_pending_input(
+                &previous_pending,
+                command,
+                transaction.snapshot.mode,
+                native_pending,
+            )
+        } else {
+            derive_direct_pending_input(command, transaction.snapshot.mode, native_pending)
+        };
+        self.store_pending_input(pending_input.clone());
+        transaction.snapshot.pending_input = pending_input;
+        Ok(transaction)
+    }
+
+    pub fn dispatch_key(&mut self, key: &str) -> Result<CoreCommandTransaction, CoreCommandError> {
+        if key.is_empty() {
+            return Err(CoreCommandError::InvalidInput);
+        }
+
+        let previous_pending = self.pending_input();
+        let command = format!("{}{}", previous_pending.pending_keys, key);
+        let next_pending = pending_for_dispatch_sequence(&command);
+        debug_log!(
+            "[DEBUG] dispatch_key: key={:?} previous_pending={:?} command={:?} predicted_pending={:?}",
+            key,
+            previous_pending,
+            command,
+            next_pending
+        );
+
+        if next_pending.is_pending() {
+            self.store_pending_input(next_pending.clone());
+            let mut snapshot = self.snapshot();
+            snapshot.pending_input = next_pending;
+            return Ok(CoreCommandTransaction {
+                outcome: CoreCommandOutcome::NoChange,
+                snapshot,
+                events: Vec::new(),
+                host_actions: Vec::new(),
+            });
+        }
+
+        let (outcome, snapshot) = self.invoke_native_normal_command(&command)?;
+        let native_pending = self.read_native_pending_argument();
+        let mut transaction = self.collect_transaction(outcome, snapshot);
+        let pending_input =
+            derive_direct_pending_input(&command, transaction.snapshot.mode, native_pending);
+
+        debug_log!(
+            "[DEBUG] dispatch_key: executed command={:?} mode={:?} native_pending={:?} next_pending={:?}",
+            command,
+            transaction.snapshot.mode,
+            native_pending,
+            pending_input
+        );
+
+        self.store_pending_input(pending_input.clone());
+        transaction.snapshot.pending_input = pending_input;
+        Ok(transaction)
     }
 
     pub fn execute_ex_command(
@@ -1296,6 +1377,7 @@ impl VimCoreSession {
         let host_actions = drained_host_actions;
         let outcome = normalize_transaction_outcome(outcome, &host_actions);
         snapshot.pending_host_actions = host_actions.len();
+        snapshot.pending_input = self.pending_input();
 
         CoreCommandTransaction {
             outcome,
@@ -1303,6 +1385,16 @@ impl VimCoreSession {
             events,
             host_actions,
         }
+    }
+
+    fn read_native_pending_argument(&self) -> Option<CorePendingArgumentKind> {
+        let pending_input = unsafe { bindings::vim_bridge_get_pending_input(self.state.as_ptr()) };
+        convert_native_pending_argument(pending_input)
+    }
+
+    fn store_pending_input(&self, pending_input: CorePendingInput) {
+        debug_log!("[DEBUG] pending_input_transition: {:?}", pending_input);
+        *self.pending_input_state.borrow_mut() = pending_input;
     }
 
     pub fn register(&self, regname: char) -> Option<String> {
@@ -1802,7 +1894,7 @@ fn convert_snapshot(snapshot: bindings::vim_core_snapshot_t) -> CoreSnapshot {
         revision: snapshot.revision,
         dirty: snapshot.dirty,
         mode: convert_mode(snapshot.mode),
-        pending_input: convert_pending_input(snapshot.pending_input),
+        pending_input: CorePendingInput::none(),
         cursor_row: snapshot.cursor_row,
         cursor_col: snapshot.cursor_col,
         pending_host_actions: snapshot.pending_host_actions,
@@ -1987,25 +2079,274 @@ fn normalize_visual_selection_bounds(
     }
 }
 
-fn convert_pending_input(pending_input: bindings::vim_core_pending_input_t) -> CorePendingInput {
+fn convert_native_pending_argument(
+    pending_input: bindings::vim_core_pending_input_t,
+) -> Option<CorePendingArgumentKind> {
     match pending_input {
         value if value == bindings::vim_core_pending_input_VIM_CORE_PENDING_INPUT_CHAR => {
-            CorePendingInput::Char
+            Some(CorePendingArgumentKind::Char)
         }
         value if value == bindings::vim_core_pending_input_VIM_CORE_PENDING_INPUT_REPLACE => {
-            CorePendingInput::Replace
+            Some(CorePendingArgumentKind::ReplaceChar)
         }
         value if value == bindings::vim_core_pending_input_VIM_CORE_PENDING_INPUT_MARK_SET => {
-            CorePendingInput::MarkSet
+            Some(CorePendingArgumentKind::MarkSet)
         }
         value if value == bindings::vim_core_pending_input_VIM_CORE_PENDING_INPUT_MARK_JUMP => {
-            CorePendingInput::MarkJump
+            Some(CorePendingArgumentKind::MarkJump)
         }
         value if value == bindings::vim_core_pending_input_VIM_CORE_PENDING_INPUT_REGISTER => {
-            CorePendingInput::Register
+            Some(CorePendingArgumentKind::Register)
         }
-        _ => CorePendingInput::None,
+        _ => None,
     }
+}
+
+fn pending_input_with_keys(
+    pending_keys: impl Into<String>,
+    awaited_argument: Option<CorePendingArgumentKind>,
+) -> CorePendingInput {
+    CorePendingInput {
+        pending_keys: pending_keys.into(),
+        awaited_argument,
+    }
+}
+
+fn pending_for_dispatch_sequence(sequence: &str) -> CorePendingInput {
+    if sequence.is_empty() {
+        return CorePendingInput::none();
+    }
+
+    let mut chars = sequence.chars();
+    let Some(first) = chars.next() else {
+        return CorePendingInput::none();
+    };
+    let rest = chars.as_str();
+
+    match first {
+        '"' => pending_for_register_prefixed_sequence(sequence, rest),
+        'd' | 'y' | 'c' | '>' | '<' | '=' => pending_for_operator_sequence(sequence, first, rest),
+        'f' | 'F' | 't' | 'T' => {
+            if rest.is_empty() {
+                pending_input_with_keys(sequence, Some(CorePendingArgumentKind::Char))
+            } else {
+                CorePendingInput::none()
+            }
+        }
+        'r' => {
+            if rest.is_empty() {
+                pending_input_with_keys(sequence, Some(CorePendingArgumentKind::ReplaceChar))
+            } else {
+                CorePendingInput::none()
+            }
+        }
+        'm' => {
+            if rest.is_empty() {
+                pending_input_with_keys(sequence, Some(CorePendingArgumentKind::MarkSet))
+            } else {
+                CorePendingInput::none()
+            }
+        }
+        '\'' | '`' => {
+            if rest.is_empty() {
+                pending_input_with_keys(sequence, Some(CorePendingArgumentKind::MarkJump))
+            } else {
+                CorePendingInput::none()
+            }
+        }
+        'g' => pending_for_g_sequence(sequence, rest),
+        _ => CorePendingInput::none(),
+    }
+}
+
+fn pending_for_register_prefixed_sequence(sequence: &str, rest: &str) -> CorePendingInput {
+    if rest.is_empty() {
+        return pending_input_with_keys(sequence, Some(CorePendingArgumentKind::Register));
+    }
+
+    let mut rest_chars = rest.chars();
+    let _register_name = rest_chars.next();
+    let command_tail = rest_chars.as_str();
+    if command_tail.is_empty() {
+        return pending_input_with_keys(sequence, Some(CorePendingArgumentKind::NormalCommand));
+    }
+
+    let tail_pending = pending_for_dispatch_sequence(command_tail);
+    if tail_pending.is_pending() {
+        return pending_input_with_keys(sequence, tail_pending.awaited_argument);
+    }
+
+    CorePendingInput::none()
+}
+
+fn pending_for_operator_sequence(sequence: &str, operator: char, rest: &str) -> CorePendingInput {
+    if rest.is_empty() {
+        return pending_input_with_keys(
+            sequence,
+            Some(CorePendingArgumentKind::MotionOrTextObject),
+        );
+    }
+
+    let mut rest_chars = rest.chars();
+    let Some(first_tail) = rest_chars.next() else {
+        return pending_input_with_keys(
+            sequence,
+            Some(CorePendingArgumentKind::MotionOrTextObject),
+        );
+    };
+    let tail_after_first = rest_chars.as_str();
+
+    if rest.chars().count() == 1 && first_tail == operator {
+        return CorePendingInput::none();
+    }
+
+    if tail_after_first.is_empty() && (first_tail == 'i' || first_tail == 'a' || first_tail == 'g')
+    {
+        return pending_input_with_keys(
+            sequence,
+            Some(CorePendingArgumentKind::MotionOrTextObject),
+        );
+    }
+
+    if tail_after_first.is_empty() && matches!(first_tail, 'f' | 'F' | 't' | 'T' | '\'' | '`') {
+        return pending_input_with_keys(
+            sequence,
+            Some(CorePendingArgumentKind::MotionOrTextObject),
+        );
+    }
+
+    CorePendingInput::none()
+}
+
+fn pending_for_g_sequence(sequence: &str, rest: &str) -> CorePendingInput {
+    if rest.is_empty() {
+        return pending_input_with_keys(sequence, None);
+    }
+
+    if rest.chars().count() == 1 && matches!(rest.chars().next(), Some('q' | 'u' | 'U' | '~')) {
+        return pending_input_with_keys(
+            sequence,
+            Some(CorePendingArgumentKind::MotionOrTextObject),
+        );
+    }
+
+    CorePendingInput::none()
+}
+
+fn derive_direct_pending_input(
+    command: &str,
+    mode: CoreMode,
+    native_pending: Option<CorePendingArgumentKind>,
+) -> CorePendingInput {
+    let pending_command = normalize_pending_command_fragment(command);
+
+    if pending_command.is_empty() {
+        return CorePendingInput::none();
+    }
+
+    if let Some(awaited_argument) = native_pending {
+        debug_log!(
+            "[DEBUG] derive_direct_pending_input: native_pending command={:?} mode={:?} awaited={:?}",
+            pending_command,
+            mode,
+            awaited_argument
+        );
+        return pending_input_with_keys(pending_command, Some(awaited_argument));
+    }
+
+    if mode == CoreMode::OperatorPending {
+        debug_log!(
+            "[DEBUG] derive_direct_pending_input: operator-pending command={:?}",
+            pending_command
+        );
+        return pending_input_with_keys(
+            pending_command,
+            Some(CorePendingArgumentKind::MotionOrTextObject),
+        );
+    }
+
+    if pending_command == "g" {
+        debug_log!(
+            "[DEBUG] derive_direct_pending_input: prefix command={:?}",
+            pending_command
+        );
+        return pending_input_with_keys(pending_command, None);
+    }
+
+    CorePendingInput::none()
+}
+
+fn normalize_pending_command_fragment(command: &str) -> &str {
+    command.rsplit('\x1b').next().unwrap_or(command)
+}
+
+fn derive_sequential_pending_input(
+    previous_pending: &CorePendingInput,
+    key: &str,
+    mode: CoreMode,
+    native_pending: Option<CorePendingArgumentKind>,
+) -> CorePendingInput {
+    let next_pending_keys = format!("{}{}", previous_pending.pending_keys, key);
+
+    let next = match previous_pending.awaited_argument {
+        Some(CorePendingArgumentKind::Register) => pending_input_with_keys(
+            next_pending_keys,
+            Some(CorePendingArgumentKind::NormalCommand),
+        ),
+        Some(CorePendingArgumentKind::NormalCommand)
+        | Some(CorePendingArgumentKind::Char)
+        | Some(CorePendingArgumentKind::ReplaceChar)
+        | Some(CorePendingArgumentKind::MarkSet)
+        | Some(CorePendingArgumentKind::MarkJump) => CorePendingInput::none(),
+        Some(CorePendingArgumentKind::MotionOrTextObject) => {
+            if previous_pending.pending_keys.chars().count() == 1
+                && previous_pending.pending_keys == key
+            {
+                CorePendingInput::none()
+            } else if key == "i" || key == "a" {
+                pending_input_with_keys(
+                    next_pending_keys,
+                    Some(CorePendingArgumentKind::MotionOrTextObject),
+                )
+            } else if let Some(awaited_argument) = native_pending {
+                pending_input_with_keys(next_pending_keys, Some(awaited_argument))
+            } else if mode == CoreMode::OperatorPending {
+                pending_input_with_keys(
+                    next_pending_keys,
+                    Some(CorePendingArgumentKind::MotionOrTextObject),
+                )
+            } else {
+                CorePendingInput::none()
+            }
+        }
+        None => {
+            if let Some(awaited_argument) = native_pending {
+                pending_input_with_keys(next_pending_keys, Some(awaited_argument))
+            } else if mode == CoreMode::OperatorPending {
+                pending_input_with_keys(
+                    next_pending_keys,
+                    Some(CorePendingArgumentKind::MotionOrTextObject),
+                )
+            } else if previous_pending.pending_keys == "g" {
+                CorePendingInput::none()
+            } else if key == "g" {
+                pending_input_with_keys(key, None)
+            } else {
+                CorePendingInput::none()
+            }
+        }
+    };
+
+    debug_log!(
+        "[DEBUG] derive_sequential_pending_input: previous={:?} key={:?} mode={:?} native_pending={:?} next={:?}",
+        previous_pending,
+        key,
+        mode,
+        native_pending,
+        next
+    );
+
+    next
 }
 
 fn convert_mark_position(mark: bindings::vim_core_mark_position_t) -> CoreMarkPosition {

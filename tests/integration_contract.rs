@@ -1,7 +1,15 @@
 use std::sync::{Mutex, OnceLock};
 use vim_core_rs::{
-    CoreCommandOutcome, CoreEvent, CoreHostAction, CoreMode, CorePendingInput, VimCoreSession,
+    CoreCommandOutcome, CoreEvent, CoreHostAction, CoreMode, CorePendingArgumentKind,
+    CorePendingInput, VimCoreSession,
 };
+
+fn pending(keys: &str, awaited_argument: Option<CorePendingArgumentKind>) -> CorePendingInput {
+    CorePendingInput {
+        pending_keys: keys.to_string(),
+        awaited_argument,
+    }
+}
 
 fn session_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -180,9 +188,9 @@ fn snapshot_and_session_state_apis_stay_consistent_within_one_session() {
 
     let initial_snapshot = session.snapshot();
     assert_eq!(initial_snapshot.mode, CoreMode::Normal);
-    assert_eq!(initial_snapshot.pending_input, CorePendingInput::None);
+    assert_eq!(initial_snapshot.pending_input, CorePendingInput::none());
     assert_eq!(session.mode(), CoreMode::Normal);
-    assert_eq!(session.pending_input(), CorePendingInput::None);
+    assert_eq!(session.pending_input(), CorePendingInput::none());
     assert_eq!(session.mark('a').expect("mark should be readable").row, 3);
     assert!(session.jumplist().entries.is_empty());
 
@@ -191,8 +199,8 @@ fn snapshot_and_session_state_apis_stay_consistent_within_one_session() {
         .expect("mark jump should succeed within one injection");
     let jumped_snapshot = session.snapshot();
     assert_eq!(jumped_snapshot.mode, CoreMode::Normal);
-    assert_eq!(jumped_snapshot.pending_input, CorePendingInput::None);
-    assert_eq!(session.pending_input(), CorePendingInput::None);
+    assert_eq!(jumped_snapshot.pending_input, CorePendingInput::none());
+    assert_eq!(session.pending_input(), CorePendingInput::none());
     assert_eq!(jumped_snapshot.cursor_row, 3);
 
     let jumplist_after_jump = session.jumplist();
@@ -211,8 +219,8 @@ fn snapshot_and_session_state_apis_stay_consistent_within_one_session() {
     let visual_snapshot = session.snapshot();
     assert_eq!(visual_snapshot.mode, CoreMode::Visual);
     assert_eq!(session.mode(), CoreMode::Visual);
-    assert_eq!(visual_snapshot.pending_input, CorePendingInput::None);
-    assert_eq!(session.pending_input(), CorePendingInput::None);
+    assert_eq!(visual_snapshot.pending_input, CorePendingInput::none());
+    assert_eq!(session.pending_input(), CorePendingInput::none());
     assert_eq!(
         session.mark('a').expect("mark should stay available").row,
         3
@@ -223,14 +231,20 @@ fn snapshot_and_session_state_apis_stay_consistent_within_one_session() {
         .expect("escape then R should enter replace mode");
     assert_eq!(session.mode(), CoreMode::Replace);
     assert_eq!(session.snapshot().mode, CoreMode::Replace);
-    assert_eq!(session.pending_input(), CorePendingInput::None);
+    assert_eq!(session.pending_input(), CorePendingInput::none());
 
     session
         .execute_normal_command("\x1bf")
         .expect("escape then f should enter char-pending state");
     assert_eq!(session.mode(), CoreMode::Normal);
-    assert_eq!(session.pending_input(), CorePendingInput::Char);
-    assert_eq!(session.snapshot().pending_input, CorePendingInput::Char);
+    assert_eq!(
+        session.pending_input(),
+        pending("f", Some(CorePendingArgumentKind::Char))
+    );
+    assert_eq!(
+        session.snapshot().pending_input,
+        pending("f", Some(CorePendingArgumentKind::Char))
+    );
     assert_eq!(
         session
             .mark('a')
