@@ -426,6 +426,15 @@ pub struct CoreSnapshot {
     pub pum: Option<CorePumInfo>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CoreVisualSelection {
+    pub mode: CoreMode,
+    pub start_row: usize,
+    pub start_col: usize,
+    pub end_row: usize,
+    pub end_col: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreCommandError {
     InvalidInput,
@@ -581,6 +590,29 @@ impl VimCoreSession {
         }
 
         Some(convert_mark_position(mark))
+    }
+
+    pub fn current_visual_selection(&mut self) -> Option<CoreVisualSelection> {
+        let snapshot = self.snapshot();
+        if !core_mode_is_visual(snapshot.mode) {
+            return None;
+        }
+
+        let current = (snapshot.cursor_row, snapshot.cursor_col);
+        self.execute_normal_command("o").ok()?;
+        let swapped = self.snapshot();
+        let anchor = (swapped.cursor_row, swapped.cursor_col);
+        self.execute_normal_command("o").ok()?;
+
+        let ((start_row, start_col), (end_row, end_col)) =
+            normalize_visual_selection_bounds(anchor, current);
+        Some(CoreVisualSelection {
+            mode: snapshot.mode,
+            start_row,
+            start_col,
+            end_row,
+            end_col,
+        })
     }
 
     pub fn set_mark(
@@ -1934,6 +1966,24 @@ fn convert_mode(mode: bindings::vim_core_mode_t) -> CoreMode {
             CoreMode::OperatorPending
         }
         _ => CoreMode::Normal,
+    }
+}
+
+fn core_mode_is_visual(mode: CoreMode) -> bool {
+    matches!(
+        mode,
+        CoreMode::Visual | CoreMode::VisualLine | CoreMode::VisualBlock
+    )
+}
+
+fn normalize_visual_selection_bounds(
+    first: (usize, usize),
+    second: (usize, usize),
+) -> ((usize, usize), (usize, usize)) {
+    if first <= second {
+        (first, second)
+    } else {
+        (second, first)
     }
 }
 

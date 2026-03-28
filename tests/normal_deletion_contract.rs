@@ -160,3 +160,34 @@ fn deleting_last_line_moves_cursor_up() {
     assert_eq!(snapshot.text, "line 1\n");
     assert_eq!(snapshot.cursor_row, 0); // Cursor should move up to the new last line
 }
+
+#[test]
+fn dd_after_inserted_text_deletes_the_current_line_semantics() {
+    let _guard = acquire_session_test_lock();
+    let mut session =
+        VimCoreSession::new("line1\nline2\nline3\n").expect("session should initialize");
+
+    session.execute_normal_command("jiXY\x1b").expect("edit second line");
+    assert_eq!(session.snapshot().text, "line1\nXYline2\nline3\n");
+    assert_eq!(session.snapshot().revision, 1);
+    assert_eq!(session.snapshot().mode, CoreMode::Normal);
+    assert_eq!(session.snapshot().cursor_row, 1);
+    assert_eq!(session.snapshot().cursor_col, 1);
+
+    let outcome = session
+        .execute_normal_command("dd")
+        .expect("dd should succeed after insert");
+
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::BufferChanged { revision: 2 }
+    ));
+
+    let snapshot = session.snapshot();
+    assert_eq!(snapshot.text, "line1\nline3\n");
+    assert_eq!(snapshot.mode, CoreMode::Normal);
+    assert_eq!(snapshot.cursor_row, 1);
+    assert_eq!(snapshot.cursor_col, 0);
+    assert_eq!(snapshot.revision, 2);
+    assert!(snapshot.dirty);
+}

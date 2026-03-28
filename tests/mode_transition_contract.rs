@@ -128,3 +128,39 @@ fn operator_pending_mode_is_reported_in_snapshot() {
     assert_eq!(session.snapshot().mode, CoreMode::OperatorPending);
     assert_eq!(session.mode(), CoreMode::OperatorPending);
 }
+
+#[test]
+fn insert_round_trip_after_motion_keeps_editing_semantics_in_core() {
+    let _guard = acquire_session_test_lock();
+    let mut session =
+        VimCoreSession::new("line1\nline2\nline3\n").expect("session should initialize");
+
+    session.execute_normal_command("j").expect("j command");
+    assert_eq!(session.snapshot().cursor_row, 1);
+    assert_eq!(session.snapshot().mode, CoreMode::Normal);
+
+    let insert_outcome = session.execute_normal_command("i").expect("i command");
+    assert_eq!(
+        insert_outcome.outcome,
+        vim_core_rs::CoreCommandOutcome::ModeChanged {
+            mode: CoreMode::Insert
+        }
+    );
+    assert_eq!(session.snapshot().mode, CoreMode::Insert);
+
+    let text_outcome = session
+        .execute_normal_command("XY\x1b")
+        .expect("insert text then escape");
+    assert_eq!(
+        text_outcome.outcome,
+        vim_core_rs::CoreCommandOutcome::BufferChanged { revision: 1 }
+    );
+
+    let snapshot = session.snapshot();
+    assert_eq!(snapshot.mode, CoreMode::Normal);
+    assert_eq!(snapshot.cursor_row, 1);
+    assert_eq!(snapshot.cursor_col, 1);
+    assert_eq!(snapshot.text, "line1\nXYline2\nline3\n");
+    assert!(snapshot.dirty);
+    assert_eq!(snapshot.revision, 1);
+}
