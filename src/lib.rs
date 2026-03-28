@@ -2352,7 +2352,22 @@ fn derive_direct_pending_input(
         return CorePendingInput::none();
     }
 
-    if let Some(awaited_argument) = native_pending {
+    let predicted_pending = if mode_uses_normal_sequence_grammar(mode) {
+        pending_for_dispatch_sequence(pending_command)
+    } else {
+        CorePendingInput::none()
+    };
+    if predicted_pending.is_pending() {
+        debug_log!(
+            "[DEBUG] derive_direct_pending_input: predicted_pending command={:?} mode={:?} predicted={:?}",
+            pending_command,
+            mode,
+            predicted_pending
+        );
+        return predicted_pending;
+    }
+
+    if let Some(awaited_argument) = native_pending.filter(|_| pending_command.chars().count() == 1) {
         debug_log!(
             "[DEBUG] derive_direct_pending_input: native_pending command={:?} mode={:?} awaited={:?}",
             pending_command,
