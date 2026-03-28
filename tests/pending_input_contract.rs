@@ -12,9 +12,14 @@ fn acquire_session_test_lock() -> MutexGuard<'static, ()> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-fn pending(keys: &str, awaited_argument: Option<CorePendingArgumentKind>) -> CorePendingInput {
+fn pending(
+    keys: &str,
+    count: Option<usize>,
+    awaited_argument: Option<CorePendingArgumentKind>,
+) -> CorePendingInput {
     CorePendingInput {
         pending_keys: keys.to_string(),
+        count,
         awaited_argument,
     }
 }
@@ -38,11 +43,11 @@ fn find_and_till_commands_report_char_pending_until_completed() {
         .expect("f should succeed");
     assert_eq!(
         session.pending_input(),
-        pending("f", Some(CorePendingArgumentKind::Char))
+        pending("f", None, Some(CorePendingArgumentKind::Char))
     );
     assert_eq!(
         session.snapshot().pending_input,
-        pending("f", Some(CorePendingArgumentKind::Char))
+        pending("f", None, Some(CorePendingArgumentKind::Char))
     );
 
     session
@@ -59,7 +64,7 @@ fn find_and_till_commands_report_char_pending_until_completed() {
         .expect("t should succeed");
     assert_eq!(
         session.pending_input(),
-        pending("t", Some(CorePendingArgumentKind::Char))
+        pending("t", None, Some(CorePendingArgumentKind::Char))
     );
 
     session
@@ -78,11 +83,11 @@ fn replace_mark_and_register_commands_report_specialized_pending_kinds() {
         .expect("r should succeed");
     assert_eq!(
         session.pending_input(),
-        pending("r", Some(CorePendingArgumentKind::ReplaceChar))
+        pending("r", None, Some(CorePendingArgumentKind::ReplaceChar))
     );
     assert_eq!(
         session.snapshot().pending_input,
-        pending("r", Some(CorePendingArgumentKind::ReplaceChar))
+        pending("r", None, Some(CorePendingArgumentKind::ReplaceChar))
     );
 
     session
@@ -95,7 +100,7 @@ fn replace_mark_and_register_commands_report_specialized_pending_kinds() {
         .expect("m should succeed");
     assert_eq!(
         session.pending_input(),
-        pending("m", Some(CorePendingArgumentKind::MarkSet))
+        pending("m", None, Some(CorePendingArgumentKind::MarkSet))
     );
     session
         .execute_normal_command("a")
@@ -107,14 +112,14 @@ fn replace_mark_and_register_commands_report_specialized_pending_kinds() {
         .expect("\" should succeed");
     assert_eq!(
         session.pending_input(),
-        pending("\"", Some(CorePendingArgumentKind::Register))
+        pending("\"", None, Some(CorePendingArgumentKind::Register))
     );
     session
         .execute_normal_command("a")
         .expect("register name should succeed");
     assert_eq!(
         session.pending_input(),
-        pending("\"a", Some(CorePendingArgumentKind::NormalCommand))
+        pending("\"a", None, Some(CorePendingArgumentKind::NormalCommand))
     );
 }
 
@@ -128,11 +133,11 @@ fn mark_jump_commands_report_pending_when_current_input_model_can_observe_them()
         .expect("' should succeed");
     assert_eq!(
         session.pending_input(),
-        pending("'", Some(CorePendingArgumentKind::MarkJump))
+        pending("'", None, Some(CorePendingArgumentKind::MarkJump))
     );
     assert_eq!(
         session.snapshot().pending_input,
-        pending("'", Some(CorePendingArgumentKind::MarkJump))
+        pending("'", None, Some(CorePendingArgumentKind::MarkJump))
     );
 
     session
@@ -145,7 +150,7 @@ fn mark_jump_commands_report_pending_when_current_input_model_can_observe_them()
         .expect("` should succeed");
     assert_eq!(
         session.pending_input(),
-        pending("`", Some(CorePendingArgumentKind::MarkJump))
+        pending("`", None, Some(CorePendingArgumentKind::MarkJump))
     );
     session
         .execute_normal_command("a")

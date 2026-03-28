@@ -4,9 +4,14 @@ use vim_core_rs::{
     CorePendingInput, VimCoreSession,
 };
 
-fn pending(keys: &str, awaited_argument: Option<CorePendingArgumentKind>) -> CorePendingInput {
+fn pending(
+    keys: &str,
+    count: Option<usize>,
+    awaited_argument: Option<CorePendingArgumentKind>,
+) -> CorePendingInput {
     CorePendingInput {
         pending_keys: keys.to_string(),
+        count,
         awaited_argument,
     }
 }
@@ -239,11 +244,11 @@ fn snapshot_and_session_state_apis_stay_consistent_within_one_session() {
     assert_eq!(session.mode(), CoreMode::Normal);
     assert_eq!(
         session.pending_input(),
-        pending("f", Some(CorePendingArgumentKind::Char))
+        pending("f", None, Some(CorePendingArgumentKind::Char))
     );
     assert_eq!(
         session.snapshot().pending_input,
-        pending("f", Some(CorePendingArgumentKind::Char))
+        pending("f", None, Some(CorePendingArgumentKind::Char))
     );
     assert_eq!(
         session
