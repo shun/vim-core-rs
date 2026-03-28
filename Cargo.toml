@@ -28,6 +28,7 @@ include = [
   "/vim-source-allowlist.txt",
   "/vim-source-build-manifest.txt",
   "/upstream-metadata.json",
+  "/upstream-test-classification.json",
   "/upstream-test-skiplist.txt",
 ]
 
