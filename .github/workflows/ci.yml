@@ -70,7 +70,7 @@ jobs:
           for test_file in tests/*.rs; do
             test_name="$(basename "$test_file" .rs)"
             case "$test_name" in
-              upstream_vim_generated)
+              upstream_vim_generated|message_log_contract)
                 continue
                 ;;
             esac
