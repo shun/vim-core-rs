@@ -633,6 +633,8 @@ void mch_clear_job(job_T *job) {
 upstream_runtime_session_t* upstream_runtime_session_new(const char* initial_text, uintptr_t text_len) {
     upstream_runtime_bootstrap();
     upstream_runtime_register_callbacks();
+    /* Embedded runtime still needs full-screen layout behavior for viewport sync. */
+    full_screen = TRUE;
 
     /* Clear any leftover typeahead from previous sessions/tests */
     if (typebuf.tb_len > 0) {

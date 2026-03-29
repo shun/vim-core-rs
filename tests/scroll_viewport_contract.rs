@@ -97,6 +97,226 @@ fn page_scroll_back_restores_previous_topline() {
 }
 
 #[test]
+fn single_line_motion_keeps_topline_stable_after_screen_resize() {
+    let _guard = acquire_session_test_lock();
+
+    let text = (1..=20)
+        .map(|i| format!("line {}", i))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut session = VimCoreSession::new(&text).expect("session should initialize");
+    session.set_screen_size(12, 80);
+
+    let initial_snapshot = session.snapshot();
+    let initial_win = &initial_snapshot.windows[0];
+    assert_eq!(initial_win.topline, 1, "Initial topline should be 1");
+    assert!(
+        initial_win.botline > initial_win.topline,
+        "Initial viewport should span multiple lines"
+    );
+
+    session.dispatch_key("j").expect("j should succeed");
+
+    let moved_snapshot = session.snapshot();
+    let moved_win = &moved_snapshot.windows[0];
+    assert_eq!(
+        moved_snapshot.cursor_row, 1,
+        "Cursor should move down one line"
+    );
+    assert_eq!(
+        moved_win.topline, 1,
+        "Single-line motion should not scroll the viewport immediately"
+    );
+    assert!(
+        moved_win.botline > moved_win.topline,
+        "Viewport height should remain valid after single-line motion"
+    );
+}
+
+#[test]
+fn repeated_resize_keeps_topline_stable_after_single_line_motion() {
+    let _guard = acquire_session_test_lock();
+
+    let text = (1..=20)
+        .map(|i| format!("line {}", i))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut session = VimCoreSession::new(&text).expect("session should initialize");
+    session.set_screen_size(24, 80);
+    session.set_screen_size(18, 80);
+    session.set_screen_size(12, 80);
+
+    let initial_snapshot = session.snapshot();
+    let initial_win = &initial_snapshot.windows[0];
+    assert_eq!(initial_win.topline, 1, "Initial topline should be 1");
+
+    session.dispatch_key("j").expect("j should succeed");
+
+    let moved_snapshot = session.snapshot();
+    let moved_win = &moved_snapshot.windows[0];
+    assert_eq!(
+        moved_snapshot.cursor_row, 1,
+        "Cursor should move down one line"
+    );
+    assert_eq!(
+        moved_win.topline, 1,
+        "Repeated resize should not make single-line motion scroll the viewport"
+    );
+}
+
+#[test]
+fn split_window_keeps_topline_stable_after_single_line_motion() {
+    let _guard = acquire_session_test_lock();
+
+    let text = (1..=20)
+        .map(|i| format!("line {}", i))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut session = VimCoreSession::new(&text).expect("session should initialize");
+    session.set_screen_size(12, 80);
+    session
+        .execute_ex_command(":split")
+        .expect("split should succeed");
+
+    let windows = session.windows();
+    assert!(
+        windows.iter().any(|window| window.is_active),
+        "Split should leave an active window"
+    );
+    let active_before = windows
+        .iter()
+        .find(|window| window.is_active)
+        .cloned()
+        .expect("split should leave an active window");
+    let snapshot_before = session.snapshot();
+    let cursor_before = snapshot_before.cursor_row;
+
+    session.dispatch_key("j").expect("j should succeed");
+
+    let snapshot_after = session.snapshot();
+    let active_after = session
+        .windows()
+        .iter()
+        .find(|window| window.is_active)
+        .cloned()
+        .expect("split should still leave an active window");
+    assert_eq!(
+        snapshot_after.cursor_row,
+        cursor_before + 1,
+        "Single-line motion after split should move the cursor down one line"
+    );
+    assert_eq!(
+        active_after.topline, active_before.topline,
+        "Single-line motion after split should not scroll the active window"
+    );
+}
+
+#[test]
+fn vertical_and_horizontal_resize_keep_topline_stable_separately() {
+    let _guard = acquire_session_test_lock();
+
+    let text = (1..=20)
+        .map(|i| format!("line {}", i))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    {
+        let mut session = VimCoreSession::new(&text).expect("session should initialize");
+        session.set_screen_size(24, 80);
+        session.set_screen_size(12, 80);
+
+        session.dispatch_key("j").expect("j should succeed");
+
+        let snapshot = session.snapshot();
+        assert_eq!(
+            snapshot.windows[0].topline, 1,
+            "Vertical resize should not make single-line motion scroll the viewport"
+        );
+    }
+
+    {
+        let mut session = VimCoreSession::new(&text).expect("session should initialize");
+        session.set_screen_size(24, 80);
+        session.set_screen_size(24, 120);
+
+        session.dispatch_key("j").expect("j should succeed");
+
+        let snapshot = session.snapshot();
+        assert_eq!(
+            snapshot.windows[0].topline, 1,
+            "Horizontal resize should not make single-line motion scroll the viewport"
+        );
+    }
+}
+
+#[test]
+fn recreated_session_keeps_topline_stable_after_single_line_motion() {
+    let _guard = acquire_session_test_lock();
+
+    let text = (1..=20)
+        .map(|i| format!("line {}", i))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    {
+        let mut session = VimCoreSession::new(&text).expect("session should initialize");
+        session.set_screen_size(12, 80);
+        session.set_screen_size(18, 80);
+        session
+            .execute_ex_command(":split")
+            .expect("split should succeed");
+
+        session.dispatch_key("j").expect("j should succeed");
+
+        let snapshot = session.snapshot();
+        assert_eq!(snapshot.cursor_row, 1);
+        assert_eq!(
+            snapshot
+                .windows
+                .iter()
+                .find(|w| w.is_active)
+                .unwrap()
+                .topline,
+            1
+        );
+    }
+
+    {
+        let mut session = VimCoreSession::new(&text).expect("session should initialize");
+        session.set_screen_size(12, 80);
+        let snapshot = session.snapshot();
+        assert_eq!(
+            snapshot
+                .windows
+                .iter()
+                .find(|w| w.is_active)
+                .unwrap()
+                .topline,
+            1,
+            "A recreated session should start with a stable topline even after the previous session resized and split"
+        );
+
+        session.dispatch_key("j").expect("j should succeed");
+
+        let snapshot = session.snapshot();
+        assert_eq!(
+            snapshot.cursor_row, 1,
+            "Recreated session should still move the cursor down one line"
+        );
+        assert_eq!(
+            snapshot
+                .windows
+                .iter()
+                .find(|w| w.is_active)
+                .unwrap()
+                .topline,
+            1,
+            "Recreated session should keep the viewport stable"
+        );
+    }
+}
+
+#[test]
 fn horizontal_scroll_updates_viewport_boundaries() {
     let _guard = acquire_session_test_lock();
 
