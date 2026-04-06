@@ -108,6 +108,9 @@ An embedding host must implement these behaviors.
 - Feed stdout and stderr bytes back through `inject_vfd_data()`.
 - Report terminal job status through `notify_job_status()`.
 - Set UI size with `set_screen_size()` when screen geometry matters.
+- Treat `window_id` as the only canonical pane identity. Resolve focus with
+  `active_window_id()` or the unique active entry in `CoreSnapshot.windows`,
+  not with host-side ordering or buffer heuristics.
 - Read `CoreEvent::Message`, `CoreEvent::PagerPrompt`, `CoreEvent::Bell`,
   `CoreEvent::Redraw`, and layout or buffer lifecycle events from the
   transaction result or event queue. Do not scrape `:messages` or
@@ -128,6 +131,9 @@ An agent reading this repository must not assume any of the following.
   responses can be rejected as stale when revisions advance.
 - Do not assume the embedded runtime owns process execution. It only requests
   host action.
+- Do not assume pane identity or active-pane resolution from window ordering,
+  buffer identity, or host layout heuristics. Use `window_id`,
+  `active_window_id()`, and per-window snapshot fields.
 
 ## Source-of-truth hierarchy
 

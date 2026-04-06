@@ -18,6 +18,7 @@
 #include "proto/usercmd.pro"
 #include "proto/memline.pro"
 #include "proto/option.pro"
+#include "proto/ex_getln.pro"
 #include "proto/buffer.pro"
 #include "proto/window.pro"
 #include "proto/screen.pro"
@@ -875,23 +876,26 @@ static int upstream_runtime_try_intercept_ex(
         return TRUE;
     }
 
-    /* :exit, :exi */
+    /* :exit, :exi — Write + Quit（dirty 判定は Rust 側で実施） */
     if (upstream_runtime_cmd_matches(cmd, cmd_len, "exit", 3)) {
-        
+
+        upstream_runtime_dispatch_core_write(session, arg, force);
         upstream_runtime_dispatch_core_quit(session, force);
         return TRUE;
     }
 
-    /* :xit, :x */
+    /* :xit, :x — Write + Quit（dirty 判定は Rust 側で実施） */
     if (upstream_runtime_cmd_matches(cmd, cmd_len, "xit", 1)) {
-        
+
+        upstream_runtime_dispatch_core_write(session, arg, force);
         upstream_runtime_dispatch_core_quit(session, force);
         return TRUE;
     }
 
-    /* :wq */
+    /* :wq — Write を先にキュー、次に Quit（ホストが save-before-quit を調整） */
     if (upstream_runtime_cmd_matches(cmd, cmd_len, "wq", 2)) {
-        
+
+        upstream_runtime_dispatch_core_write(session, arg, force);
         upstream_runtime_dispatch_core_quit(session, force);
         return TRUE;
     }
@@ -904,10 +908,11 @@ static int upstream_runtime_try_intercept_ex(
         return TRUE;
     }
 
-    /* :wqall, :wqa, :xall, :xa */
+    /* :wqall, :wqa, :xall, :xa — Write + Quit（save-before-quit 用） */
     if (upstream_runtime_cmd_matches(cmd, cmd_len, "wqall", 3)
         || upstream_runtime_cmd_matches(cmd, cmd_len, "xall", 2)) {
-        
+
+        upstream_runtime_dispatch_core_write(session, arg, force);
         upstream_runtime_dispatch_core_quit(session, force);
         return TRUE;
     }
@@ -1464,6 +1469,8 @@ static void upstream_runtime_populate_windows(vim_core_snapshot_t* snapshot) {
         infos[idx].botline = (uintptr_t)wp->w_botline;
         infos[idx].leftcol = (uintptr_t)wp->w_leftcol;
         infos[idx].skipcol = (uintptr_t)wp->w_skipcol;
+        infos[idx].cursor_row = (uintptr_t)wp->w_cursor.lnum - 1;
+        infos[idx].cursor_col = (uintptr_t)wp->w_cursor.col;
         infos[idx].is_active = (wp == curwin) ? true : false;
         
     }
@@ -2733,6 +2740,195 @@ void upstream_runtime_enqueue_bell_for_active_session(void) {
  * Search Highlight Extraction API 
  */
 
+static char* upstream_runtime_leased_search_string = NULL;
+
+static int upstream_runtime_search_cmdline_type(void) {
+    cmdline_info_T* cmdline = get_cmdline_info();
+
+    if ((State & MODE_CMDLINE) == 0 || cmdline == NULL || cmdline->cmdbuff == NULL) {
+        return NUL;
+    }
+
+    if (cmdline->cmdfirstc == NUL) {
+        return '-';
+    }
+
+    return cmdline->cmdfirstc;
+}
+
+static char_u* upstream_runtime_search_cmdline_pattern(void) {
+    int cmd_type = upstream_runtime_search_cmdline_type();
+    cmdline_info_T* cmdline = get_cmdline_info();
+
+    if (cmd_type != '/' && cmd_type != '?') {
+        return NULL;
+    }
+
+    if (cmdline == NULL || cmdline->cmdbuff == NULL || cmdline->cmdlen == 0) {
+        return NULL;
+    }
+
+    return vim_strnsave(cmdline->cmdbuff, cmdline->cmdlen);
+}
+
+static int upstream_runtime_incsearch_active(void) {
+    int cmd_type;
+
+    if (!p_is) {
+        return FALSE;
+    }
+
+    cmd_type = upstream_runtime_search_cmdline_type();
+    return cmd_type == '/' || cmd_type == '?';
+}
+
+static int upstream_runtime_range_contains_cursor(
+    linenr_T start_row,
+    colnr_T start_col,
+    linenr_T end_row,
+    colnr_T end_col,
+    pos_T cursor
+) {
+    if (cursor.lnum < start_row || cursor.lnum > end_row) {
+        return FALSE;
+    }
+
+    if (start_row == end_row) {
+        return cursor.col >= start_col && cursor.col < end_col;
+    }
+
+    if (cursor.lnum == start_row) {
+        return cursor.col >= start_col;
+    }
+
+    if (cursor.lnum == end_row) {
+        return cursor.col < end_col;
+    }
+
+    return TRUE;
+}
+
+static int upstream_runtime_locate_incsearch_match(win_T* wp, pos_T* match_pos) {
+    char_u* pattern = upstream_runtime_search_cmdline_pattern();
+    size_t pattern_len = 0;
+    int cmd_type = upstream_runtime_search_cmdline_type();
+    int direction = cmd_type == '?' ? BACKWARD : FORWARD;
+    int found = FAIL;
+    win_T* saved_curwin = curwin;
+    buf_T* saved_curbuf = curbuf;
+    pos_T start_pos;
+
+    if (wp == NULL || wp->w_buffer == NULL || match_pos == NULL || pattern == NULL) {
+        vim_free(pattern);
+        return FALSE;
+    }
+
+    pattern_len = STRLEN(pattern);
+    start_pos = wp->w_cursor;
+    curwin = wp;
+    curbuf = wp->w_buffer;
+    found = searchit(
+        wp,
+        wp->w_buffer,
+        &start_pos,
+        NULL,
+        direction,
+        pattern,
+        pattern_len,
+        1,
+        SEARCH_KEEP,
+        RE_SEARCH,
+        NULL
+    );
+    curwin = saved_curwin;
+    curbuf = saved_curbuf;
+    vim_free(pattern);
+
+    if (found == FAIL) {
+        return FALSE;
+    }
+
+    *match_pos = start_pos;
+    return TRUE;
+}
+
+static int upstream_runtime_prepare_search_regmatch(
+    win_T* wp,
+    int use_incsearch_pattern,
+    regmmatch_T* regmatch
+) {
+    char_u* pattern = NULL;
+    size_t pattern_len = 0;
+    int compiled = FALSE;
+    win_T* saved_curwin = curwin;
+    buf_T* saved_curbuf = curbuf;
+
+    if (wp == NULL || wp->w_buffer == NULL || regmatch == NULL) {
+        return FALSE;
+    }
+
+    curwin = wp;
+    curbuf = wp->w_buffer;
+
+    if (use_incsearch_pattern) {
+        pattern = upstream_runtime_search_cmdline_pattern();
+        if (pattern != NULL) {
+            pattern_len = STRLEN(pattern);
+            compiled = search_regcomp(
+                pattern,
+                pattern_len,
+                NULL,
+                RE_SEARCH,
+                RE_SEARCH,
+                SEARCH_KEEP,
+                regmatch
+            ) == OK;
+        }
+        vim_free(pattern);
+    } else {
+        pattern = last_search_pattern();
+        pattern_len = last_search_pattern_len();
+        if (pattern != NULL && *pattern != NUL) {
+            compiled = search_regcomp(
+                pattern,
+                pattern_len,
+                NULL,
+                RE_SEARCH,
+                RE_SEARCH,
+                SEARCH_KEEP,
+                regmatch
+            ) == OK;
+        }
+    }
+
+    curwin = saved_curwin;
+    curbuf = saved_curbuf;
+    return compiled;
+}
+
+static const char* upstream_runtime_store_search_string(char_u* value) {
+    size_t len;
+
+    free(upstream_runtime_leased_search_string);
+    upstream_runtime_leased_search_string = NULL;
+
+    if (value == NULL || *value == NUL) {
+        vim_free(value);
+        return "";
+    }
+
+    len = STRLEN(value);
+    upstream_runtime_leased_search_string = (char*)malloc(len + 1);
+    if (upstream_runtime_leased_search_string == NULL) {
+        vim_free(value);
+        return "";
+    }
+
+    memcpy(upstream_runtime_leased_search_string, value, len + 1);
+    vim_free(value);
+    return upstream_runtime_leased_search_string;
+}
+
 const char* vim_bridge_get_search_pattern(void) {
     char_u* pat = last_search_pat();
     if (pat == NULL) return "";
@@ -2748,30 +2944,51 @@ int vim_bridge_get_search_direction(void) {
 }
 
 int vim_bridge_is_incsearch_active(void) {
-    return 0; // TODO: Implement incsearch active check
+    return upstream_runtime_incsearch_active() ? 1 : 0;
 }
 
 const char* vim_bridge_get_incsearch_pattern(void) {
-    return ""; // TODO: Implement incsearch pattern
+    if (!upstream_runtime_incsearch_active()) {
+        return "";
+    }
+
+    return upstream_runtime_store_search_string(
+        upstream_runtime_search_cmdline_pattern()
+    );
+}
+
+const char* vim_bridge_get_search_input_pattern(void) {
+    return upstream_runtime_store_search_string(
+        upstream_runtime_search_cmdline_pattern()
+    );
 }
 
 vim_core_match_list_t vim_bridge_get_search_highlights(int window_id, int start_row, int end_row) {
     vim_core_match_list_t list;
+    int incsearch_active = upstream_runtime_incsearch_active();
+    regmmatch_T regmatch;
+    pos_T cursor;
+    pos_T incsearch_match;
+    int has_incsearch_match = FALSE;
     list.count = 0;
     list.ranges = NULL;
 
-    if (!vim_bridge_is_hlsearch_active()) return list;
+    if (!incsearch_active && !vim_bridge_is_hlsearch_active()) return list;
 
     win_T* wp = win_id2wp(window_id);
     if (wp == NULL || wp->w_buffer == NULL) return list;
     buf_T* buf = wp->w_buffer;
+    cursor = wp->w_cursor;
+    if (incsearch_active) {
+        has_incsearch_match = upstream_runtime_locate_incsearch_match(
+            wp,
+            &incsearch_match
+        );
+    }
 
-    char_u* pat = last_search_pat();
-    if (pat == NULL || *pat == NUL) return list;
-
-    regmmatch_T regmatch;
-    last_pat_prog(&regmatch);
-    if (regmatch.regprog == NULL) return list;
+    if (!upstream_runtime_prepare_search_regmatch(wp, incsearch_active, &regmatch)) {
+        return list;
+    }
 
     int capacity = 16;
     list.ranges = (vim_core_match_range_t*)malloc(sizeof(vim_core_match_range_t) * capacity);
@@ -2795,7 +3012,21 @@ vim_core_match_list_t vim_bridge_get_search_highlights(int window_id, int start_
                 list.ranges[list.count].start_col = regmatch.startpos[0].col;
                 list.ranges[list.count].end_row = r + regmatch.endpos[0].lnum;
                 list.ranges[list.count].end_col = regmatch.endpos[0].col;
-                list.ranges[list.count].match_type = VIM_CORE_MATCH_REGULAR;
+                list.ranges[list.count].match_type =
+                    (incsearch_active && has_incsearch_match
+                        && list.ranges[list.count].start_row == incsearch_match.lnum
+                        && list.ranges[list.count].start_col == incsearch_match.col)
+                    || upstream_runtime_range_contains_cursor(
+                        list.ranges[list.count].start_row,
+                        list.ranges[list.count].start_col,
+                        list.ranges[list.count].end_row,
+                        list.ranges[list.count].end_col,
+                        cursor
+                    )
+                        ? VIM_CORE_MATCH_CURSEARCH
+                        : (incsearch_active
+                            ? VIM_CORE_MATCH_INCSEARCH
+                            : VIM_CORE_MATCH_REGULAR);
                 list.count++;
             }
 

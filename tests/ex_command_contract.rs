@@ -162,7 +162,7 @@ fn ex_quit_bang_queues_force_quit_action() {
 }
 
 #[test]
-fn ex_wq_is_intercepted_as_quit_action() {
+fn ex_wq_is_intercepted_as_write_then_quit_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
 
@@ -175,16 +175,56 @@ fn ex_wq_is_intercepted_as_quit_action() {
         CoreCommandOutcome::HostActionQueued
     ));
 
-    assert!(matches!(
-        outcome.host_actions.as_slice(),
-        [CoreHostAction::Quit { .. }]
-    ));
+    // :wq は Write → Quit の順でホストアクションをキューする
+    assert!(
+        matches!(
+            outcome.host_actions.as_slice(),
+            [CoreHostAction::Write { .. }, CoreHostAction::Quit { .. }]
+        ),
+        "Expected [Write, Quit], got {:?}",
+        outcome.host_actions
+    );
+
+    // Write の path は空文字列（カレントバッファ対象）
+    if let CoreHostAction::Write { path, .. } = &outcome.host_actions[0] {
+        assert_eq!(path, "");
+    }
 }
 
 #[test]
-fn ex_xit_is_intercepted_as_quit_action() {
+fn ex_xit_is_intercepted_as_quit_action_on_clean_buffer() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
+
+    // clean buffer では :xit は Quit のみ（Write は不要）
+    let outcome = session
+        .execute_ex_command(":x")
+        .expect("xit command should succeed");
+
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::HostActionQueued
+    ));
+
+    assert!(
+        matches!(
+            outcome.host_actions.as_slice(),
+            [CoreHostAction::Quit { .. }]
+        ),
+        "Expected [Quit] on clean buffer, got {:?}",
+        outcome.host_actions
+    );
+}
+
+#[test]
+fn ex_xit_is_intercepted_as_write_then_quit_on_dirty_buffer() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("some content").expect("session should initialize");
+
+    // バッファを dirty にする
+    session
+        .execute_ex_command(":normal! ihello")
+        .expect("insert should succeed");
 
     let outcome = session
         .execute_ex_command(":x")
@@ -195,10 +235,15 @@ fn ex_xit_is_intercepted_as_quit_action() {
         CoreCommandOutcome::HostActionQueued
     ));
 
-    assert!(matches!(
-        outcome.host_actions.as_slice(),
-        [CoreHostAction::Quit { .. }]
-    ));
+    // dirty buffer では :xit は Write → Quit の順でキューする
+    assert!(
+        matches!(
+            outcome.host_actions.as_slice(),
+            [CoreHostAction::Write { .. }, CoreHostAction::Quit { .. }]
+        ),
+        "Expected [Write, Quit] on dirty buffer, got {:?}",
+        outcome.host_actions
+    );
 }
 
 #[test]
@@ -277,7 +322,7 @@ fn multiple_ex_commands_can_queue_multiple_actions() {
 }
 
 #[test]
-fn ex_compound_command_with_write_is_not_intercepted_yet() {
+fn ex_compound_command_with_write_is_intercepted() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");
 
@@ -286,25 +331,35 @@ fn ex_compound_command_with_write_is_not_intercepted_yet() {
         fs::remove_file(test_file).ok();
     }
 
-    // CURRENT LIMITATION: Compound commands starting with non-intercepted keywords
-    // will bypass the bridge interception and might perform actual I/O.
-    let _outcome = session
+    // 複合コマンド内の write はブリッジ層でインターセプトされる
+    let outcome = session
         .execute_ex_command(&format!(":set number | write! {}", test_file))
         .expect("compound command should succeed");
 
-    let file_exists = fs::metadata(test_file).is_ok();
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::HostActionQueued
+    ));
 
-    if file_exists {
-        fs::remove_file(test_file).ok();
-        // compound コマンド内の write は bridge interception を bypass する。
-        // Write ホストアクションは出ないが、autocommand 由来のイベント
-        // (BufAdd 等) がキューされることはある。
-        while let Some(action) = session.take_pending_host_action() {
-            assert!(
-                !matches!(action, CoreHostAction::Write { .. }),
-                "Write action should have bypassed bridge interception, got {:?}",
-                action
-            );
-        }
+    // Write ホストアクションがキューされていることを確認
+    let write_action = outcome
+        .host_actions
+        .iter()
+        .find(|a| matches!(a, CoreHostAction::Write { .. }));
+    assert!(
+        write_action.is_some(),
+        "Expected Write action in compound command, got {:?}",
+        outcome.host_actions
+    );
+
+    if let Some(CoreHostAction::Write { path, force, .. }) = write_action {
+        assert_eq!(path, test_file);
+        assert!(force, "write! should have force=true");
     }
+
+    // ファイルがディスク上に作成されていないことを確認
+    assert!(
+        fs::metadata(test_file).is_err(),
+        "File should NOT be created on disk by Vim runtime"
+    );
 }

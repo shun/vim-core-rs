@@ -7,17 +7,22 @@ features.
 
 ## Current implementation gaps
 
-The following public methods exist, but the current native implementation does
-not yet provide the expected dynamic data.
+The incremental search getters and viewport query API now return live Vim
+state. The remaining caveat is narrower: hosts should treat the column values
+as byte offsets, not display-cell widths or Unicode scalar indexes.
 
-- `is_incsearch_active()`
-  Currently returns `false` because the native bridge stub returns `0`.
-- `get_incsearch_pattern()`
-  Currently returns `None` because the native bridge stub returns an empty
-  string.
+- `CoreMatchRange.start_col`
+  Inclusive byte offset into the line.
+- `CoreMatchRange.end_col`
+  Exclusive byte offset into the line.
 
-Treat these methods as placeholders in the current implementation, not as
-reliable state queries.
+If your UI renders by grapheme cluster or display cell, convert from the byte
+contract explicitly before drawing.
+
+Some message-producing paths are still incomplete. In current tests, basic
+`echo*` and prompt-oriented commands do not always surface as `CoreEvent`
+values or terminal output, so hosts should not assume every Vim message path is
+fully bridged yet.
 
 ## Job bridge limits
 
@@ -40,11 +45,14 @@ Local buffers and VFS-backed buffers do not follow the same save path.
 - For local buffers, `:write` and `:update` enqueue `CoreHostAction::Write`.
 - For VFS-backed buffers, `:write` and `:update` enqueue
   `CoreHostAction::VfsRequest(CoreVfsRequest::Save)`.
-- For local buffers, `:wq` and `:xit` currently enqueue `CoreHostAction::Quit`
-  instead of automatically sequencing a `Write` followed by `Quit`.
-
-That last point is easy to misread. If a host wants local save-and-quit
-semantics, the host must coordinate them after observing the queued action.
+- For local buffers, `:wq` enqueues `[Write, Quit]` in that order so the host
+  can coordinate save-before-quit.
+- For local buffers, `:xit` / `:x` enqueues `[Write, Quit]` only when the
+  buffer is dirty; on a clean buffer it enqueues `Quit` alone.
+- Compound Ex commands (pipe-separated, e.g. `:set number | write! file`)
+  are now split and the write/quit sub-command is intercepted by the bridge.
+  Non-intercepted sub-commands before the intercepted one are executed
+  natively.
 
 ## Build and feature limits
 

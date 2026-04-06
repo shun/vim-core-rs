@@ -146,6 +146,8 @@ typedef struct vim_core_window_info {
     uintptr_t botline;
     uintptr_t leftcol;
     uintptr_t skipcol;
+    uintptr_t cursor_row;
+    uintptr_t cursor_col;
     bool is_active;
 } vim_core_window_info_t;
 
@@ -478,5 +480,6 @@ vim_core_cursor_match_info_t vim_bridge_get_cursor_match_info(int window_id, int
 
 int vim_bridge_is_incsearch_active(void);
 const char* vim_bridge_get_incsearch_pattern(void);
+const char* vim_bridge_get_search_input_pattern(void);
 
 #endif

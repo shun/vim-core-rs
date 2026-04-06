@@ -35,6 +35,31 @@ The snapshot contract explains what `snapshot()` means.
 - `snapshot().pending_host_actions` includes the length of the Rust-side queue
   in addition to whatever the runtime already reported.
 - `buffers()` and `windows()` are convenience wrappers over `snapshot()`.
+- `CoreSnapshot.cursor_row` and `cursor_col` describe the active window only.
+- `CoreWindowInfo` is the per-window source of truth for geometry, viewport
+  state, active-window state, and window-local cursor state.
+- Exactly one entry in `CoreSnapshot.windows` is active when the snapshot
+  contains windows.
+- `CoreWindowInfo.id` is the only canonical window identity across the host
+  boundary. Hosts must key projection and follow-up queries by `window_id`
+  instead of inferring pane identity from row, column, buffer, or ordering.
+- `CoreSnapshot.active_window()`, `active_window_id()`, and `window(window_id)`
+  are the read-only helpers for resolving the active window and looking up a
+  window by canonical ID without host-side guesswork.
+- `active_window_id()` is the preferred convenience API when the host needs
+  only the active window identity. If the host already holds a snapshot, use
+  `snapshot.active_window_id()` and `snapshot.window(window_id)` from that same
+  snapshot instead of re-scanning or mixing reads from another snapshot.
+- `None` from the active-window helpers and `None` from `window(window_id)` are
+  intentional contract states. Hosts must treat them as "no active window" or
+  "unknown window" and must not substitute fallback values such as the first
+  window or a hard-coded `window_id`.
+- When host code needs the active window ID, prefer `active_window_id()` as
+  the stable read path. `CoreSnapshot.active_window()` is the equivalent helper
+  when the host already holds a snapshot and needs the active window record.
+- Hosts must treat `None`, `WindowNotFound`, and `InvalidViewport` as explicit
+  contract outcomes. Do not fall back to the first window, `window_id = 1`, or
+  any other host-side heuristic.
 
 ## Command contract
 
@@ -192,6 +217,14 @@ The option system is typed and scope-aware.
 The search and syntax methods are read-only rendering helpers.
 
 - Search highlight methods return plain ranges. They do not own rendering.
+- `query_visible_search_state()` and
+  `query_visible_search_state_for_window()` are the stable pane-local search
+  contract. They bundle mode, pattern, visible ranges, and `hlsearch` /
+  `incsearch` state without moving rendering policy into the core.
+- `query_visible_search_state_for_window(window_id, ...)` accepts inactive
+  windows as long as the `window_id` exists in the current snapshot.
+- Search columns are byte offsets. Hosts that render by grapheme or display
+  cell must convert explicitly.
 - `get_cursor_match_info` can signal `TimedOut` or `MaxReached` instead of a
   concrete full count.
 - Syntax extraction groups consecutive columns with the same syntax ID into one

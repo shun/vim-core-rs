@@ -357,6 +357,598 @@ fn vsplit_creates_additional_window() {
     );
 }
 
+#[test]
+fn split_and_vsplit_preserve_window_cursor_state() {
+    let _guard = acquire_session_test_lock();
+
+    for command in [":split", ":vsplit"] {
+        let mut session = VimCoreSession::new("alphaaaaa\nbetaBBBBBB\ncharlieCCC")
+            .expect("session should initialize");
+        session.set_screen_size(24, 80);
+        session
+            .execute_normal_command("2G4l")
+            .expect("cursor positioning should succeed");
+
+        let before = session.snapshot();
+        let expected_cursor = (before.cursor_row, before.cursor_col);
+
+        session
+            .execute_ex_command(command)
+            .expect("split command should succeed");
+
+        let after = session.snapshot();
+        assert_eq!(
+            after.windows.len(),
+            2,
+            "{command} should create two windows"
+        );
+        for window in &after.windows {
+            assert_eq!(
+                window_cursor(window),
+                expected_cursor,
+                "{command} should preserve the cursor position in each window"
+            );
+        }
+        assert_eq!(
+            window_cursor(&active_window(&session)),
+            expected_cursor,
+            "{command} should keep the active window cursor in sync with the snapshot"
+        );
+    }
+}
+
+fn send_ctrl_w_command(session: &mut VimCoreSession, suffix: &str) {
+    session
+        .execute_normal_command(&format!("\x17{suffix}"))
+        .expect("Ctrl-W command should succeed");
+}
+
+fn active_window(session: &VimCoreSession) -> CoreWindowInfo {
+    session
+        .windows()
+        .into_iter()
+        .find(|window| window.is_active)
+        .expect("active window should exist")
+}
+
+fn window_cursor(window: &CoreWindowInfo) -> (usize, usize) {
+    (window.cursor_row, window.cursor_col)
+}
+
+#[test]
+fn snapshot_window_helpers_resolve_active_and_target_windows_without_host_guessing() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("helper contract").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    session
+        .execute_ex_command(":split")
+        .expect("split should succeed");
+
+    let snapshot = session.snapshot();
+    let active_window = snapshot
+        .active_window()
+        .expect("active window helper should resolve the active window");
+    let active_window_id = snapshot
+        .active_window_id()
+        .expect("active window id helper should resolve the active window id");
+
+    assert!(active_window.is_active);
+    assert_eq!(active_window.id, active_window_id);
+    assert_eq!(
+        snapshot.window(active_window_id).map(|window| window.id),
+        Some(active_window_id),
+        "window lookup should resolve by canonical window_id"
+    );
+    assert!(
+        snapshot.window(999_999).is_none(),
+        "unknown window ids should not resolve through snapshot helpers"
+    );
+}
+
+#[test]
+fn ctrl_w_h_and_l_move_between_horizontal_neighbors() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("ctrl-w h/l").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    session
+        .execute_ex_command(":vsplit")
+        .expect("vsplit should succeed");
+
+    let windows = session.windows();
+    assert_eq!(windows.len(), 2, "vsplit should create two windows");
+    let left_id = windows
+        .iter()
+        .min_by_key(|window| window.col)
+        .expect("left window should exist")
+        .id;
+    let right_id = windows
+        .iter()
+        .max_by_key(|window| window.col)
+        .expect("right window should exist")
+        .id;
+
+    session
+        .switch_to_window(left_id)
+        .expect("switch to left window should succeed");
+    send_ctrl_w_command(&mut session, "l");
+    assert_eq!(
+        active_window(&session).id,
+        right_id,
+        "Ctrl-w l should move to the window on the right"
+    );
+
+    send_ctrl_w_command(&mut session, "h");
+    assert_eq!(
+        active_window(&session).id,
+        left_id,
+        "Ctrl-w h should move back to the window on the left"
+    );
+}
+
+#[test]
+fn ctrl_w_j_and_k_move_between_vertical_neighbors() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("ctrl-w j/k").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    session
+        .execute_ex_command(":split")
+        .expect("split should succeed");
+
+    let windows = session.windows();
+    assert_eq!(windows.len(), 2, "split should create two windows");
+    let top_id = windows
+        .iter()
+        .min_by_key(|window| window.row)
+        .expect("top window should exist")
+        .id;
+    let bottom_id = windows
+        .iter()
+        .max_by_key(|window| window.row)
+        .expect("bottom window should exist")
+        .id;
+
+    session
+        .switch_to_window(top_id)
+        .expect("switch to top window should succeed");
+    send_ctrl_w_command(&mut session, "j");
+    assert_eq!(
+        active_window(&session).id,
+        bottom_id,
+        "Ctrl-w j should move to the window below"
+    );
+
+    send_ctrl_w_command(&mut session, "k");
+    assert_eq!(
+        active_window(&session).id,
+        top_id,
+        "Ctrl-w k should move back to the window above"
+    );
+}
+
+#[test]
+fn ctrl_w_c_closes_the_active_window() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("ctrl-w c").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    session
+        .execute_ex_command(":split")
+        .expect("split should succeed");
+
+    let before = session.windows().len();
+    assert_eq!(before, 2, "split should create two windows");
+
+    send_ctrl_w_command(&mut session, "c");
+
+    let after = session.windows();
+    assert_eq!(after.len(), 1, "Ctrl-w c should close one window");
+    assert!(
+        after.iter().any(|window| window.is_active),
+        "one remaining window should stay active"
+    );
+}
+
+#[test]
+fn ctrl_w_equalize_restores_balanced_horizontal_layout() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("ctrl-w =").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    session
+        .execute_ex_command(":vsplit")
+        .expect("vsplit should succeed");
+
+    let windows = session.windows();
+    let left_id = windows
+        .iter()
+        .min_by_key(|window| window.col)
+        .expect("left window should exist")
+        .id;
+
+    session
+        .switch_to_window(left_id)
+        .expect("switch to left window should succeed");
+    session
+        .execute_ex_command(":vertical resize 50")
+        .expect("vertical resize should succeed");
+
+    let before = session.windows();
+    let active_before = before
+        .iter()
+        .find(|window| window.is_active)
+        .expect("active window should exist");
+    let other_before = before
+        .iter()
+        .find(|window| !window.is_active)
+        .expect("inactive window should exist");
+    assert!(
+        active_before.width != other_before.width,
+        "test setup should create an uneven vertical layout"
+    );
+
+    send_ctrl_w_command(&mut session, "=");
+
+    let after = session.windows();
+    let active_after = after
+        .iter()
+        .find(|window| window.is_active)
+        .expect("active window should exist after equalize");
+    let other_after = after
+        .iter()
+        .find(|window| !window.is_active)
+        .expect("inactive window should exist after equalize");
+    assert!(
+        active_after.width.abs_diff(other_after.width) <= 1,
+        "Ctrl-w = should equalize widths: active={}, other={}",
+        active_after.width,
+        other_after.width
+    );
+}
+
+#[test]
+fn ctrl_w_focus_changes_expose_window_local_cursor_state() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("alphaaaaa\nbetaBBBBBB\ncharlieCCC")
+        .expect("session should initialize");
+    session.set_screen_size(24, 80);
+    session
+        .execute_ex_command(":vsplit")
+        .expect("vsplit should succeed");
+
+    let windows = session.windows();
+    let left_id = windows
+        .iter()
+        .min_by_key(|window| window.col)
+        .expect("left window should exist")
+        .id;
+    let right_id = windows
+        .iter()
+        .max_by_key(|window| window.col)
+        .expect("right window should exist")
+        .id;
+
+    session
+        .switch_to_window(left_id)
+        .expect("switch to left window should succeed");
+    session
+        .execute_normal_command("2G3l")
+        .expect("cursor movement in left window should succeed");
+    let left_cursor = window_cursor(&active_window(&session));
+
+    session
+        .switch_to_window(right_id)
+        .expect("switch to right window should succeed");
+    session
+        .execute_normal_command("G0")
+        .expect("cursor movement in right window should succeed");
+    let right_cursor = window_cursor(&active_window(&session));
+
+    session
+        .switch_to_window(left_id)
+        .expect("switch back to left window should succeed");
+    assert_eq!(
+        window_cursor(&active_window(&session)),
+        left_cursor,
+        "active snapshot cursor should follow the left window"
+    );
+
+    send_ctrl_w_command(&mut session, "l");
+    assert_eq!(
+        active_window(&session).id,
+        right_id,
+        "Ctrl-w l should move focus to the right window"
+    );
+    assert_eq!(
+        window_cursor(&active_window(&session)),
+        right_cursor,
+        "Ctrl-w l should expose the right window's cursor state"
+    );
+}
+
+#[test]
+fn ctrl_w_plus_and_minus_resize_the_active_window_height() {
+    let _guard = acquire_session_test_lock();
+    let mut session =
+        VimCoreSession::new("ctrl-w height resize").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    session
+        .execute_ex_command(":split")
+        .expect("split should succeed");
+
+    let before = active_window(&session);
+
+    send_ctrl_w_command(&mut session, "+");
+    let after_plus = active_window(&session);
+    assert!(
+        after_plus.height > before.height,
+        "Ctrl-w + should increase the active window height: before={}, after={}",
+        before.height,
+        after_plus.height
+    );
+
+    send_ctrl_w_command(&mut session, "-");
+    let after_minus = active_window(&session);
+    assert!(
+        after_minus.height <= after_plus.height,
+        "Ctrl-w - should not increase the active window height: after_plus={}, after_minus={}",
+        after_plus.height,
+        after_minus.height
+    );
+}
+
+#[test]
+fn ctrl_w_angle_brackets_resize_the_active_window_width() {
+    let _guard = acquire_session_test_lock();
+    let mut session =
+        VimCoreSession::new("ctrl-w width resize").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    session
+        .execute_ex_command(":vsplit")
+        .expect("vsplit should succeed");
+
+    let before = active_window(&session);
+
+    send_ctrl_w_command(&mut session, ">");
+    let after_right = active_window(&session);
+    assert!(
+        after_right.width > before.width,
+        "Ctrl-w > should increase the active window width: before={}, after={}",
+        before.width,
+        after_right.width
+    );
+
+    send_ctrl_w_command(&mut session, "<");
+    let after_left = active_window(&session);
+    assert!(
+        after_left.width <= after_right.width,
+        "Ctrl-w < should not increase the active window width: after_right={}, after_left={}",
+        after_right.width,
+        after_left.width
+    );
+}
+
+#[test]
+fn ctrl_w_h_and_l_move_the_active_window_to_horizontal_edges() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("ctrl-w H/L").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    session
+        .execute_ex_command(":vsplit")
+        .expect("vsplit should succeed");
+
+    let windows = session.windows();
+    let left_id = windows
+        .iter()
+        .min_by_key(|window| window.col)
+        .expect("left window should exist")
+        .id;
+    let right_id = windows
+        .iter()
+        .max_by_key(|window| window.col)
+        .expect("right window should exist")
+        .id;
+
+    session
+        .switch_to_window(right_id)
+        .expect("switch to right window should succeed");
+
+    send_ctrl_w_command(&mut session, "H");
+    let after_h = active_window(&session);
+    assert_eq!(
+        after_h.id, right_id,
+        "Ctrl-w H should keep the same window active while moving it to the left edge"
+    );
+    assert_eq!(
+        after_h.col, 0,
+        "Ctrl-w H should place the active window at the left edge"
+    );
+    assert!(
+        session
+            .windows()
+            .iter()
+            .find(|window| window.id == left_id)
+            .map(|window| window.col > after_h.col)
+            .unwrap_or(false),
+        "the former left window should remain to the right of the moved window"
+    );
+
+    send_ctrl_w_command(&mut session, "L");
+    let after_l = active_window(&session);
+    let rightmost_col = session
+        .windows()
+        .iter()
+        .map(|window| window.col)
+        .max()
+        .expect("rightmost window should exist");
+    assert_eq!(
+        after_l.id, right_id,
+        "Ctrl-w L should keep the same window active while moving it to the right edge"
+    );
+    assert_eq!(
+        after_l.col, rightmost_col,
+        "Ctrl-w L should place the active window at the right edge"
+    );
+}
+
+#[test]
+fn ctrl_w_j_and_k_move_the_active_window_to_vertical_edges() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("ctrl-w J/K").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    session
+        .execute_ex_command(":split")
+        .expect("split should succeed");
+
+    let windows = session.windows();
+    let top_id = windows
+        .iter()
+        .min_by_key(|window| window.row)
+        .expect("top window should exist")
+        .id;
+    let bottom_id = windows
+        .iter()
+        .max_by_key(|window| window.row)
+        .expect("bottom window should exist")
+        .id;
+
+    session
+        .switch_to_window(bottom_id)
+        .expect("switch to bottom window should succeed");
+
+    send_ctrl_w_command(&mut session, "K");
+    let after_k = active_window(&session);
+    assert_eq!(
+        after_k.id, bottom_id,
+        "Ctrl-w K should keep the same window active while moving it to the top edge"
+    );
+    assert_eq!(
+        after_k.row, 0,
+        "Ctrl-w K should place the active window at the top edge"
+    );
+    assert!(
+        session
+            .windows()
+            .iter()
+            .find(|window| window.id == top_id)
+            .map(|window| window.row > after_k.row)
+            .unwrap_or(false),
+        "the former top window should remain below the moved window"
+    );
+
+    send_ctrl_w_command(&mut session, "J");
+    let after_j = active_window(&session);
+    let bottommost_row = session
+        .windows()
+        .iter()
+        .map(|window| window.row)
+        .max()
+        .expect("bottommost window should exist");
+    assert_eq!(
+        after_j.id, bottom_id,
+        "Ctrl-w J should keep the same window active while moving it to the bottom edge"
+    );
+    assert_eq!(
+        after_j.row, bottommost_row,
+        "Ctrl-w J should place the active window at the bottom edge"
+    );
+}
+
+#[test]
+fn query_visible_search_state_accepts_inactive_window_ids() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("hello\nworld\n").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    session
+        .execute_ex_command(":split")
+        .expect("split should succeed");
+
+    let inactive_window_id = session
+        .windows()
+        .iter()
+        .find(|window| !window.is_active)
+        .expect("inactive window should exist")
+        .id;
+
+    let state = session
+        .query_visible_search_state_for_window(inactive_window_id, 1, 2)
+        .expect("inactive window should be queryable");
+
+    assert_eq!(state.window_id, inactive_window_id);
+    assert_eq!(state.mode, vim_core_rs::CoreSearchHighlightMode::Disabled);
+    assert!(state.ranges.is_empty());
+}
+
+#[test]
+fn window_id_stays_canonical_across_resize_move_and_close() {
+    let _guard = acquire_session_test_lock();
+    let mut session =
+        VimCoreSession::new("window identity contract").expect("session should initialize");
+    session.set_screen_size(24, 80);
+    session
+        .execute_ex_command(":split")
+        .expect("split should succeed");
+    session
+        .execute_ex_command(":vsplit")
+        .expect("vsplit should succeed");
+
+    let initial_snapshot = session.snapshot();
+    let tracked_window_id = initial_snapshot
+        .active_window_id()
+        .expect("active window id should exist");
+    let tracked_window_before = initial_snapshot
+        .window(tracked_window_id)
+        .expect("tracked window should exist before layout changes")
+        .clone();
+
+    eprintln!(
+        "[window-id-contract] before: tracked_id={}, geometry=({}, {}) {}x{}",
+        tracked_window_before.id,
+        tracked_window_before.row,
+        tracked_window_before.col,
+        tracked_window_before.width,
+        tracked_window_before.height
+    );
+
+    session
+        .execute_ex_command(":resize 5")
+        .expect("resize should succeed");
+    send_ctrl_w_command(&mut session, "H");
+    send_ctrl_w_command(&mut session, "=");
+
+    let after_layout_snapshot = session.snapshot();
+    let tracked_window_after = after_layout_snapshot
+        .window(tracked_window_id)
+        .expect("tracked window should still exist after resize and move");
+    assert_eq!(
+        tracked_window_after.id, tracked_window_id,
+        "window_id must remain the canonical identity across layout changes"
+    );
+
+    eprintln!(
+        "[window-id-contract] after layout: tracked_id={}, geometry=({}, {}) {}x{}",
+        tracked_window_after.id,
+        tracked_window_after.row,
+        tracked_window_after.col,
+        tracked_window_after.width,
+        tracked_window_after.height
+    );
+
+    session
+        .switch_to_window(tracked_window_id)
+        .expect("switch to tracked window should succeed");
+    session
+        .execute_ex_command(":close")
+        .expect("close should succeed");
+
+    let after_close_snapshot = session.snapshot();
+    assert!(
+        after_close_snapshot.window(tracked_window_id).is_none(),
+        "closed window_id should disappear from the snapshot"
+    );
+    assert!(
+        after_close_snapshot.active_window_id().is_some(),
+        "a surviving active window should remain resolvable after close"
+    );
+}
+
 // =============================================================================
 // Task 2.1: Rust ドメインモデルの定義
 // CoreBufferInfo および CoreWindowInfo 構造体の検証
@@ -396,11 +988,19 @@ fn core_window_info_has_required_fields() {
 
     let snapshot = session.snapshot();
 
-    // CoreWindowInfo が id, buf_id, row, col, width, height, is_active フィールドを持つこと
+    // CoreWindowInfo が id, buf_id, row, col, width, height, cursor_row, cursor_col, is_active フィールドを持つこと
     let win: &CoreWindowInfo = &snapshot.windows[0];
     eprintln!(
-        "[Task 2.1] CoreWindowInfo 検証: id={}, buf_id={}, row={}, col={}, width={}, height={}, is_active={}",
-        win.id, win.buf_id, win.row, win.col, win.width, win.height, win.is_active
+        "[Task 2.1] CoreWindowInfo 検証: id={}, buf_id={}, row={}, col={}, width={}, height={}, cursor_row={}, cursor_col={}, is_active={}",
+        win.id,
+        win.buf_id,
+        win.row,
+        win.col,
+        win.width,
+        win.height,
+        win.cursor_row,
+        win.cursor_col,
+        win.is_active
     );
 
     assert!(
@@ -410,6 +1010,11 @@ fn core_window_info_has_required_fields() {
     assert!(
         win.buf_id > 0,
         "ウィンドウが表示するバッファIDは正の値であること"
+    );
+    assert_eq!(
+        (win.cursor_row, win.cursor_col),
+        (snapshot.cursor_row, snapshot.cursor_col),
+        "アクティブウィンドウのcursorはsnapshot全体のcursorと一致すること"
     );
     // スクリーンサイズ設定後は幾何情報が正しく取得できること
     assert!(

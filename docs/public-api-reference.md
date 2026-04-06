@@ -72,8 +72,8 @@ These methods create the session and extract high-level state.
   `Standalone`.
 - `snapshot(&self) -> CoreSnapshot`
   Returns a coherent state capture. It includes text, revision, dirty state,
-  mode, pending input, cursor position, pending host-action count, buffer
-  metadata, window metadata, and pop-up menu state.
+  mode, pending input, active-window cursor position, pending host-action
+  count, buffer metadata, window metadata, and pop-up menu state.
 - `mode(&self) -> CoreMode`
   Returns the current mode. It is equivalent to `snapshot().mode` but cheaper
   to consume conceptually.
@@ -145,7 +145,15 @@ These methods extract structural information about the editor state.
 - `buffers(&self) -> Vec<CoreBufferInfo>`
   Returns the buffer list from the latest snapshot.
 - `windows(&self) -> Vec<CoreWindowInfo>`
-  Returns the window list from the latest snapshot.
+  Returns the window list from the latest snapshot, including geometry,
+  viewport state, active-window state, and per-window cursor state.
+- `active_window_id(&self) -> Option<i32>`
+  Returns the canonical `window_id` for the active window. Use this when you
+  need active-pane resolution without scanning the window list in host code.
+  When you already hold a `CoreSnapshot`, prefer `snapshot.active_window_id()`
+  so the identity lookup stays within one coherent read.
+  Treat `None` as an explicit no-active-window case, not as a signal to fall
+  back to a synthetic host default.
 - `buffer_binding(&self, buf_id: i32) -> Option<CoreBufferBinding>`
   Returns VFS binding metadata for one buffer after synchronizing bindings with
   the current snapshot.
@@ -204,15 +212,32 @@ These methods expose rendering-relevant state that the host can draw directly.
   Returns whether incremental search is active.
 - `get_incsearch_pattern(&self) -> Option<String>`
   Returns the incremental search pattern if one exists.
+- `get_search_input_pattern(&self) -> Option<String>`
+  Returns the current `/` or `?` command-line pattern even when `incsearch`
+  is disabled.
+- `query_visible_search_state(&mut self, start_row: i32, end_row: i32)
+  -> Result<CoreVisibleSearchState, CoreSearchQueryError>`
+  Returns the active window's search state for a 1-based inclusive viewport.
+- `query_visible_search_state_for_window(&mut self, window_id: i32,
+  start_row: i32, end_row: i32)
+  -> Result<CoreVisibleSearchState, CoreSearchQueryError>`
+  Returns the specified window's search state for a 1-based inclusive
+  viewport.
+- `search_capability_contract() -> CoreSearchCapabilityContract`
+  Returns the stable rendering contract for search ranges.
 - `get_syntax_name(&self, syn_id: i32) -> Option<String>`
   Maps a syntax ID to its human-readable syntax group name.
 - `get_line_syntax(&self, win_id: i32, lnum: i64)
   -> Result<Vec<CoreSyntaxChunk>, CoreCommandError>`
   Returns syntax chunks for one line in one window.
 
-In the current implementation, the two incremental-search getters are
-exposed, but the native bridge still returns placeholder values. Read
-`known-limitations.md` before assuming they reflect live Vim state.
+Search ranges now follow one fixed contract: `start_col` is inclusive,
+`end_col` is exclusive, both are byte columns, and results are limited to the
+requested visible rows. `CoreVisibleSearchState` also separates
+`hlsearch_enabled`, `hlsearch_suspended`, `incsearch_active`, `pattern`,
+`input_pattern`, and per-range `CoreMatchType` values so hosts can render
+persistent matches, incremental preview matches, and the current match
+without reimplementing Vim search semantics.
 
 ### Undo and backend methods
 
@@ -348,6 +373,8 @@ These structs expose the current editor layout.
   - `botline`
   - `leftcol`
   - `skipcol`
+  - `cursor_row`
+  - `cursor_col`
   - `is_active`
 - `CoreSnapshot`
   - `text`
@@ -361,6 +388,19 @@ These structs expose the current editor layout.
   - `buffers`
   - `windows`
   - `pum`
+  - helper methods: `active_window()`, `active_window_id()`,
+    `window(window_id)`
+
+`CoreSnapshot.windows` is the full per-window contract. Use
+`CoreWindowInfo.id` as the stable identity, `is_active` or
+`active_window_id()` for focus, and the viewport fields (`topline`, `botline`,
+`leftcol`, and `skipcol`) for window-local rendering state.
+Treat `None` from `active_window_id()` and `window(window_id)` as explicit
+contract results. Do not replace them with host-side fallbacks such as "first
+window" or a hard-coded ID.
+When you already hold a snapshot, use `window(window_id)` as the standard
+lookup path for per-window projection instead of rescanning or inferring by
+geometry.
 
 ### Undo, syntax, and completion structs
 
@@ -386,6 +426,16 @@ These types capture message and search metadata.
 - `MatchCountResult`: `Calculated(usize)`, `MaxReached(usize)`, `TimedOut`
 - `CoreCursorMatchInfo { is_on_match, current_match_index, total_matches }`
 - `CoreSearchDirection`: `Forward`, `Backward`
+- `CoreSearchHighlightMode`: `Disabled`, `HlSearch`, `IncSearch`
+- `CoreVisibleSearchState`
+  `{ window_id, start_row, end_row, mode, pattern, input_pattern,
+  hlsearch_enabled, hlsearch_suspended, incsearch_active, ranges }`
+- `CoreSearchCapabilityContract`
+  `{ live_state_query_available, visible_rows_only, start_col_inclusive,
+  end_col_exclusive }`
+- `CoreSearchQueryError`
+  `NoActiveWindow`, `InvalidViewport { start_row, end_row }`,
+  `WindowNotFound { window_id }`
 
 ### Option types
 

@@ -94,7 +94,8 @@ These helpers convert raw bridge output into safe Rust values.
 - `convert_buffer_list`
   Converts the FFI buffer array into `Vec<CoreBufferInfo>`.
 - `convert_window_list`
-  Converts the FFI window array into `Vec<CoreWindowInfo>`.
+  Converts the FFI window array into `Vec<CoreWindowInfo>`, including
+  geometry, viewport state, active-window state, and per-window cursor state.
 - `convert_mode`
   Maps the raw Vim mode enum into `CoreMode`.
 - `convert_pending_input`
@@ -123,6 +124,10 @@ These helpers convert raw bridge output into safe Rust values.
   `CoreOptionError`.
 - `convert_option_set_result`
   Converts the raw option setter result into `()` or `CoreOptionError`.
+- `validate_search_viewport`
+  Validates the 1-based inclusive row range used by visible-search queries.
+- `resolve_active_search_window_id`
+  Finds the active window ID in a snapshot for `query_visible_search_state()`.
 - `is_error_message`
   Heuristically classifies one Vim message line as an error.
 - `string_from_parts`
@@ -138,6 +143,16 @@ These types are implementation details used by internal helpers.
 - `ConvertedOptionValue`
   The internal enum used to stage typed option getter results before the
   public getters downcast them.
+
+## Search helper behavior
+
+- `drain_native_events` preserves native event ordering as the Rust layer
+  moves them into the transaction/result queue.
+- `validate_search_viewport` rejects rows below 1, rows below `end_row`, and
+  inverted ranges before any native query runs.
+- `resolve_active_search_window_id` is only used for the active-window search
+  convenience method. The window-targeted search API still requires an
+  explicit `window_id`.
 
 ## Internal API in `src/vfs.rs`
 

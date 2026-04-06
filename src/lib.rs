@@ -265,6 +265,8 @@ pub struct CoreWindowInfo {
     pub botline: usize,
     pub leftcol: usize,
     pub skipcol: usize,
+    pub cursor_row: usize,
+    pub cursor_col: usize,
     pub is_active: bool,
 }
 
@@ -428,6 +430,35 @@ pub enum CoreSearchDirection {
     Backward,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoreSearchHighlightMode {
+    Disabled,
+    HlSearch,
+    IncSearch,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CoreSearchCapabilityContract {
+    pub live_state_query_available: bool,
+    pub visible_rows_only: bool,
+    pub start_col_inclusive: bool,
+    pub end_col_exclusive: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreVisibleSearchState {
+    pub window_id: i32,
+    pub start_row: usize,
+    pub end_row: usize,
+    pub mode: CoreSearchHighlightMode,
+    pub pattern: Option<String>,
+    pub input_pattern: Option<String>,
+    pub hlsearch_enabled: bool,
+    pub hlsearch_suspended: bool,
+    pub incsearch_active: bool,
+    pub ranges: Vec<CoreMatchRange>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreSnapshot {
     pub text: String,
@@ -444,6 +475,20 @@ pub struct CoreSnapshot {
     pub pum: Option<CorePumInfo>,
 }
 
+impl CoreSnapshot {
+    pub fn active_window(&self) -> Option<&CoreWindowInfo> {
+        self.windows.iter().find(|window| window.is_active)
+    }
+
+    pub fn active_window_id(&self) -> Option<i32> {
+        self.active_window().map(|window| window.id)
+    }
+
+    pub fn window(&self, window_id: i32) -> Option<&CoreWindowInfo> {
+        self.windows.iter().find(|window| window.id == window_id)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CoreVisualSelection {
     pub mode: CoreMode,
@@ -458,6 +503,13 @@ pub enum CoreCommandError {
     InvalidInput,
     OperationFailed { reason_code: u32 },
     UnknownStatus { status: u32, reason_code: u32 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreSearchQueryError {
+    NoActiveWindow,
+    InvalidViewport { start_row: i32, end_row: i32 },
+    WindowNotFound { window_id: i32 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -957,14 +1009,23 @@ impl VimCoreSession {
                         .set_deferred_close(buf_id, CoreDeferredClose::SaveAndClose);
                     self.apply_write_intent(String::new(), force, None)
                 } else {
-                    // local buffer: 既存フロー -- :wq は Quit として扱う（host が save を管理）
+                    // local buffer: :wq は Write → Quit の順でキューする（ホストが save-before-quit を調整）
                     let revision = snapshot.revision;
-                    self.pending_host_actions
-                        .borrow_mut()
-                        .push_back(CoreHostAction::Quit {
-                            force,
-                            issued_after_revision: revision,
-                        });
+                    debug_log!(
+                        "[DEBUG] apply_intent: :wq on local buffer buf_id={}, queuing Write then Quit (revision={})",
+                        buf_id,
+                        revision
+                    );
+                    let mut actions = self.pending_host_actions.borrow_mut();
+                    actions.push_back(CoreHostAction::Write {
+                        path: String::new(),
+                        force,
+                        issued_after_revision: revision,
+                    });
+                    actions.push_back(CoreHostAction::Quit {
+                        force,
+                        issued_after_revision: revision,
+                    });
                     Ok(CoreCommandOutcome::HostActionQueued)
                 }
             }
@@ -998,14 +1059,28 @@ impl VimCoreSession {
                         });
                     Ok(CoreCommandOutcome::HostActionQueued)
                 } else {
-                    // local buffer: 既存フロー -- :xit は Quit として扱う（host が save を管理）
+                    // local buffer: :xit は dirty の場合のみ Write をキューし、Quit は常にキューする
                     let revision = snapshot.revision;
-                    self.pending_host_actions
-                        .borrow_mut()
-                        .push_back(CoreHostAction::Quit {
+                    let is_dirty = snapshot.dirty;
+                    debug_log!(
+                        "[DEBUG] apply_intent: :xit on local buffer buf_id={}, dirty={}, queuing {}Quit (revision={})",
+                        buf_id,
+                        is_dirty,
+                        if is_dirty { "Write then " } else { "" },
+                        revision
+                    );
+                    let mut actions = self.pending_host_actions.borrow_mut();
+                    if is_dirty {
+                        actions.push_back(CoreHostAction::Write {
+                            path: String::new(),
                             force: false,
                             issued_after_revision: revision,
                         });
+                    }
+                    actions.push_back(CoreHostAction::Quit {
+                        force: false,
+                        issued_after_revision: revision,
+                    });
                     Ok(CoreCommandOutcome::HostActionQueued)
                 }
             }
@@ -1288,6 +1363,42 @@ impl VimCoreSession {
         &mut self,
         command: &str,
     ) -> Result<CoreCommandTransaction, CoreCommandError> {
+        let trimmed = command.trim();
+        let stripped = trimmed.strip_prefix(':').unwrap_or(trimmed).trim();
+
+        // 複合コマンド（パイプ含む）の場合: インターセプト対象より前のサブコマンドをネイティブ実行
+        if stripped.contains('|') {
+            let segments = split_compound_ex(stripped);
+            let mut intercept_idx = None;
+            for (i, seg) in segments.iter().enumerate() {
+                let seg_trimmed = seg.trim();
+                if !seg_trimmed.is_empty() && parse_single_ex_intent(seg_trimmed).is_some() {
+                    intercept_idx = Some(i);
+                    break;
+                }
+            }
+
+            if let Some(idx) = intercept_idx {
+                // インターセプト対象より前のサブコマンドをネイティブ実行
+                for seg in &segments[..idx] {
+                    let seg_trimmed = seg.trim();
+                    if !seg_trimmed.is_empty() {
+                        debug_log!(
+                            "[DEBUG] execute_ex_command: executing non-intercepted sub-command natively: '{}'",
+                            seg_trimmed
+                        );
+                        let native_cmd = format!(":{}", seg_trimmed);
+                        let _ = self.invoke_native_ex_command(&native_cmd);
+                    }
+                }
+                // インターセプト対象のサブコマンドを処理
+                let intent = parse_single_ex_intent(segments[idx].trim()).unwrap();
+                let outcome = self.apply_intent(intent)?;
+                return Ok(self.collect_transaction(outcome, self.snapshot()));
+            }
+        }
+
+        // 単一コマンドまたはインターセプト対象なしの複合コマンド
         if let Some(intent) = parse_ex_intent(command) {
             let outcome = self.apply_intent(intent)?;
             return Ok(self.collect_transaction(outcome, self.snapshot()));
@@ -1514,6 +1625,10 @@ impl VimCoreSession {
 
     pub fn windows(&self) -> Vec<CoreWindowInfo> {
         self.snapshot().windows
+    }
+
+    pub fn active_window_id(&self) -> Option<i32> {
+        active_window_id_from_snapshot(&self.snapshot())
     }
 
     pub fn buffer_binding(&self, buf_id: i32) -> Option<CoreBufferBinding> {
@@ -1855,6 +1970,94 @@ impl VimCoreSession {
             }
         }
     }
+
+    pub fn get_search_input_pattern(&self) -> Option<String> {
+        unsafe {
+            let ptr = bindings::vim_bridge_get_search_input_pattern();
+            if ptr.is_null() {
+                None
+            } else {
+                let c_str = std::ffi::CStr::from_ptr(ptr);
+                let s = c_str.to_string_lossy().into_owned();
+                if s.is_empty() { None } else { Some(s) }
+            }
+        }
+    }
+
+    pub fn query_visible_search_state(
+        &mut self,
+        start_row: i32,
+        end_row: i32,
+    ) -> Result<CoreVisibleSearchState, CoreSearchQueryError> {
+        validate_search_viewport(start_row, end_row)?;
+        let snapshot = self.snapshot();
+        let window_id = resolve_active_search_window_id(&snapshot)?;
+        self.query_visible_search_state_for_window(window_id, start_row, end_row)
+    }
+
+    pub fn query_visible_search_state_for_window(
+        &mut self,
+        window_id: i32,
+        start_row: i32,
+        end_row: i32,
+    ) -> Result<CoreVisibleSearchState, CoreSearchQueryError> {
+        validate_search_viewport(start_row, end_row)?;
+
+        let snapshot = self.snapshot();
+        if !snapshot.windows.iter().any(|window| window.id == window_id) {
+            return Err(CoreSearchQueryError::WindowNotFound { window_id });
+        }
+
+        let input_pattern = self.current_search_input_pattern();
+        let incsearch_active = self.is_incsearch_active();
+        let hlsearch_enabled = self
+            .get_option_bool("hlsearch", CoreOptionScope::Default)
+            .unwrap_or(false);
+        let hlsearch_suspended = hlsearch_enabled && !self.is_hlsearch_active();
+        let pattern = if incsearch_active {
+            self.get_incsearch_pattern()
+        } else {
+            self.get_search_pattern()
+        };
+        let mode = if incsearch_active {
+            CoreSearchHighlightMode::IncSearch
+        } else if self.is_hlsearch_active() {
+            CoreSearchHighlightMode::HlSearch
+        } else {
+            CoreSearchHighlightMode::Disabled
+        };
+        let ranges = if matches!(mode, CoreSearchHighlightMode::Disabled) {
+            Vec::new()
+        } else {
+            self.get_search_highlights(window_id, start_row, end_row)
+        };
+
+        Ok(CoreVisibleSearchState {
+            window_id,
+            start_row: start_row as usize,
+            end_row: end_row as usize,
+            mode,
+            pattern,
+            input_pattern,
+            hlsearch_enabled,
+            hlsearch_suspended,
+            incsearch_active,
+            ranges,
+        })
+    }
+
+    pub fn search_capability_contract() -> CoreSearchCapabilityContract {
+        CoreSearchCapabilityContract {
+            live_state_query_available: true,
+            visible_rows_only: true,
+            start_col_inclusive: true,
+            end_col_exclusive: true,
+        }
+    }
+
+    fn current_search_input_pattern(&self) -> Option<String> {
+        self.get_search_input_pattern()
+    }
 }
 
 impl Drop for VimCoreSession {
@@ -1933,6 +2136,25 @@ fn convert_command_result_with_snapshot(
             reason_code: result.reason_code,
         }),
     }
+}
+
+fn validate_search_viewport(start_row: i32, end_row: i32) -> Result<(), CoreSearchQueryError> {
+    if start_row < 1 || end_row < 1 || start_row > end_row {
+        return Err(CoreSearchQueryError::InvalidViewport { start_row, end_row });
+    }
+    Ok(())
+}
+
+fn active_window_id_from_snapshot(snapshot: &CoreSnapshot) -> Option<i32> {
+    snapshot
+        .windows
+        .iter()
+        .find(|window| window.is_active)
+        .map(|window| window.id)
+}
+
+fn resolve_active_search_window_id(snapshot: &CoreSnapshot) -> Result<i32, CoreSearchQueryError> {
+    active_window_id_from_snapshot(snapshot).ok_or(CoreSearchQueryError::NoActiveWindow)
 }
 
 fn option_name_to_cstring(name: &str) -> Result<CString, CoreOptionError> {
@@ -2123,6 +2345,8 @@ fn convert_window_list(
             botline: info.botline,
             leftcol: info.leftcol,
             skipcol: info.skipcol,
+            cursor_row: info.cursor_row,
+            cursor_col: info.cursor_col,
             is_active: info.is_active,
         })
         .collect()
@@ -2734,13 +2958,9 @@ fn convert_undo_tree(tree: bindings::vim_core_undo_tree_t) -> CoreUndoTree {
     result
 }
 
-fn parse_ex_intent(command: &str) -> Option<ParsedExIntent> {
-    let trimmed = command.trim();
-    let trimmed = trimmed.strip_prefix(':').unwrap_or(trimmed).trim();
-    if trimmed.is_empty() || trimmed.contains('|') {
-        return None;
-    }
-
+/// 単一のExコマンド文字列をパースしてインテントに変換する。
+/// パイプを含まない単一コマンド専用。
+fn parse_single_ex_intent(trimmed: &str) -> Option<ParsedExIntent> {
     let mut parts = trimmed.split_whitespace();
     let head = parts.next()?;
     let bang = head.ends_with('!');
@@ -2762,6 +2982,98 @@ fn parse_ex_intent(command: &str) -> Option<ParsedExIntent> {
         "quit" | "q" | "quitall" | "qall" | "qa" => Some(ParsedExIntent::Quit { force: bang }),
         _ => None,
     }
+}
+
+/// 複合コマンド（パイプ区切り）を安全に分割する。
+/// 引用符やスラッシュ内の `|` はパイプ区切りとして扱わない。
+fn split_compound_ex(input: &str) -> Vec<&str> {
+    let mut segments = Vec::new();
+    let mut start = 0;
+    let bytes = input.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i < len {
+        let ch = bytes[i];
+        // 引用符内はスキップ
+        if ch == b'"' || ch == b'\'' {
+            let quote = ch;
+            i += 1;
+            while i < len && bytes[i] != quote {
+                if bytes[i] == b'\\' {
+                    i += 1; // エスケープ文字をスキップ
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1; // 閉じ引用符をスキップ
+            }
+            continue;
+        }
+        // 正規表現区切り（:s/pat|ern/repl/）内はスキップ
+        if ch == b'/' {
+            i += 1;
+            while i < len && bytes[i] != b'/' {
+                if bytes[i] == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1; // 閉じ / をスキップ
+            }
+            continue;
+        }
+        // パイプ区切り検出
+        if ch == b'|' {
+            segments.push(&input[start..i]);
+            start = i + 1;
+            i += 1;
+            continue;
+        }
+        i += 1;
+    }
+    segments.push(&input[start..]);
+    segments
+}
+
+fn parse_ex_intent(command: &str) -> Option<ParsedExIntent> {
+    let trimmed = command.trim();
+    let trimmed = trimmed.strip_prefix(':').unwrap_or(trimmed).trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // パイプを含まないコマンドは従来どおり単一パース
+    if !trimmed.contains('|') {
+        return parse_single_ex_intent(trimmed);
+    }
+
+    // 複合コマンド: 各サブコマンドを分割して、インターセプト対象を探す
+    let segments = split_compound_ex(trimmed);
+    debug_log!(
+        "[DEBUG] parse_ex_intent: compound command split into {} segments: {:?}",
+        segments.len(),
+        segments
+    );
+
+    // インターセプト対象のサブコマンドを探す（最後に見つかったものを返す）
+    // write/quit 系のコマンドが含まれていれば、それをインターセプトする
+    for seg in &segments {
+        let seg_trimmed = seg.trim();
+        if seg_trimmed.is_empty() {
+            continue;
+        }
+        if let Some(intent) = parse_single_ex_intent(seg_trimmed) {
+            debug_log!(
+                "[DEBUG] parse_ex_intent: found interceptable sub-command '{}' -> {:?}",
+                seg_trimmed,
+                intent
+            );
+            return Some(intent);
+        }
+    }
+
+    None
 }
 
 fn convert_host_action(action: bindings::vim_host_action_t) -> Option<CoreHostAction> {
@@ -3341,5 +3653,32 @@ mod undo_conversion_tests {
         assert_eq!(node2.prev_seq, Some(1));
         assert_eq!(node2.next_seq, None);
         assert!(node2.is_curhead);
+    }
+}
+
+#[cfg(test)]
+mod search_query_tests {
+    use super::*;
+
+    #[test]
+    fn resolve_active_search_window_id_requires_active_window() {
+        let snapshot = CoreSnapshot {
+            text: String::new(),
+            revision: 0,
+            dirty: false,
+            mode: CoreMode::Normal,
+            pending_input: CorePendingInput::none(),
+            cursor_row: 0,
+            cursor_col: 0,
+            pending_host_actions: 0,
+            buffers: Vec::new(),
+            windows: Vec::new(),
+            pum: None,
+        };
+
+        assert_eq!(
+            resolve_active_search_window_id(&snapshot),
+            Err(CoreSearchQueryError::NoActiveWindow)
+        );
     }
 }

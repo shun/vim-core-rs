@@ -85,6 +85,39 @@ fn assert_quit_action(session: &mut VimCoreSession, command: &str, force: bool) 
     });
 }
 
+/// `:wq`/`:xit` 等の Write→Quit 連結アクションを検証する
+fn assert_write_then_quit_actions(session: &mut VimCoreSession, command: &str, force: bool) {
+    let outcome = session
+        .execute_ex_command(command)
+        .unwrap_or_else(|_| panic!("Failed to apply command: {}", command));
+
+    match outcome.outcome {
+        CoreCommandOutcome::HostActionQueued => {
+            let actions: Vec<_> = outcome.host_actions.into_iter().collect();
+            assert_eq!(
+                actions.len(),
+                2,
+                "Expected 2 host actions (Write + Quit) for {command}, got {:?}",
+                actions
+            );
+            assert!(
+                matches!(&actions[0], CoreHostAction::Write { force: f, .. } if *f == force),
+                "First action should be Write(force={force}) for {command}, got {:?}",
+                actions[0]
+            );
+            assert!(
+                matches!(&actions[1], CoreHostAction::Quit { force: f, .. } if *f == force),
+                "Second action should be Quit(force={force}) for {command}, got {:?}",
+                actions[1]
+            );
+        }
+        _ => panic!(
+            "Expected HostActionQueued for command: {}, got {:?}",
+            command, outcome.outcome
+        ),
+    }
+}
+
 #[test]
 fn side_effect_convergence_matrix() {
     let _guard = acquire_session_test_lock();
@@ -99,7 +132,13 @@ fn side_effect_convergence_matrix() {
         assert_quit_action(&mut session, command, command.ends_with('!'));
     }
 
-    for command in ["wq", "wq!", "x", "xit"] {
+    // :wq は常に Write + Quit を返す
+    for command in ["wq", "wq!"] {
+        assert_write_then_quit_actions(&mut session, command, command.ends_with('!'));
+    }
+
+    // :x/:xit はバッファが変更されていない場合は Quit のみ（dirty時のみ Write + Quit）
+    for command in ["x", "xit"] {
         assert_quit_action(&mut session, command, command.ends_with('!'));
     }
 

@@ -67,15 +67,17 @@ The public session methods are grouped by role.
   `eval_string`
 - Host integration: `take_pending_host_action`, `take_pending_event`,
   `set_screen_size`, `submit_vfs_response`
-- Buffer and window inspection: `buffers`, `windows`, `buffer_binding`,
-  `vfs_request_ledger`, `vfs_transaction_log`
+- Buffer and window inspection: `buffers`, `windows`, `active_window_id`,
+  `buffer_binding`, `vfs_request_ledger`, `vfs_transaction_log`
 - Registers and options: `register`, `set_register`, `get_option_number`,
   `get_option_bool`, `get_option_string`, `set_option_number`,
   `set_option_bool`, `set_option_string`
 - Search and syntax: `get_search_pattern`, `is_hlsearch_active`,
   `get_search_direction`, `get_search_highlights`,
   `get_cursor_match_info`, `is_incsearch_active`,
-  `get_incsearch_pattern`, `get_syntax_name`, `get_line_syntax`
+  `get_incsearch_pattern`, `get_search_input_pattern`,
+  `query_visible_search_state`, `query_visible_search_state_for_window`,
+  `search_capability_contract`, `get_syntax_name`, `get_line_syntax`
 - Undo and backend metadata: `get_undo_tree`, `undo_jump`,
   `backend_identity`
 - Job and VFD bridge helpers: `inject_vfd_data`, `notify_job_status`

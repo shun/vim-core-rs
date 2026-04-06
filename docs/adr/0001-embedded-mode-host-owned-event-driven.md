@@ -20,13 +20,12 @@ escape from the embedded library.
 
 In particular:
 
-- Vim messages can be written through native UI and terminal code paths.
-- Rust-side message handling relies on scraping `:messages` and `v:errmsg`
-  after command execution.
-- Message delivery therefore happens after terminal side effects may already
-  have occurred.
-- The design mixes state extraction and event observation.
-- Command execution does not expose a complete transaction-shaped result.
+- Earlier versions relied on native UI and terminal code paths for messages.
+- The current implementation exposes message events through the transaction
+  result and the event queue, rather than treating `:messages` or `v:errmsg`
+  as the primary delivery path.
+- The design now separates state extraction and event observation.
+- Command execution exposes a transaction-shaped result.
 
 This breaks the repository scope. The embedded core should provide editing
 semantics and host-facing contracts, but it should not directly own terminal
@@ -108,13 +107,9 @@ Host actions include:
 
 Messages become first-class events.
 
-The library will not reconstruct host-visible messages by scraping Vim
-history after execution. Instead, native message paths must publish message
-events into an explicit event queue that Rust drains as part of command
-execution.
-
-`:messages` may remain as Vim-compatible runtime history, but it will not be
-the authoritative transport for host delivery.
+The library reconstructs host-visible messages through explicit events in the
+transaction result and event queue. `:messages` may remain as Vim-compatible
+runtime history, but it is not the primary transport for host delivery.
 
 ## Command model
 
@@ -163,7 +158,7 @@ The repository rejects the following alternatives:
 
 - Keep the current model and suppress specific messages.
   This treats symptoms instead of fixing the architectural cause.
-- Improve `set_message_handler()` by scraping more sources.
+- Improve post-hoc message scraping by scraping more sources.
   This remains post-hoc observation and cannot guarantee that native side
   effects did not already occur.
 - Special-case undo output only.
