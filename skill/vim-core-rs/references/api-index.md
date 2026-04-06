@@ -30,7 +30,6 @@ Read the bundled pages in this order when you need complete coverage.
 
 - Module: `ffi`
 - Session type: `VimCoreSession`
-- Type alias: `MessageHandler`
 - Enums: `CoreMode`, `CorePendingInput`, `CoreCommandOutcome`,
   `CoreInputRequestKind`, `CoreBackendIdentity`, `CoreOptionScope`,
   `CoreOptionType`, `CoreOptionError`, `JobStatus`, `CoreHostAction`,
@@ -56,8 +55,8 @@ Read the bundled pages in this order when you need complete coverage.
   `switch_to_buffer`, `switch_to_window`, `buffer_text`
 - Command execution: `execute_normal_command`, `execute_ex_command`,
   `eval_string`
-- Host integration: `take_pending_host_action`, `set_screen_size`,
-  `set_message_handler`, `submit_vfs_response`
+- Host integration: `take_pending_host_action`, `take_pending_event`,
+  `set_screen_size`, `submit_vfs_response`
 - Buffer and window inspection: `buffers`, `windows`, `buffer_binding`,
   `vfs_request_ledger`, `vfs_transaction_log`
 - Registers and options: `register`, `set_register`, `get_option_number`,
@@ -66,7 +65,9 @@ Read the bundled pages in this order when you need complete coverage.
 - Search and syntax: `get_search_pattern`, `is_hlsearch_active`,
   `get_search_direction`, `get_search_highlights`,
   `get_cursor_match_info`, `is_incsearch_active`,
-  `get_incsearch_pattern`, `get_syntax_name`, `get_line_syntax`
+  `get_incsearch_pattern`, `get_search_input_pattern`,
+  `query_visible_search_state`, `query_visible_search_state_for_window`,
+  `search_capability_contract`, `get_syntax_name`, `get_line_syntax`
 - Undo and backend metadata: `get_undo_tree`, `undo_jump`,
   `backend_identity`
 - Job and VFD bridge helpers: `inject_vfd_data`, `notify_job_status`

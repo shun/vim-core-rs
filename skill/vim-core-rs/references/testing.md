@@ -72,6 +72,9 @@ Use these when changing modal state, motion, history, or register behavior.
 
 - `tests/search_highlight_contract.rs`
   Search pattern state, direction, highlight ranges, and cursor match metadata.
+- `tests/incsearch_contract.rs`
+  Visible-search-state queries, `incsearch` live preview, and viewport query
+  error handling.
 - `tests/search_highlight_c_contract.rs`
   Lower-level search highlight integration.
 - `tests/syntax_contract.rs`
@@ -81,7 +84,8 @@ Use these when changing modal state, motion, history, or register behavior.
 - `tests/scroll_viewport_contract.rs`
   Window viewport and scrolling state.
 - `tests/multi_buffer_window_contract.rs`
-  Buffer and window extraction in multi-target scenarios.
+  Buffer and window extraction, split semantics, per-window cursor state,
+  `Ctrl-w` navigation and resize contracts, and inactive-window search queries.
 - `tests/multi_buffer_window_integration.rs`
   Multi-buffer workflow coverage across more realistic flows.
 
@@ -90,8 +94,8 @@ Use these when changing data consumed by a renderer or UI shell.
 ## Messages, eval, and regressions
 
 - `tests/message_log_contract.rs`
-  `eval_string()`, message handler delivery, and structured message routing
-  with `CoreMessageSeverity` and `CoreMessageCategory`.
+  `eval_string()`, pending-event delivery, and structured message routing with
+  `CoreMessageSeverity` and `CoreMessageCategory`.
 - `tests/repro_e182.rs`
   Regression coverage for a specific Vim error path.
 - `tests/repro_prefix_conflict.rs`
@@ -129,8 +133,10 @@ Pick one narrow suite first, then expand only if the change crosses boundaries.
 - Jobs:
   `job_api_contract`
 - Search or syntax:
-  `search_highlight_contract` or `syntax_contract`
+  `search_highlight_contract`, `incsearch_contract`, or `syntax_contract`
 - Completion UI extraction:
   `pum_contract`
+- Window layout, split, viewport, or `Ctrl-w` semantics:
+  `multi_buffer_window_contract`
 - Native build or vendor pipeline:
   `quality_gate_contract`

@@ -53,8 +53,8 @@ creates wrong assumptions about persistence, ownership, and concurrency.
 - Feed stdout and stderr bytes back through `inject_vfd_data()`.
 - Report terminal job status through `notify_job_status()`.
 - Set UI size with `set_screen_size()` when geometry matters.
-- Register `set_message_handler()` before a command if Vim messages must be
-  observed.
+- Drain `take_pending_event()` when you need structured message or layout
+  events outside the transaction result.
 
 ## Dangerous assumptions to avoid
 

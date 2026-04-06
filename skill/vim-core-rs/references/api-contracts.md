@@ -33,6 +33,9 @@ You can understand the crate as a composition of four contracts.
 - `snapshot().pending_host_actions` includes the Rust-side queue length in
   addition to whatever the runtime already reported.
 - `buffers()` and `windows()` are convenience wrappers over `snapshot()`.
+- `CoreSnapshot.cursor_row` and `cursor_col` describe the active window only.
+- `CoreWindowInfo` is the per-window source of truth for geometry, viewport
+  state, active-window state, and window-local cursor state.
 
 ## Command contract
 
@@ -74,14 +77,20 @@ You can understand the crate as a composition of four contracts.
 
 ## Message delivery contract
 
-- Registering a message handler clears existing `:messages` output and
-  `v:errmsg`.
-- Message polling is skipped when no handler is registered.
-- After command execution, the session captures `v:errmsg`, captures message
-  history with `execute('messages')`, clears both sources, then emits one
-  `CoreMessageEvent` per non-empty line.
-- Error classification uses both `E123:`-style pattern detection and substring
-  matching against captured `v:errmsg`.
+- `take_pending_event()` drains the native event queue into a Rust FIFO and
+  returns one event at a time.
+- `execute_normal_command()` and `execute_ex_command()` drain both the event
+  queue and the host-action queue before returning the transaction.
+- Message delivery does not depend on `execute('messages')`, `v:errmsg`, or a
+  registered callback.
+- `CoreMessageEvent` carries structured metadata. Hosts must distinguish
+  user-visible notifications from command feedback through
+  `CoreMessageCategory`, not by parsing message text.
+- `CoreSnapshot` is state-only. Reading a snapshot does not drain pending
+  events.
+- UI-like notifications such as bell, redraw, buffer creation, window
+  creation, and layout changes are modeled as `CoreEvent`, not duplicated host
+  actions in v2 transactions.
 
 ## VFS request contract
 
@@ -152,6 +161,12 @@ You can understand the crate as a composition of four contracts.
 ## Search and syntax contract
 
 - Search highlight methods return plain ranges. They do not own rendering.
+- `query_visible_search_state()` and
+  `query_visible_search_state_for_window()` are the stable pane-local search
+  contract. They bundle mode, pattern, visible ranges, and `hlsearch` /
+  `incsearch` state without moving rendering policy into the core.
+- Search columns are byte offsets. Hosts that render by grapheme or display
+  cell must convert explicitly.
 - `get_cursor_match_info` can signal `TimedOut` or `MaxReached` instead of a
   concrete full count.
 - Syntax extraction groups consecutive columns with the same syntax ID into one

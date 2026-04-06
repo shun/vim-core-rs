@@ -10,6 +10,11 @@ maintainer. `vim-core-rs` is not a generic editor toolkit. It is a Rust-facing
 host integration layer over an embedded upstream Vim runtime, with strict
 session, host-action, message-routing, and repository-contract constraints.
 
+For split panes and renderer-facing work, keep one boundary explicit:
+`vim-core-rs` owns Vim-compatible window semantics, while the host owns pane
+projection, viewport caches, and rendering. Expose read-only observations of
+Vim state; do not move host policy or layout projection into the core.
+
 ## Start here
 
 Read only the materials needed for the current task.
@@ -122,6 +127,19 @@ Choose the workflow that matches the user task instead of reading everything.
 4. Verify mode transitions, pending input, revision updates, and dirty state,
    not only buffer text.
 
+### Add or debug window, split, or search-rendering behavior
+
+1. Treat `CoreSnapshot.windows` as the source of truth for window geometry,
+   active-window state, viewport state, and per-window cursor state.
+2. Keep window semantics in the core. Hosts may project panes from window
+   metadata, but they must not infer `Ctrl-w` behavior by reimplementing Vim.
+3. Use `query_visible_search_state()` or
+   `query_visible_search_state_for_window()` for pane-local search rendering
+   instead of composing `hlsearch`, `incsearch`, and match ranges manually.
+4. Remember that search columns are byte offsets, not display-cell widths.
+5. If the task mentions inactive panes, verify the target API works on a
+   non-active window instead of assuming active-window-only behavior.
+
 ### Update vendored Vim or build pipeline behavior
 
 1. Read [references/architecture.md](references/architecture.md) first.
@@ -196,8 +214,12 @@ Before finishing, check the smallest relevant set below.
   `cargo test --test message_log_contract`
 - Search, syntax, or completion:
   `cargo test --test search_highlight_contract`
+  `cargo test --test incsearch_contract`
   `cargo test --test syntax_contract`
   `cargo test --test pum_contract`
+- Window semantics, viewport extraction, or `Ctrl-w` behavior:
+  `env VIM_CORE_FROM_SOURCE=1 gtimeout 600 cargo test --test multi_buffer_window_contract ctrl_w_ -- --nocapture`
+  `env VIM_CORE_FROM_SOURCE=1 gtimeout 600 cargo test --test multi_buffer_window_contract split_and_vsplit_preserve_window_cursor_state -- --nocapture`
 - Native build and vendor integrity:
   `cargo test --test quality_gate_contract`
 

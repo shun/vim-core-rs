@@ -70,13 +70,14 @@ The core owns modal editing state. The host owns environment integration.
 Host responsibilities:
 
 - Drain `take_pending_host_action()`.
+- Drain `take_pending_event()` when you need structured event data outside the
+  transaction result.
 - Handle `Write`, `Quit`, `Redraw`, and `RequestInput`.
 - Resolve and serve VFS requests, then call `submit_vfs_response()`.
 - Spawn and manage external jobs after `JobStart`.
 - Feed job output with `inject_vfd_data()` and completion with
   `notify_job_status()`.
 - Provide UI sizing through `set_screen_size()`.
-- Register message hooks with `set_message_handler()` when needed.
 
 If behavior looks incomplete, first ask whether the missing piece belongs in
 the host instead of the crate.

@@ -105,6 +105,12 @@ pub enum CoreSearchDirection {
     Backward,
 }
 
+pub enum CoreSearchHighlightMode {
+    Disabled,
+    HlSearch,
+    IncSearch,
+}
+
 pub enum CoreMatchType {
     Regular,
     IncSearch,
@@ -118,7 +124,37 @@ pub struct CoreMatchRange {
     pub end_col: usize,
     pub match_type: CoreMatchType,
 }
+
+pub struct CoreVisibleSearchState {
+    pub window_id: i32,
+    pub start_row: usize,
+    pub end_row: usize,
+    pub mode: CoreSearchHighlightMode,
+    pub pattern: Option<String>,
+    pub input_pattern: Option<String>,
+    pub hlsearch_enabled: bool,
+    pub hlsearch_suspended: bool,
+    pub incsearch_active: bool,
+    pub ranges: Vec<CoreMatchRange>,
+}
+
+pub struct CoreSearchCapabilityContract {
+    pub live_state_query_available: bool,
+    pub visible_rows_only: bool,
+    pub start_col_inclusive: bool,
+    pub end_col_exclusive: bool,
+}
+
+pub enum CoreSearchQueryError {
+    NoActiveWindow,
+    InvalidViewport { start_row: i32, end_row: i32 },
+    WindowNotFound { window_id: i32 },
+}
 ```
+
+Search columns use byte offsets. For pane-local rendering, use the
+window-targeted visible-search query APIs instead of recomputing match state in
+the host.
 
 ## Undo, syntax, and completion
 ```rust
@@ -224,6 +260,8 @@ pub struct CoreWindowInfo {
     pub botline: usize,
     pub leftcol: usize,
     pub skipcol: usize,
+    pub cursor_row: usize,
+    pub cursor_col: usize,
     pub is_active: bool,
 }
 
@@ -251,6 +289,10 @@ pub enum CoreOptionError {
     InternalError { name: String, detail: String },
 }
 ```
+
+`CoreWindowInfo` is the renderer-facing window contract. It exposes window
+geometry, viewport state, active-window state, and the per-window cursor
+without requiring the host to reimplement Vim window semantics.
 
 ## VFS and job-facing models
 

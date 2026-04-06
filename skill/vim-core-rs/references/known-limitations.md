@@ -7,17 +7,22 @@ realized features.
 
 ## Current implementation gaps
 
-The following public methods exist, but the current native implementation does
-not yet provide expected dynamic data.
+The incremental-search and visible-search APIs now return live Vim state. The
+main caveat is narrower: search columns are byte offsets, not display-cell
+widths or Unicode scalar indexes.
 
-- `is_incsearch_active()`
-  Currently returns `false` because the native bridge path still returns a
-  placeholder value.
-- `get_incsearch_pattern()`
-  Currently returns `None` because the native bridge path still returns an
-  empty placeholder string.
+- `CoreMatchRange.start_col`
+  Inclusive byte offset into the line.
+- `CoreMatchRange.end_col`
+  Exclusive byte offset into the line.
 
-Treat these as exposed-but-incomplete APIs, not reliable live-state queries.
+If a host renders by grapheme cluster or display cell, it must convert from
+the byte contract explicitly before drawing.
+
+Some message-producing paths are still incomplete. In current tests, basic
+`echo*` and prompt-oriented commands do not always surface as `CoreEvent`
+values or terminal output, so hosts should not assume every Vim message path is
+fully bridged yet.
 
 ## Job bridge limits
 
@@ -65,8 +70,8 @@ boundaries.
 ## Interpretation rules
 
 - If a type or method exists, first check whether contract tests exercise it.
-- If a method is present but the native bridge returns placeholder data, treat
-  it as exposed-but-incomplete.
+- If a method is present but contract tests do not cover the behavior you need,
+  verify the native bridge and add a focused test before widening the contract.
 - If a behavior depends on host action, the crate is only one half of the
   feature.
 

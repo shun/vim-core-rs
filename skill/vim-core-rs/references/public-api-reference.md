@@ -91,8 +91,8 @@ through host policy.
 ### Host integration methods
 
 - `take_pending_host_action(&mut self) -> Option<CoreHostAction>`
+- `take_pending_event(&mut self) -> Option<CoreEvent>`
 - `set_screen_size(&mut self, rows: i32, cols: i32)`
-- `set_message_handler(&mut self, handler: MessageHandler)`
 - `submit_vfs_response(&mut self, response: CoreVfsResponse)
   -> Result<CoreCommandOutcome, CoreCommandError>`
 
@@ -137,14 +137,20 @@ may resume a deferred quit. An unknown request ID is rejected as
   max_count: i32, timeout_ms: i32) -> CoreCursorMatchInfo`
 - `is_incsearch_active(&self) -> bool`
 - `get_incsearch_pattern(&self) -> Option<String>`
+- `get_search_input_pattern(&self) -> Option<String>`
+- `query_visible_search_state(&mut self, start_row: i32, end_row: i32)
+  -> Result<CoreVisibleSearchState, CoreSearchQueryError>`
+- `query_visible_search_state_for_window(&mut self, window_id: i32,
+  start_row: i32, end_row: i32)
+  -> Result<CoreVisibleSearchState, CoreSearchQueryError>`
+- `search_capability_contract() -> CoreSearchCapabilityContract`
 - `get_syntax_name(&self, syn_id: i32) -> Option<String>`
 - `get_line_syntax(&self, win_id: i32, lnum: i64)
   -> Result<Vec<CoreSyntaxChunk>, CoreCommandError>`
 
-In the current implementation, `is_incsearch_active()` and
-`get_incsearch_pattern()` are exposed but may still return placeholder values.
-Read [known-limitations.md](known-limitations.md) before treating them as
-reliable live-state queries.
+Search ranges follow one fixed contract: `start_col` is inclusive, `end_col`
+is exclusive, both are byte columns, and visible-state queries are limited to
+the requested 1-based inclusive row range for the target window.
 
 ### Undo, backend, job, and VFD methods
 
@@ -203,7 +209,7 @@ reliable live-state queries.
   pending_vfs_operation, deferred_close, last_vfs_error }`
 - `CoreWindowInfo`
   `{ id, buf_id, row, col, width, height, topline, botline, leftcol, skipcol,
-  is_active }`
+  cursor_row, cursor_col, is_active }`
 - `CoreSnapshot`
   `{ text, revision, dirty, mode, pending_input, cursor_row, cursor_col,
   pending_host_actions, buffers, windows, pum }`
@@ -219,7 +225,6 @@ reliable live-state queries.
 - `CoreMessageCategory`
   `UserVisible`, `CommandFeedback`
 - `CoreMessageEvent { severity, category, content }`
-- `MessageHandler = Box<dyn FnMut(CoreMessageEvent) + Send + 'static>`
 - `CoreMatchType`
   `Regular`, `IncSearch`, `CurSearch`
 - `CoreMatchRange { start_row, start_col, end_row, end_col, match_type }`
@@ -228,6 +233,17 @@ reliable live-state queries.
 - `CoreCursorMatchInfo { is_on_match, current_match_index, total_matches }`
 - `CoreSearchDirection`
   `Forward`, `Backward`
+- `CoreSearchHighlightMode`
+  `Disabled`, `HlSearch`, `IncSearch`
+- `CoreVisibleSearchState`
+  `{ window_id, start_row, end_row, mode, pattern, input_pattern,
+  hlsearch_enabled, hlsearch_suspended, incsearch_active, ranges }`
+- `CoreSearchCapabilityContract`
+  `{ live_state_query_available, visible_rows_only, start_col_inclusive,
+  end_col_exclusive }`
+- `CoreSearchQueryError`
+  `NoActiveWindow`, `InvalidViewport { start_row, end_row }`,
+  `WindowNotFound { window_id }`
 
 ### Option types
 

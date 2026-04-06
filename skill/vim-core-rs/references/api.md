@@ -9,18 +9,6 @@ If you are inside the original repository, you can supplement this file with
 the shorter, task-oriented companion that still works when the skill is copied
 standalone.
 
-## Table of contents
-
-- Session lifecycle
-- Commands and evaluation
-- State inspection
-- Navigation, marks, registers, and windows
-- Options
-- Host-action queue, events, and VFS inspection
-- Jobs and VFD integration
-- Undo, search, syntax, completion, and UI-facing extraction
-- Messaging and diagnostics
-
 ## Session lifecycle
 
 - `VimCoreSession::new(initial_text: &str) -> Result<Self, CoreSessionError>`
@@ -70,7 +58,8 @@ Check `CoreCommandOutcome` instead of assuming that a command changed text.
 - `buffers(&self) -> Vec<CoreBufferInfo>`
   Return visible buffer metadata.
 - `windows(&self) -> Vec<CoreWindowInfo>`
-  Return window layout metadata.
+  Return window layout metadata, including geometry, viewport, active-window
+  state, and per-window cursor state.
 - `buffer_text(&self, buf_id: i32) -> Option<String>`
   Return the current full text of a specific buffer.
 
@@ -153,19 +142,29 @@ Use these only after the host has handled a `JobStart` action.
   max_count: i32, timeout_ms: i32) -> CoreCursorMatchInfo`
 - `is_incsearch_active(&self) -> bool`
 - `get_incsearch_pattern(&self) -> Option<String>`
+- `get_search_input_pattern(&self) -> Option<String>`
+- `query_visible_search_state(&mut self, start_row: i32, end_row: i32)
+  -> Result<CoreVisibleSearchState, CoreSearchQueryError>`
+- `query_visible_search_state_for_window(&mut self, window_id: i32,
+  start_row: i32, end_row: i32)
+  -> Result<CoreVisibleSearchState, CoreSearchQueryError>`
+- `search_capability_contract() -> CoreSearchCapabilityContract`
 - `get_syntax_name(&self, syn_id: i32) -> Option<String>`
 - `get_line_syntax(&self, win_id: i32, lnum: i64)
   -> Result<Vec<CoreSyntaxChunk>, CoreCommandError>`
 - `set_screen_size(&mut self, rows: i32, cols: i32)`
 
 These methods exist so the host can render or inspect Vim-derived state without
-screen scraping.
+screen scraping. Search columns use byte offsets, and visible-search queries
+are the preferred pane-local contract because they already combine `hlsearch`,
+`:nohlsearch`, `incsearch`, the current pattern, and per-range
+`CoreMatchType`.
 
 ## Messaging and diagnostics
 
-- `set_message_handler(&mut self, handler: MessageHandler)`
-  Register a callback for structured messages emitted by Vim. Message events
-  include `CoreMessageSeverity` and `CoreMessageCategory` metadata.
+- `take_pending_event(&mut self) -> Option<CoreEvent>`
+  Drain queued events after command execution when you need out-of-band
+  structured messages, pager prompts, redraws, or layout notifications.
 - `backend_identity(&self) -> CoreBackendIdentity`
   Report whether the session runs against the real upstream runtime or the
   bridge stub.

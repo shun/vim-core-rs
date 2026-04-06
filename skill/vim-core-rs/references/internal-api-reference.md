@@ -56,6 +56,8 @@ polling, and host-action queue behavior.
 - `c_str_to_string`
 - `convert_buffer_list`
 - `convert_window_list`
+  Converts the FFI window array into `Vec<CoreWindowInfo>`, including
+  geometry, viewport state, active-window state, and per-window cursor state.
 - `convert_mode`
 - `convert_pending_input`
 - `convert_mark_position`
@@ -69,6 +71,8 @@ polling, and host-action queue behavior.
 - `convert_option_type`
 - `convert_option_get_result`
 - `convert_option_set_result`
+- `validate_search_viewport`
+- `resolve_active_search_window_id`
 - `is_error_message`
 - `string_from_parts`
 
@@ -181,8 +185,13 @@ polling, and host-action queue behavior.
 - `DocumentCoordinator` stores revisions, not text. Callers must fetch text
   from the session before issuing a save.
 - `VfdManager` is process-global state. Dropping a `VimCoreSession` clears it.
-- `drain_native_events` is intentionally lossy because it clears Vim message
-  history after events are collected into a transaction.
+- `drain_native_events` preserves native event ordering as the Rust layer
+  moves them into the transaction/result queue.
+- `validate_search_viewport` rejects rows below 1, rows below `end_row`, and
+  inverted ranges before any native query runs.
+- `resolve_active_search_window_id` is only used for the active-window search
+  convenience method. The window-targeted search API still requires an
+  explicit `window_id`.
 
 ## Reading guidance
 
