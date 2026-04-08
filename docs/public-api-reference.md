@@ -295,7 +295,7 @@ These types describe the observable result surface for embedded execution.
 - `CoreMessageCategory`: `UserVisible`, `CommandFeedback`
 - `CorePagerPromptKind`: `More`, `HitReturn`
 - `CoreHostAction`: `VfsRequest`, `Write`, `Quit`, `Redraw`,
-  `RequestInput`, `Bell`, `JobStart`, `JobStop`
+  `RequestInput`, `Bell`, `JobStart`, `JobWrite`, `JobStop`
 
 ### Session configuration types
 
@@ -346,6 +346,7 @@ on its own.
   - `RequestInput { prompt, input_kind, correlation_id }`
   - `Bell`
   - `JobStart(CoreJobStartRequest)`
+  - `JobWrite { vfd, data }`
   - `JobStop { job_id }`
 
 ### Buffer, window, and snapshot structs

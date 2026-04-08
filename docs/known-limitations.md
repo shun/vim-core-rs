@@ -19,10 +19,10 @@ as byte offsets, not display-cell widths or Unicode scalar indexes.
 If your UI renders by grapheme cluster or display cell, convert from the byte
 contract explicitly before drawing.
 
-Some message-producing paths are still incomplete. In current tests, basic
-`echo*` and prompt-oriented commands do not always surface as `CoreEvent`
-values or terminal output, so hosts should not assume every Vim message path is
-fully bridged yet.
+`echo`, `echon`, `echomsg`, `echoerr`, `echoconsole` の出力は `CoreEvent::Message`
+として host に到達する。`more-prompt` および `hit-return` prompt は
+`CoreEvent::PagerPrompt` としてブロッキングなしで通知される。
+`input()` や `confirm()` 等の対話的プロンプトは未対応。
 
 ## Job bridge limits
 
@@ -30,11 +30,9 @@ The job bridge is real, but intentionally narrow.
 
 - The crate does not spawn OS processes itself.
 - `CoreHostAction::JobStart` is a host request, not process execution.
-- `vim_core_vfd_write()` currently ignores bytes written from Vim and simply
-  reports success.
-- Job working directory propagation is not implemented in the current bridge.
-  `CoreJobStartRequest.cwd` may therefore be `None` even when Vimscript-level
-  job options suggest a directory.
+- Bytes written from Vim to a job channel surface as
+  `CoreHostAction::JobWrite { vfd, data }`. The host must consume that action
+  and forward the bytes to the real process.
 - When a job reaches a terminal status, the associated VFDs are closed so Vim
   observes EOF. Late injected data is rejected.
 

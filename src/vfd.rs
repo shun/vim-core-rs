@@ -29,9 +29,16 @@ pub struct JobState {
     pub reaped: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct PendingJobWrite {
+    pub vfd: i32,
+    pub data: Vec<u8>,
+}
+
 pub struct VfdManager {
     pub vfds: HashMap<c_int, VfdState>,
     pub jobs: HashMap<i32, JobState>,
+    pending_job_writes: VecDeque<PendingJobWrite>,
     next_vfd: i32,
 }
 
@@ -40,6 +47,7 @@ impl VfdManager {
         Self {
             vfds: HashMap::new(),
             jobs: HashMap::new(),
+            pending_job_writes: VecDeque::new(),
             next_vfd: 512,
         }
     }
@@ -93,6 +101,26 @@ impl VfdManager {
         self.close_fd(vfd_out);
         self.close_fd(vfd_err);
         true
+    }
+
+    pub fn is_job_input_fd(&self, fd: c_int) -> bool {
+        self.jobs
+            .values()
+            .any(|job| job.vfd_in == fd && !job.is_closed)
+    }
+
+    pub fn enqueue_job_write(&mut self, fd: c_int, data: Vec<u8>) -> bool {
+        if self.is_job_input_fd(fd) {
+            self.pending_job_writes
+                .push_back(PendingJobWrite { vfd: fd, data });
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn take_pending_job_write(&mut self) -> Option<PendingJobWrite> {
+        self.pending_job_writes.pop_front()
     }
 
     pub fn inject_data(&mut self, fd: c_int, data: &[u8]) -> bool {
@@ -154,6 +182,7 @@ impl VfdManager {
     pub fn clear_all(&mut self) {
         self.vfds.clear();
         self.jobs.clear();
+        self.pending_job_writes.clear();
         self.next_vfd = 512;
     }
 }
@@ -176,7 +205,13 @@ pub extern "C" fn vim_core_vfd_read(fd: c_int, buf: *mut c_void, count: usize) -
 
 #[unsafe(no_mangle)]
 pub extern "C" fn vim_core_vfd_write(_fd: c_int, _buf: *const c_void, count: usize) -> isize {
-    // For now, ignore write from Vim (or we could store it to pass to host)
+    if count == 0 {
+        return 0;
+    }
+
+    let data = unsafe { std::slice::from_raw_parts(_buf as *const u8, count) }.to_vec();
+    let mut mgr = get_manager();
+    let _ = mgr.enqueue_job_write(_fd, data);
     count as isize
 }
 

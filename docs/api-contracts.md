@@ -100,9 +100,9 @@ application.
   actions drained from the native runtime.
 - The host must repeatedly call `take_pending_host_action()` until it returns
   `None`.
-- `Write`, `Quit`, `Redraw`, `RequestInput`, `JobStart`, `JobStop`, and
-  `VfsRequest` are requests to the host. The crate does not complete them by
-  itself.
+- `Write`, `Quit`, `Redraw`, `RequestInput`, `JobStart`, `JobWrite`,
+  `JobStop`, and `VfsRequest` are requests to the host. The crate does not
+  complete them by itself.
 
 ## Event delivery contract
 
@@ -238,6 +238,9 @@ The VFD contract explains what the host must do for jobs.
 
 - `CoreHostAction::JobStart` means Vim requested a process. The host must spawn
   it and retain the requested job and VFD IDs.
+- `CoreHostAction::JobWrite { vfd, data }` means Vim wrote bytes to a job
+  channel. The host must forward those bytes to the real process input that
+  owns `vfd`.
 - The host must feed stdout and stderr bytes back through
   `inject_vfd_data(vfd, bytes)`.
 - The host must report lifecycle transitions through

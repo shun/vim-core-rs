@@ -288,7 +288,10 @@ These types model the virtual file descriptor subsystem.
 - `JobState { vfd_in, vfd_out, vfd_err, is_closed, status, exit_code, reaped }`
   Per-job state. `reaped` prevents the same terminal job status from being
   reported repeatedly.
-- `VfdManager { vfds, jobs, next_vfd }`
+- `PendingJobWrite { vfd, data }`
+  Captures one pending Vim-to-host job write until the session drains it into a
+  host action.
+- `VfdManager { vfds, jobs, pending_job_writes, next_vfd }`
   Global manager for all VFD and job state in the process.
 
 ### `VfdManager` methods
@@ -307,6 +310,12 @@ These methods are the complete internal VFD management API.
   -> bool`
   Stores job status. If the status is terminal, it marks the job as closed and
   closes the associated VFDs to deliver EOF.
+- `is_job_input_fd(&self, fd: c_int) -> bool`
+  Reports whether one open job currently owns `fd` as its stdin VFD.
+- `enqueue_job_write(&mut self, fd: c_int, data: Vec<u8>) -> bool`
+  Queues one Vim-to-host write when `fd` is an open job stdin VFD.
+- `take_pending_job_write(&mut self) -> Option<PendingJobWrite>`
+  Pops one queued Vim-to-host job write for host-action draining.
 - `inject_data(&mut self, fd: c_int, data: &[u8]) -> bool`
   Appends bytes to one VFD's read queue if the VFD exists and is still open.
 - `read_data(&mut self, fd: c_int, buf: &mut [u8]) -> isize`

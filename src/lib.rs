@@ -235,6 +235,10 @@ pub enum CoreHostAction {
     },
     Bell,
     JobStart(CoreJobStartRequest),
+    JobWrite {
+        vfd: i32,
+        data: Vec<u8>,
+    },
     JobStop {
         job_id: i32,
     },
@@ -1706,6 +1710,24 @@ impl VimCoreSession {
             if should_expose_host_action_in_queue_api(&action) {
                 self.pending_host_actions.borrow_mut().push_back(action);
             }
+        }
+
+        let pending_job_writes = {
+            let mut mgr = crate::vfd::get_manager();
+            let mut writes = Vec::new();
+            while let Some(write) = mgr.take_pending_job_write() {
+                writes.push(write);
+            }
+            writes
+        };
+
+        for write in pending_job_writes {
+            self.pending_host_actions
+                .borrow_mut()
+                .push_back(CoreHostAction::JobWrite {
+                    vfd: write.vfd,
+                    data: write.data,
+                });
         }
     }
 

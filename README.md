@@ -105,6 +105,8 @@ An embedding host must implement these behaviors.
 - Handle every `CoreHostAction::VfsRequest` and send one matching
   `CoreVfsResponse`.
 - Spawn real jobs when `CoreHostAction::JobStart` appears.
+- Handle `CoreHostAction::JobWrite { vfd, data }` by forwarding the
+  Vim-originated bytes to the real process stdin.
 - Feed stdout and stderr bytes back through `inject_vfd_data()`.
 - Report terminal job status through `notify_job_status()`.
 - Set UI size with `set_screen_size()` when screen geometry matters.
