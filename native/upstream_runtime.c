@@ -637,6 +637,10 @@ upstream_runtime_session_t* upstream_runtime_session_new(const char* initial_tex
     /* Embedded runtime still needs full-screen layout behavior for viewport sync. */
     full_screen = TRUE;
 
+    /* embedded mode ではページャプロンプトを CoreEvent 経由で通知する。
+     * vi 互換モードでは 'more' がデフォルト OFF のため、明示的に有効化する。 */
+    p_more = TRUE;
+
     /* Clear any leftover typeahead from previous sessions/tests */
     if (typebuf.tb_len > 0) {
         del_typebuf(typebuf.tb_len, 0);
@@ -2141,12 +2145,17 @@ vim_core_option_set_result_t upstream_runtime_set_option_string(
 }
 
 void upstream_runtime_set_screen_size(upstream_runtime_session_t* session, int rows, int cols) {
-    
+
     Rows = rows;
     Columns = cols;
     screenalloc(TRUE);
     shell_new_rows();
     shell_new_columns();
+    /* 画面サイズ変更後、メッセージページャの残行数を再同期する。
+     * msg_starthere() は条件付き（!msg_didany || lines_left < 0）でしか
+     * 呼ばれないため、lines_left を -1 にして次の msg_start() で
+     * cmdline_row から再計算させる。 */
+    lines_left = -1;
     
 
     /* Task 3.2: Notify layout change after screen resize */
