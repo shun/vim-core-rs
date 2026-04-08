@@ -428,6 +428,11 @@ void vim_core_bridge_enqueue_message_event(
     vim_core_message_severity_t severity,
     vim_core_message_category_t category
 );
+void vim_core_bridge_enqueue_input_request(
+    const char* prompt,
+    uintptr_t prompt_len,
+    vim_core_input_request_kind_t kind
+);
 void vim_core_bridge_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind);
 void vim_core_bridge_enqueue_bell(void);
 

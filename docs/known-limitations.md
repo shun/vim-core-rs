@@ -21,8 +21,11 @@ contract explicitly before drawing.
 
 `echo`, `echon`, `echomsg`, `echoerr`, and `echoconsole` output reaches the
 host as `CoreEvent::Message`. The `more-prompt` and `hit-return` prompts are
-reported as `CoreEvent::PagerPrompt` without blocking. Interactive prompts
-such as `input()` and `confirm()` are not supported.
+reported as `CoreEvent::PagerPrompt` without blocking. The dedicated `:input`
+Ex command is bridged to `CoreHostAction::RequestInput`, but Vimscript
+`input()`, `inputsecret()`, `confirm()`, and `:confirm` are intentionally not
+supported in embedded mode. They emit a user-visible info message and return
+the cancel sentinel without blocking or leaking terminal prompts.
 
 ## Job bridge limits
 

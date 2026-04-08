@@ -106,6 +106,10 @@ application.
 - `Write`, `Quit`, `Redraw`, `RequestInput`, `JobStart`, `JobWrite`,
   `JobStop`, and `VfsRequest` are requests to the host. The crate does not
   complete them by itself.
+- `RequestInput` is the bridge used by the dedicated `:input` Ex command.
+  Vimscript `input()`, `inputsecret()`, `confirm()`, and `:confirm` are
+  intentionally unsupported in embedded mode and surface as user-visible
+  `CoreEvent::Message` values instead of host actions.
 
 ## Event delivery contract
 

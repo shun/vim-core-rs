@@ -7,9 +7,9 @@ use std::{
     os::fd::{FromRawFd, RawFd},
 };
 use vim_core_rs::{
-    CoreCommandOutcome, CoreEvent, CoreHostAction, CoreInputRequestKind, CoreMode, CoreOptionError,
-    CoreOptionScope, CoreOptionType, CoreRuntimeMode, CoreSessionError, CoreSessionOptions,
-    VimCoreSession,
+    CoreCommandOutcome, CoreEvent, CoreHostAction, CoreInputRequestKind, CoreMessageCategory,
+    CoreMessageEvent, CoreMessageSeverity, CoreMode, CoreOptionError, CoreOptionScope,
+    CoreOptionType, CoreRuntimeMode, CoreSessionError, CoreSessionOptions, VimCoreSession,
 };
 
 fn session_test_lock() -> &'static Mutex<()> {
@@ -1073,6 +1073,86 @@ fn execute_ex_command_keeps_input_flow_as_host_action_not_pager_prompt() {
             .all(|event| !matches!(event, CoreEvent::PagerPrompt(_))),
         "input prompt should stay a host action rather than a pager prompt: {:?}",
         tx.events
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn vimscript_input_function_emits_message_without_host_action_or_terminal_leak() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    let ((result, event, action), stdout, stderr) = capture_standard_streams(|| {
+        let result = session.eval_string(r#"input("Enter filename: ")"#);
+        let event = session.take_pending_event();
+        let action = session.take_pending_host_action();
+        (result, event, action)
+    });
+
+    assert_eq!(result, Some(String::new()));
+    assert!(
+        matches!(
+            event,
+            Some(CoreEvent::Message(CoreMessageEvent {
+                severity: CoreMessageSeverity::Info,
+                category: CoreMessageCategory::UserVisible,
+                ref content,
+            })) if content.contains("input()")
+                && content.contains("embedded mode")
+        ),
+        "input() should emit a user-visible info message in embedded mode: {:?}",
+        event
+    );
+    assert!(
+        action.is_none(),
+        "input() should not enqueue host actions in embedded mode: {:?}",
+        action
+    );
+    assert!(
+        sanitize_harness_output(&stdout).is_empty() && sanitize_harness_output(&stderr).is_empty(),
+        "embedded input() should not leak prompts to the terminal: stdout={:?}, stderr={:?}",
+        stdout,
+        stderr
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn vimscript_inputsecret_function_emits_message_without_host_action_or_terminal_leak() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    let ((result, event, action), stdout, stderr) = capture_standard_streams(|| {
+        let result = session.eval_string(r#"inputsecret("Password: ")"#);
+        let event = session.take_pending_event();
+        let action = session.take_pending_host_action();
+        (result, event, action)
+    });
+
+    assert_eq!(result, Some(String::new()));
+    assert!(
+        matches!(
+            event,
+            Some(CoreEvent::Message(CoreMessageEvent {
+                severity: CoreMessageSeverity::Info,
+                category: CoreMessageCategory::UserVisible,
+                ref content,
+            })) if content.contains("input()")
+                && content.contains("embedded mode")
+        ),
+        "inputsecret() should emit a user-visible info message in embedded mode: {:?}",
+        event
+    );
+    assert!(
+        action.is_none(),
+        "inputsecret() should not enqueue host actions in embedded mode: {:?}",
+        action
+    );
+    assert!(
+        sanitize_harness_output(&stdout).is_empty() && sanitize_harness_output(&stderr).is_empty(),
+        "embedded inputsecret() should not leak prompts to the terminal: stdout={:?}, stderr={:?}",
+        stdout,
+        stderr
     );
 }
 

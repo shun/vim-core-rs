@@ -272,6 +272,14 @@ void vim_core_bridge_enqueue_message_event(
     upstream_runtime_enqueue_message_event(text, text_len, severity, category);
 }
 
+void vim_core_bridge_enqueue_input_request(
+    const char* prompt,
+    uintptr_t prompt_len,
+    vim_core_input_request_kind_t kind
+) {
+    upstream_runtime_enqueue_input_request(prompt, prompt_len, kind);
+}
+
 void vim_core_bridge_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind) {
     upstream_runtime_enqueue_pager_prompt_event(kind);
 }

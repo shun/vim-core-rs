@@ -308,6 +308,186 @@ fn output_contains(output: &str, needle: &str) -> bool {
 
 #[cfg(unix)]
 #[test]
+fn embedded_input_function_fails_fast_with_info_event_instead_of_blocking() {
+    let (sender, receiver) = mpsc::channel();
+
+    let handle = thread::spawn(move || {
+        let _guard = acquire_session_test_lock();
+        let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
+        while session.take_pending_event().is_some() {}
+        while session.take_pending_host_action().is_some() {}
+
+        let ((result, event, action), stdout, stderr) = capture_standard_streams(|| {
+            let result = session.eval_string("input('name: ')");
+            let event = session.take_pending_event();
+            let action = session.take_pending_host_action();
+            (result, event, action)
+        });
+
+        sender
+            .send((result, event, action, stdout, stderr))
+            .expect("test result should be sent");
+    });
+
+    let (result, event, action, stdout, stderr) = receiver
+        .recv_timeout(Duration::from_secs(5))
+        .expect("embedded input() should not block");
+    handle.join().expect("worker thread should complete");
+
+    assert_eq!(
+        result,
+        Some(String::new()),
+        "unsupported input() should return the empty-string cancel sentinel: {:?}",
+        result
+    );
+    assert!(
+        matches!(
+            event,
+            Some(CoreEvent::Message(CoreMessageEvent {
+                severity: CoreMessageSeverity::Info,
+                category: CoreMessageCategory::UserVisible,
+                ref content,
+            })) if content.contains("input()")
+                && content.contains("embedded mode")
+        ),
+        "input() should surface an explicit embedded-mode info event: {:?}",
+        event
+    );
+    assert!(
+        action.is_none(),
+        "unsupported input() should not enqueue host actions without a response contract: {:?}",
+        action
+    );
+    assert!(
+        sanitize_harness_output(&stdout).is_empty() && sanitize_harness_output(&stderr).is_empty(),
+        "unsupported input() should not leak terminal prompts: stdout={:?}, stderr={:?}",
+        stdout,
+        stderr
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn embedded_inputsecret_function_fails_fast_with_info_event_instead_of_blocking() {
+    let (sender, receiver) = mpsc::channel();
+
+    let handle = thread::spawn(move || {
+        let _guard = acquire_session_test_lock();
+        let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
+        while session.take_pending_event().is_some() {}
+        while session.take_pending_host_action().is_some() {}
+
+        let ((result, event, action), stdout, stderr) = capture_standard_streams(|| {
+            let result = session.eval_string("inputsecret('password: ')");
+            let event = session.take_pending_event();
+            let action = session.take_pending_host_action();
+            (result, event, action)
+        });
+
+        sender
+            .send((result, event, action, stdout, stderr))
+            .expect("test result should be sent");
+    });
+
+    let (result, event, action, stdout, stderr) = receiver
+        .recv_timeout(Duration::from_secs(5))
+        .expect("embedded inputsecret() should not block");
+    handle.join().expect("worker thread should complete");
+
+    assert_eq!(
+        result,
+        Some(String::new()),
+        "unsupported inputsecret() should return the empty-string cancel sentinel: {:?}",
+        result
+    );
+    assert!(
+        matches!(
+            event,
+            Some(CoreEvent::Message(CoreMessageEvent {
+                severity: CoreMessageSeverity::Info,
+                category: CoreMessageCategory::UserVisible,
+                ref content,
+            })) if content.contains("input()")
+                && content.contains("embedded mode")
+        ),
+        "inputsecret() should surface an explicit embedded-mode info event: {:?}",
+        event
+    );
+    assert!(
+        action.is_none(),
+        "unsupported inputsecret() should not enqueue host actions without a response contract: {:?}",
+        action
+    );
+    assert!(
+        sanitize_harness_output(&stdout).is_empty() && sanitize_harness_output(&stderr).is_empty(),
+        "unsupported inputsecret() should not leak terminal prompts: stdout={:?}, stderr={:?}",
+        stdout,
+        stderr
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn embedded_confirm_function_fails_fast_with_info_event_instead_of_blocking() {
+    let (sender, receiver) = mpsc::channel();
+
+    let handle = thread::spawn(move || {
+        let _guard = acquire_session_test_lock();
+        let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
+        while session.take_pending_event().is_some() {}
+        while session.take_pending_host_action().is_some() {}
+
+        let ((result, event, action), stdout, stderr) = capture_standard_streams(|| {
+            let result = session.eval_string("string(confirm('Are you sure?', '&Yes\\n&No'))");
+            let event = session.take_pending_event();
+            let action = session.take_pending_host_action();
+            (result, event, action)
+        });
+
+        sender
+            .send((result, event, action, stdout, stderr))
+            .expect("test result should be sent");
+    });
+
+    let (result, event, action, stdout, stderr) = receiver
+        .recv_timeout(Duration::from_secs(5))
+        .expect("embedded confirm() should not block");
+    handle.join().expect("worker thread should complete");
+
+    assert_eq!(
+        result,
+        Some("0".to_string()),
+        "unsupported confirm() should return the cancel sentinel: {:?}",
+        result
+    );
+    assert!(
+        matches!(
+            event,
+            Some(CoreEvent::Message(CoreMessageEvent {
+                severity: CoreMessageSeverity::Info,
+                category: CoreMessageCategory::UserVisible,
+                ref content,
+            })) if content.contains("confirm()")
+                && content.contains("embedded mode")
+        ),
+        "confirm() should surface an explicit embedded-mode info event: {:?}",
+        event
+    );
+    assert!(
+        action.is_none(),
+        "unsupported confirm() should not enqueue host actions without a response contract: {:?}",
+        action
+    );
+    assert!(
+        sanitize_harness_output(&stdout).is_empty() && sanitize_harness_output(&stderr).is_empty(),
+        "unsupported confirm() should not leak terminal prompts: stdout={:?}, stderr={:?}",
+        stdout,
+        stderr
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn embedded_echoconsole_is_delivered_as_event_without_terminal_leak() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");

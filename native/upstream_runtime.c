@@ -2735,6 +2735,31 @@ void upstream_runtime_enqueue_message_event(
     );
 }
 
+void upstream_runtime_enqueue_input_request(
+    const char* prompt,
+    uintptr_t prompt_len,
+    vim_core_input_request_kind_t kind
+) {
+    size_t bounded_len;
+    char* prompt_copy;
+
+    if (upstream_runtime_active_session == NULL) return;
+    if (prompt == NULL) prompt = "";
+
+    bounded_len = (size_t)prompt_len;
+    prompt_copy = (char*)malloc(bounded_len + 1U);
+    if (prompt_copy == NULL) return;
+    if (bounded_len > 0) memcpy(prompt_copy, prompt, bounded_len);
+    prompt_copy[bounded_len] = '\0';
+
+    (void)upstream_runtime_queue_input_action(
+        upstream_runtime_active_session,
+        prompt_copy,
+        kind
+    );
+    free(prompt_copy);
+}
+
 void upstream_runtime_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind) {
     if (upstream_runtime_active_session == NULL) return;
     upstream_runtime_queue_pager_prompt_event(upstream_runtime_active_session, kind);
