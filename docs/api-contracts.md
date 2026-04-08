@@ -81,6 +81,9 @@ type is private.
 - `:edit` becomes a `CoreVfsRequest::Resolve` against the active buffer.
 - `:write` and `:update` become either `CoreHostAction::Write` for local
   buffers or `CoreVfsRequest::Save` for virtual buffers.
+- On local buffers, a compound Ex command with an intercepted `:write` or
+  `:update` followed immediately by `:quit` also queues `Quit` so the host can
+  keep save-before-quit ordering.
 - `:update` on a clean VFS buffer becomes `CoreCommandOutcome::NoChange`.
 - `:wq` on a VFS buffer sets `CoreDeferredClose::SaveAndClose`, issues a save,
   and only later resumes quit after save success.

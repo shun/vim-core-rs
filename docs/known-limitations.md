@@ -19,10 +19,10 @@ as byte offsets, not display-cell widths or Unicode scalar indexes.
 If your UI renders by grapheme cluster or display cell, convert from the byte
 contract explicitly before drawing.
 
-`echo`, `echon`, `echomsg`, `echoerr`, `echoconsole` の出力は `CoreEvent::Message`
-として host に到達する。`more-prompt` および `hit-return` prompt は
-`CoreEvent::PagerPrompt` としてブロッキングなしで通知される。
-`input()` や `confirm()` 等の対話的プロンプトは未対応。
+`echo`, `echon`, `echomsg`, `echoerr`, and `echoconsole` output reaches the
+host as `CoreEvent::Message`. The `more-prompt` and `hit-return` prompts are
+reported as `CoreEvent::PagerPrompt` without blocking. Interactive prompts
+such as `input()` and `confirm()` are not supported.
 
 ## Job bridge limits
 
@@ -51,6 +51,11 @@ Local buffers and VFS-backed buffers do not follow the same save path.
   are now split and the write/quit sub-command is intercepted by the bridge.
   Non-intercepted sub-commands before the intercepted one are executed
   natively.
+- For local buffers, `:write {path} | quit` and `:update {path} | quit` keep
+  the same host coordination and enqueue `[Write, Quit]`.
+- For VFS-backed buffers, `:write | quit` is still not treated as `:wq`. Save
+  completion has to round-trip through `submit_vfs_response()`, so use `:wq`
+  or `:xit` when you need deferred close after a host-owned save.
 
 ## Build and feature limits
 
@@ -65,10 +70,11 @@ The embedded upstream Vim is compiled with explicit feature reductions.
 Do not infer "missing tests" from those skips. They are repository-declared
 feature boundaries.
 
-When an upstream case is marked as `temporarily_excluded`, treat that as a
-test-infrastructure or encoding gap, not as a scope decision. Policy
+If a future upstream case is marked as `temporarily_excluded`, treat that as
+a test-infrastructure or encoding gap, not as a scope decision. Policy
 exclusions belong in the upstream classification manifest as `out_of_scope`
-or `preserve_through_adaptation`, not in the skiplist.
+or `preserve_through_adaptation`, not in the skiplist. The current manifest
+has no `temporarily_excluded` cases.
 
 ## Architecture limits
 

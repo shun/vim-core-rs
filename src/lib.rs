@@ -1397,7 +1397,16 @@ impl VimCoreSession {
                 }
                 // インターセプト対象のサブコマンドを処理
                 let intent = parse_single_ex_intent(segments[idx].trim()).unwrap();
+                let should_chain_trailing_quit =
+                    should_chain_trailing_quit_for_local_write(self, &intent, &segments[idx + 1..]);
                 let outcome = self.apply_intent(intent)?;
+                if should_chain_trailing_quit {
+                    if let Some(trailing_quit) =
+                        find_first_trailing_quit_intent(&segments[idx + 1..])
+                    {
+                        let _ = self.apply_intent(trailing_quit)?;
+                    }
+                }
                 return Ok(self.collect_transaction(outcome, self.snapshot()));
             }
         }
@@ -3078,8 +3087,7 @@ fn parse_ex_intent(command: &str) -> Option<ParsedExIntent> {
         segments
     );
 
-    // インターセプト対象のサブコマンドを探す（最後に見つかったものを返す）
-    // write/quit 系のコマンドが含まれていれば、それをインターセプトする
+    // インターセプト対象のサブコマンドを先頭から探し、最初に見つかったものを返す
     for seg in &segments {
         let seg_trimmed = seg.trim();
         if seg_trimmed.is_empty() {
@@ -3095,6 +3103,47 @@ fn parse_ex_intent(command: &str) -> Option<ParsedExIntent> {
         }
     }
 
+    None
+}
+
+fn should_chain_trailing_quit_for_local_write(
+    session: &VimCoreSession,
+    intent: &ParsedExIntent,
+    trailing_segments: &[&str],
+) -> bool {
+    if !matches!(
+        intent,
+        ParsedExIntent::Write { .. } | ParsedExIntent::Update { .. }
+    ) {
+        return false;
+    }
+
+    if find_first_trailing_quit_intent(trailing_segments).is_none() {
+        return false;
+    }
+
+    let snapshot = session.snapshot();
+    let Some(active_buf) = snapshot.buffers.iter().find(|buffer| buffer.is_active) else {
+        return false;
+    };
+
+    !session
+        .document_coordinator
+        .borrow()
+        .is_vfs_buffer(active_buf.id)
+}
+
+fn find_first_trailing_quit_intent(trailing_segments: &[&str]) -> Option<ParsedExIntent> {
+    for seg in trailing_segments {
+        let seg_trimmed = seg.trim();
+        if seg_trimmed.is_empty() {
+            continue;
+        }
+        match parse_single_ex_intent(seg_trimmed) {
+            Some(intent @ ParsedExIntent::Quit { .. }) => return Some(intent),
+            _ => return None,
+        }
+    }
     None
 }
 

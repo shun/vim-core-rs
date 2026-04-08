@@ -363,3 +363,51 @@ fn ex_compound_command_with_write_is_intercepted() {
         "File should NOT be created on disk by Vim runtime"
     );
 }
+
+#[test]
+fn ex_compound_write_then_quit_preserves_host_coordination_on_local_buffer() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("some content").expect("session should initialize");
+
+    let outcome = session
+        .execute_ex_command(":write compound.txt | quit")
+        .expect("compound write|quit should succeed");
+
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::HostActionQueued
+    ));
+    assert!(
+        matches!(
+            outcome.host_actions.as_slice(),
+            [CoreHostAction::Write { path, force: false, .. }, CoreHostAction::Quit { force: false, .. }]
+            if path == "compound.txt"
+        ),
+        "Expected [Write, Quit] for local :write | quit, got {:?}",
+        outcome.host_actions
+    );
+}
+
+#[test]
+fn ex_compound_update_then_quit_preserves_host_coordination_on_local_buffer() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("some content").expect("session should initialize");
+
+    let outcome = session
+        .execute_ex_command(":update compound.txt | quit")
+        .expect("compound update|quit should succeed");
+
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::HostActionQueued
+    ));
+    assert!(
+        matches!(
+            outcome.host_actions.as_slice(),
+            [CoreHostAction::Write { path, force: false, .. }, CoreHostAction::Quit { force: false, .. }]
+            if path == "compound.txt"
+        ),
+        "Expected [Write, Quit] for local :update | quit, got {:?}",
+        outcome.host_actions
+    );
+}

@@ -8,10 +8,10 @@ machine-readable manifest in `upstream-test-classification.json`.
 ## Summary
 
 - Total cases: `311`
-- Preserve directly: `223`
+- Preserve directly: `231`
 - Preserve through adaptation: `42`
 - Out of scope: `38`
-- Temporarily excluded: `8`
+- Temporarily excluded: `0`
 
 ## How to use this manifest
 
@@ -23,8 +23,9 @@ the selected cases and the exclusion reasons for everything else.
 
 Generated upstream tests now cover only `preserve_directly` cases.
 Repository contract tests are the source of truth for
-`preserve_through_adaptation` behavior. `out_of_scope` and
-`temporarily_excluded` cases stay out of the generated runner.
+`preserve_through_adaptation` behavior. `out_of_scope` cases stay out of
+the generated runner, and there are currently no
+`temporarily_excluded` cases.
 
 ## Classification rules
 
@@ -36,8 +37,8 @@ Repository contract tests are the source of truth for
   such as GUI, terminal-emulator parity, plugin hosting, clientserver, and
   external language interpreter integrations.
 - **Temporarily excluded**: Cases that are conceptually adjacent to the
-  scope but are currently skipped for explicit repository reasons, such as
-  encoding limits.
+  scope but are currently skipped for explicit repository reasons. The
+  current manifest has none.
 
 ## Operating rules
 
@@ -47,8 +48,8 @@ Repository contract tests are the source of truth for
   upstream Vim has script coverage for similar scenarios.
 - Record policy exclusions in the classification manifest, not in the
   skiplist.
-- Reserve the skiplist for `temporarily_excluded` cases that still fit the
-  repository boundary but cannot run yet for explicit reasons.
+- Reserve the skiplist for future `temporarily_excluded` cases that still
+  fit the repository boundary but cannot run yet for explicit reasons.
 
 ## Next steps
 

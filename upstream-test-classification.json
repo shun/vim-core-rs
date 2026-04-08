@@ -10,10 +10,10 @@
   },
   "counts": {
     "total_cases": 311,
-    "preserve_directly": 223,
+    "preserve_directly": 231,
     "preserve_through_adaptation": 42,
     "out_of_scope": 38,
-    "temporarily_excluded": 8
+    "temporarily_excluded": 0
   },
   "cases": [
     {
@@ -97,13 +97,14 @@
     {
       "name": "test_autochdir.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_autochdir.vim",
-      "classification": "temporarily_excluded",
-      "rationale": "Temporarily excluded by the repository skiplist: Non-UTF-8 encoding (Non-ISO extended-ASCII)",
-      "intended_harness": "excluded",
-      "currently_collected_by_generated_runner": false,
-      "current_generated_runner_status": "excluded",
+      "classification": "preserve_directly",
+      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly.",
+      "intended_harness": "upstream_generated",
+      "currently_collected_by_generated_runner": true,
+      "current_generated_runner_status": "active",
       "related_contract_suites": [
-
+        "public_api_contract.rs",
+        "integration_contract.rs"
       ]
     },
     {
@@ -1309,13 +1310,14 @@
     {
       "name": "test_gettext_cp1251.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_gettext_cp1251.vim",
-      "classification": "temporarily_excluded",
-      "rationale": "Temporarily excluded by the repository skiplist: Non-UTF-8 encoding (CP1251)",
-      "intended_harness": "excluded",
-      "currently_collected_by_generated_runner": false,
-      "current_generated_runner_status": "excluded",
+      "classification": "preserve_directly",
+      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly.",
+      "intended_harness": "upstream_generated",
+      "currently_collected_by_generated_runner": true,
+      "current_generated_runner_status": "active",
       "related_contract_suites": [
-
+        "public_api_contract.rs",
+        "integration_contract.rs"
       ]
     },
     {
@@ -1624,13 +1626,14 @@
     {
       "name": "test_increment_dbcs.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_increment_dbcs.vim",
-      "classification": "temporarily_excluded",
-      "rationale": "Temporarily excluded by the repository skiplist: Non-UTF-8 encoding (DBCS)",
-      "intended_harness": "excluded",
-      "currently_collected_by_generated_runner": false,
-      "current_generated_runner_status": "excluded",
+      "classification": "preserve_directly",
+      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly.",
+      "intended_harness": "upstream_generated",
+      "currently_collected_by_generated_runner": true,
+      "current_generated_runner_status": "active",
       "related_contract_suites": [
-
+        "public_api_contract.rs",
+        "integration_contract.rs"
       ]
     },
     {
@@ -2646,37 +2649,40 @@
     {
       "name": "test_regex_char_classes.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_regex_char_classes.vim",
-      "classification": "temporarily_excluded",
-      "rationale": "Temporarily excluded by the repository skiplist: Non-UTF-8 encoding in some parts",
-      "intended_harness": "excluded",
-      "currently_collected_by_generated_runner": false,
-      "current_generated_runner_status": "excluded",
+      "classification": "preserve_directly",
+      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly.",
+      "intended_harness": "upstream_generated",
+      "currently_collected_by_generated_runner": true,
+      "current_generated_runner_status": "active",
       "related_contract_suites": [
-
+        "public_api_contract.rs",
+        "integration_contract.rs"
       ]
     },
     {
       "name": "test_regexp_latin.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_regexp_latin.vim",
-      "classification": "temporarily_excluded",
-      "rationale": "Temporarily excluded by the repository skiplist: Non-UTF-8 encoding (Latin1)",
-      "intended_harness": "excluded",
-      "currently_collected_by_generated_runner": false,
-      "current_generated_runner_status": "excluded",
+      "classification": "preserve_directly",
+      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly.",
+      "intended_harness": "upstream_generated",
+      "currently_collected_by_generated_runner": true,
+      "current_generated_runner_status": "active",
       "related_contract_suites": [
-
+        "public_api_contract.rs",
+        "integration_contract.rs"
       ]
     },
     {
       "name": "test_regexp_utf8.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_regexp_utf8.vim",
-      "classification": "temporarily_excluded",
-      "rationale": "Temporarily excluded by the repository skiplist: Non-UTF-8 encoding in some parts",
-      "intended_harness": "excluded",
-      "currently_collected_by_generated_runner": false,
-      "current_generated_runner_status": "excluded",
+      "classification": "preserve_directly",
+      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly.",
+      "intended_harness": "upstream_generated",
+      "currently_collected_by_generated_runner": true,
+      "current_generated_runner_status": "active",
       "related_contract_suites": [
-
+        "public_api_contract.rs",
+        "integration_contract.rs"
       ]
     },
     {
@@ -3037,13 +3043,14 @@
     {
       "name": "test_spell.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_spell.vim",
-      "classification": "temporarily_excluded",
-      "rationale": "Temporarily excluded by the repository skiplist: Non-UTF-8 encoding in some parts",
-      "intended_harness": "excluded",
-      "currently_collected_by_generated_runner": false,
-      "current_generated_runner_status": "excluded",
+      "classification": "preserve_directly",
+      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly.",
+      "intended_harness": "upstream_generated",
+      "currently_collected_by_generated_runner": true,
+      "current_generated_runner_status": "active",
       "related_contract_suites": [
-
+        "public_api_contract.rs",
+        "integration_contract.rs"
       ]
     },
     {
@@ -4017,13 +4024,14 @@
     {
       "name": "test_writefile.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_writefile.vim",
-      "classification": "temporarily_excluded",
-      "rationale": "Temporarily excluded by the repository skiplist: Non-UTF-8 encoding in some parts",
-      "intended_harness": "excluded",
-      "currently_collected_by_generated_runner": false,
-      "current_generated_runner_status": "excluded",
+      "classification": "preserve_directly",
+      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly.",
+      "intended_harness": "upstream_generated",
+      "currently_collected_by_generated_runner": true,
+      "current_generated_runner_status": "active",
       "related_contract_suites": [
-
+        "public_api_contract.rs",
+        "integration_contract.rs"
       ]
     },
     {
