@@ -298,3 +298,256 @@ fn snapshot_and_session_state_apis_stay_consistent_within_one_session() {
     );
     assert_eq!(session.jumplist(), jumplist_after_jump);
 }
+
+#[test]
+fn autocmd_bufunload_event_order_matches_vim_slice() {
+    let _guard = acquire_session_test_lock();
+
+    let mut session = VimCoreSession::new("seed").expect("Failed to initialize session");
+
+    session
+        .execute_ex_command("let g:li = []")
+        .expect("should initialize autocmd log");
+
+    session
+        .execute_ex_command("augroup test_bufunload_contract")
+        .expect("augroup should open");
+    session
+        .execute_ex_command("autocmd!")
+        .expect("augroup should clear prior autocmds");
+    session
+        .execute_ex_command("autocmd BufUnload * call add(g:li, 'bufunload')")
+        .expect("BufUnload autocmd should define");
+    session
+        .execute_ex_command("autocmd BufDelete * call add(g:li, 'bufdelete')")
+        .expect("BufDelete autocmd should define");
+    session
+        .execute_ex_command("autocmd BufWipeout * call add(g:li, 'bufwipeout')")
+        .expect("BufWipeout autocmd should define");
+    session
+        .execute_ex_command("augroup END")
+        .expect("augroup should close");
+
+    session
+        .execute_ex_command("new")
+        .expect("new should create a buffer");
+    session
+        .execute_ex_command("setlocal bufhidden=")
+        .expect("bufhidden should be configurable");
+    session
+        .execute_ex_command("bunload")
+        .expect("bunload should succeed");
+
+    assert_eq!(
+        session.eval_string("string(g:li)"),
+        Some("['bufunload', 'bufdelete']".to_string()),
+        "bunload should trigger BufUnload then BufDelete"
+    );
+
+    session
+        .execute_ex_command("new")
+        .expect("new should create a second buffer");
+    session
+        .execute_ex_command("setlocal bufhidden=unload")
+        .expect("bufhidden should accept unload");
+    session
+        .execute_ex_command("bwipeout")
+        .expect("bwipeout should succeed");
+
+    assert_eq!(
+        session.eval_string("string(g:li)"),
+        Some("['bufunload', 'bufdelete', 'bufunload', 'bufdelete', 'bufwipeout']".to_string()),
+        "bwipeout should append BufUnload, BufDelete, and BufWipeout in order"
+    );
+
+    session
+        .execute_ex_command("augroup test_bufunload_contract | autocmd! | augroup END")
+        .expect("cleanup should succeed");
+}
+
+#[test]
+fn autocmd_bufunload_can_tabnext_from_buffer_local_autocmd() {
+    let _guard = acquire_session_test_lock();
+
+    let mut session = VimCoreSession::new("seed").expect("Failed to initialize session");
+
+    session
+        .execute_ex_command("tabedit")
+        .expect("tabedit should create a second tab");
+    session
+        .execute_ex_command("tabfirst")
+        .expect("tabfirst should switch to the first tab");
+    session
+        .execute_ex_command("augroup test_autocmd_bufunload_tabnext")
+        .expect("augroup should open");
+    session
+        .execute_ex_command("autocmd!")
+        .expect("augroup should clear prior autocmds");
+    session
+        .execute_ex_command("autocmd BufUnload <buffer> tabnext")
+        .expect("BufUnload autocmd should define");
+    session
+        .execute_ex_command("augroup END")
+        .expect("augroup should close");
+
+    session
+        .execute_ex_command("quit")
+        .expect("quit should succeed after BufUnload-triggered tabnext");
+
+    assert_eq!(
+        session.eval_string("tabpagenr('$')"),
+        Some("2".to_string()),
+        "quit should keep both tabs alive after tabnext from BufUnload"
+    );
+
+    session
+        .execute_ex_command("tablast")
+        .expect("tablast should switch to the last tab");
+    session
+        .execute_ex_command("quit")
+        .expect("final quit should succeed");
+
+    session
+        .execute_ex_command("augroup test_autocmd_bufunload_tabnext | autocmd! | augroup END")
+        .expect("cleanup should succeed");
+}
+
+#[test]
+fn autocmd_bufunload_close_other_records_window_event_order() {
+    let _guard = acquire_session_test_lock();
+
+    let mut session = VimCoreSession::new("seed").expect("Failed to initialize session");
+
+    session
+        .execute_ex_command("tabnew Xb1")
+        .expect("tabnew should create a new tab");
+    session
+        .execute_ex_command("let g:tab = tabpagenr()")
+        .expect("tabpagenr should be readable");
+    session
+        .execute_ex_command("let g:w1 = win_getid()")
+        .expect("first window id should be readable");
+    session
+        .execute_ex_command("new Xb2")
+        .expect("new should create a second window");
+    session
+        .execute_ex_command("let g:w2 = win_getid()")
+        .expect("second window id should be readable");
+    session
+        .execute_ex_command("let g:log = []")
+        .expect("log should initialize");
+
+    session
+        .execute_ex_command("augroup test_autocmd_bufunload_close_other")
+        .expect("augroup should open");
+    session
+        .execute_ex_command("autocmd!")
+        .expect("augroup should clear prior autocmds");
+    session
+        .execute_ex_command("autocmd BufUnload * ++nested ++once bwipe! Xb1")
+        .expect("BufUnload autocmd should define");
+    for event in ["WinClosed", "BufLeave", "WinLeave", "TabLeave"] {
+        session
+            .execute_ex_command(&format!(
+                "autocmd {event} * call add(g:log, '{event}:' .. expand('<afile>'))"
+            ))
+            .expect("window event autocmd should define");
+    }
+    session
+        .execute_ex_command("augroup END")
+        .expect("augroup should close");
+
+    session
+        .execute_ex_command("close")
+        .expect("close should trigger BufUnload-driven cleanup");
+
+    let w1 = session
+        .eval_string("string(g:w1)")
+        .expect("first window id should be readable");
+    let w2 = session
+        .eval_string("string(g:w2)")
+        .expect("second window id should be readable");
+    assert_eq!(
+        session.eval_string("string(g:log)"),
+        Some(format!(
+            "['BufLeave:Xb2', 'WinLeave:Xb2', 'WinClosed:{w2}', 'WinClosed:{w1}', 'TabLeave:Xb2']"
+        )),
+        "close should record the expected sequence of window/tab events"
+    );
+
+    session
+        .execute_ex_command("augroup test_autocmd_bufunload_close_other | autocmd! | augroup END")
+        .expect("cleanup should succeed");
+}
+
+#[test]
+fn autocmd_bufunload_can_switch_curbuf_without_leaking_a_new_buffer() {
+    let _guard = acquire_session_test_lock();
+
+    let mut session = VimCoreSession::new("asdf").expect("Failed to initialize session");
+
+    session
+        .execute_ex_command("let g:asdf_win = win_getid()")
+        .expect("first window id should be readable");
+    session
+        .execute_ex_command("new")
+        .expect("new should create a second buffer");
+    session
+        .execute_ex_command("let g:other_buf = bufnr()")
+        .expect("other buffer id should be readable");
+    session
+        .execute_ex_command("let g:other_win = win_getid()")
+        .expect("other window id should be readable");
+    session
+        .execute_ex_command("let g:triggered = 0")
+        .expect("trigger flag should initialize");
+
+    session
+        .execute_ex_command("augroup test_autocmd_bufunload_switch_curbuf")
+        .expect("augroup should open");
+    session
+        .execute_ex_command("autocmd!")
+        .expect("augroup should clear prior autocmds");
+    session
+        .execute_ex_command(
+            "autocmd BufUnload * ++once let g:triggered = 1 | call assert_fails('split', 'E1159:') | call win_gotoid(g:asdf_win)",
+        )
+        .expect("BufUnload autocmd should define");
+    session
+        .execute_ex_command("augroup END")
+        .expect("augroup should close");
+
+    session
+        .execute_ex_command("enew")
+        .expect("enew should trigger BufUnload");
+
+    assert_eq!(
+        session.eval_string("string(g:triggered)"),
+        Some("1".to_string()),
+        "BufUnload autocmd should run"
+    );
+    assert_eq!(
+        session.eval_string("bufnr()"),
+        session.eval_string("string(g:other_buf)"),
+        "curbuf should be reused instead of leaking a new buffer"
+    );
+    assert_eq!(
+        session.eval_string("win_getid()"),
+        session.eval_string("string(g:other_win)"),
+        "window focus should remain on the original other window"
+    );
+    assert_eq!(
+        session.eval_string("len(win_findbuf(g:other_buf))"),
+        Some("1".to_string()),
+        "other buffer should remain displayed exactly once"
+    );
+    assert_eq!(
+        session.eval_string("bufloaded(g:other_buf)"),
+        Some("1".to_string()),
+        "other buffer should stay loaded"
+    );
+
+    session
+        .execute_ex_command("augroup test_autocmd_bufunload_switch_curbuf | autocmd! | augroup END")
+        .expect("cleanup should succeed");
+}

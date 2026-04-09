@@ -28,6 +28,40 @@ pub enum GeneratedSelectionStatus {
     TemporarilyExcluded,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CoverageStatus {
+    Covered,
+    Uncovered,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoverageEvidence {
+    pub contract_suite: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub test_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evidence_ref: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GeneratedAdaptedBehavior {
+    pub id: String,
+    pub upstream_case_name: String,
+    pub relative_path: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub upstream_test_cases: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bucket: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rationale: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_contract_suites: Vec<String>,
+    pub coverage_status: CoverageStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coverage_evidence: Option<CoverageEvidence>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GeneratedUpstreamTestCase {
     pub name: String,
@@ -39,14 +73,40 @@ pub struct GeneratedUpstreamTestCase {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompatibilityBaselineSummary {
+    pub boundary: String,
+    pub total: usize,
+    pub in_scope: usize,
+    pub direct: usize,
+    pub adapted: usize,
+    pub out_of_scope: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdaptationCoverageSummary {
+    pub tracking_unit: String,
+    pub total_units: usize,
+    pub covered_units: usize,
+    pub uncovered_units: usize,
+    pub runtime_path_total_units: usize,
+    pub runtime_path_covered_units: usize,
+    pub runtime_path_uncovered_units: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GeneratedUpstreamTestManifest {
+    pub compatibility_baseline: CompatibilityBaselineSummary,
+    pub adaptation_coverage: AdaptationCoverageSummary,
     pub cases: Vec<GeneratedUpstreamTestCase>,
+    pub adapted_behaviors: Vec<GeneratedAdaptedBehavior>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct ClassificationManifest {
     counts: ClassificationCounts,
     cases: Vec<ClassificationCase>,
+    #[serde(default)]
+    adapted_behaviors: Vec<ClassificationAdaptedBehavior>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +125,24 @@ struct ClassificationCase {
     classification: UpstreamTestClassification,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct ClassificationAdaptedBehavior {
+    id: String,
+    upstream_case_name: String,
+    relative_path: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    upstream_test_cases: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    bucket: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    rationale: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    related_contract_suites: Vec<String>,
+    coverage_status: CoverageStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    coverage_evidence: Option<CoverageEvidence>,
+}
+
 pub fn generate_upstream_tests(out_dir: &Path) -> Result<(), String> {
     let repo_root = PathBuf::from(
         env::var("CARGO_MANIFEST_DIR")
@@ -76,7 +154,12 @@ pub fn generate_upstream_tests(out_dir: &Path) -> Result<(), String> {
 pub fn generate_upstream_tests_from(repo_root: &Path, out_dir: &Path) -> Result<(), String> {
     let test_dir = repo_root.join(UPSTREAM_TESTDIR);
     if !test_dir.exists() {
-        let manifest = GeneratedUpstreamTestManifest { cases: Vec::new() };
+        let manifest = GeneratedUpstreamTestManifest {
+            compatibility_baseline: empty_compatibility_baseline_summary(),
+            adaptation_coverage: empty_adaptation_coverage_summary(),
+            cases: Vec::new(),
+            adapted_behaviors: Vec::new(),
+        };
         write_manifest(out_dir, &manifest)?;
         write_generated_runner(out_dir, &manifest)?;
         return Ok(());
@@ -86,8 +169,13 @@ pub fn generate_upstream_tests_from(repo_root: &Path, out_dir: &Path) -> Result<
     let classification_path = repo_root.join(UPSTREAM_CLASSIFICATION_MANIFEST);
     let skiplist = parse_skiplist(&skiplist_path)?;
     let classification_manifest = parse_classification_manifest(&classification_path)?;
+    let compatibility_baseline = build_compatibility_baseline_summary(&classification_manifest)?;
+    let adaptation_coverage = build_adaptation_coverage_summary(&classification_manifest)?;
     let manifest = GeneratedUpstreamTestManifest {
+        compatibility_baseline,
+        adaptation_coverage,
         cases: collect_cases(repo_root, &test_dir, &skiplist, &classification_manifest)?,
+        adapted_behaviors: collect_adapted_behaviors(&classification_manifest),
     };
 
     write_manifest(out_dir, &manifest)?;
@@ -171,7 +259,7 @@ fn validate_classification_counts(
         match case.classification {
             UpstreamTestClassification::PreserveDirectly => preserve_directly += 1,
             UpstreamTestClassification::PreserveThroughAdaptation => {
-                preserve_through_adaptation += 1
+                preserve_through_adaptation += 1;
             }
             UpstreamTestClassification::OutOfScope => out_of_scope += 1,
             UpstreamTestClassification::TemporarilyExcluded => temporarily_excluded += 1,
@@ -195,7 +283,314 @@ fn validate_classification_counts(
         ));
     }
 
+    validate_adapted_behaviors(manifest, classification_path)?;
+
     Ok(())
+}
+
+fn validate_adapted_behaviors(
+    manifest: &ClassificationManifest,
+    classification_path: &Path,
+) -> Result<(), String> {
+    let mut adapted_files = BTreeMap::new();
+    for case in &manifest.cases {
+        if case.classification == UpstreamTestClassification::PreserveThroughAdaptation {
+            adapted_files.insert(case.name.as_str(), case.relative_path.as_str());
+        }
+    }
+
+    let mut behavior_ids = BTreeSet::new();
+    let mut files_with_behaviors = BTreeSet::new();
+    for behavior in &manifest.adapted_behaviors {
+        if !behavior_ids.insert(behavior.id.clone()) {
+            return Err(format!(
+                "adapted behavior manifest in {} contains duplicate id: {}",
+                classification_path.display(),
+                behavior.id
+            ));
+        }
+
+        let Some(expected_relative_path) = adapted_files.get(behavior.upstream_case_name.as_str())
+        else {
+            return Err(format!(
+                "adapted behavior {} in {} references non-adapted upstream case {}",
+                behavior.id,
+                classification_path.display(),
+                behavior.upstream_case_name
+            ));
+        };
+        if expected_relative_path != &behavior.relative_path.as_str() {
+            return Err(format!(
+                "adapted behavior {} in {} has mismatched path for {}: expected {}, got {}",
+                behavior.id,
+                classification_path.display(),
+                behavior.upstream_case_name,
+                expected_relative_path,
+                behavior.relative_path
+            ));
+        }
+
+        validate_adapted_behavior(behavior, classification_path)?;
+        files_with_behaviors.insert(behavior.upstream_case_name.as_str());
+    }
+
+    for case in &manifest.cases {
+        if case.classification == UpstreamTestClassification::PreserveThroughAdaptation
+            && !files_with_behaviors.contains(case.name.as_str())
+        {
+            return Err(format!(
+                "preserve_through_adaptation case {} in {} must declare at least one adapted behavior",
+                case.name,
+                classification_path.display()
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_adapted_behavior(
+    behavior: &ClassificationAdaptedBehavior,
+    classification_path: &Path,
+) -> Result<(), String> {
+    if behavior.id.trim().is_empty() {
+        return Err(format!(
+            "adapted behavior in {} must declare a non-empty id",
+            classification_path.display()
+        ));
+    }
+
+    for test_case in &behavior.upstream_test_cases {
+        if test_case.trim().is_empty() {
+            return Err(format!(
+                "adapted behavior {} in {} must not declare an empty upstream test case name",
+                behavior.id,
+                classification_path.display()
+            ));
+        }
+    }
+
+    if behavior.related_contract_suites.is_empty() {
+        return Err(format!(
+            "adapted behavior {} in {} must declare at least one related_contract_suites entry",
+            behavior.id,
+            classification_path.display()
+        ));
+    }
+
+    if behavior.coverage_status == CoverageStatus::Covered && behavior.coverage_evidence.is_none() {
+        return Err(format!(
+            "covered adapted behavior {} in {} must declare coverage_evidence",
+            behavior.id,
+            classification_path.display()
+        ));
+    }
+
+    if let Some(evidence) = &behavior.coverage_evidence {
+        validate_coverage_evidence(behavior, evidence, classification_path)?;
+    }
+
+    Ok(())
+}
+
+fn validate_coverage_evidence(
+    behavior: &ClassificationAdaptedBehavior,
+    evidence: &CoverageEvidence,
+    classification_path: &Path,
+) -> Result<(), String> {
+    let subject_name = &behavior.id;
+
+    if evidence.contract_suite.trim().is_empty() {
+        return Err(format!(
+            "coverage_evidence for {} in {} must declare a non-empty contract_suite",
+            subject_name,
+            classification_path.display()
+        ));
+    }
+
+    let has_locator = evidence
+        .test_name
+        .as_deref()
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+        || evidence
+            .evidence_ref
+            .as_deref()
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false);
+
+    if !has_locator {
+        return Err(format!(
+            "coverage_evidence for {} in {} must declare test_name or evidence_ref",
+            subject_name,
+            classification_path.display()
+        ));
+    }
+
+    if !behavior
+        .related_contract_suites
+        .iter()
+        .any(|suite| suite == &evidence.contract_suite)
+    {
+        return Err(format!(
+            "coverage_evidence for {} in {} must reference a suite declared in related_contract_suites",
+            subject_name,
+            classification_path.display()
+        ));
+    }
+
+    let repo_root = classification_path.parent().ok_or_else(|| {
+        format!(
+            "failed to resolve repository root from classification manifest path {}",
+            classification_path.display()
+        )
+    })?;
+    let suite_path = repo_root.join("tests").join(&evidence.contract_suite);
+    if !suite_path.exists() {
+        return Err(format!(
+            "coverage_evidence for {} in {} references missing contract suite {}",
+            subject_name,
+            classification_path.display(),
+            suite_path.display()
+        ));
+    }
+
+    if let Some(test_name) = evidence.test_name.as_deref() {
+        validate_contract_test_locator(subject_name, test_name, &suite_path, classification_path)?;
+    }
+
+    Ok(())
+}
+
+fn validate_contract_test_locator(
+    subject_name: &str,
+    test_name: &str,
+    suite_path: &Path,
+    classification_path: &Path,
+) -> Result<(), String> {
+    let suite_source = fs::read_to_string(suite_path).map_err(|error| {
+        format!(
+            "failed to read contract suite {} while validating coverage_evidence in {}: {error}",
+            suite_path.display(),
+            classification_path.display()
+        )
+    })?;
+
+    let needle = format!("fn {test_name}(");
+    if !suite_source.lines().any(|line| line.contains(&needle)) {
+        return Err(format!(
+            "coverage_evidence for {} in {} references missing test {} in {}",
+            subject_name,
+            classification_path.display(),
+            test_name,
+            suite_path.display()
+        ));
+    }
+
+    Ok(())
+}
+
+fn build_compatibility_baseline_summary(
+    classification_manifest: &ClassificationManifest,
+) -> Result<CompatibilityBaselineSummary, String> {
+    let mut direct = 0usize;
+    let mut adapted = 0usize;
+    let mut out_of_scope = 0usize;
+
+    for case in &classification_manifest.cases {
+        match case.classification {
+            UpstreamTestClassification::PreserveDirectly => direct += 1,
+            UpstreamTestClassification::PreserveThroughAdaptation => adapted += 1,
+            UpstreamTestClassification::OutOfScope => out_of_scope += 1,
+            UpstreamTestClassification::TemporarilyExcluded => {}
+        }
+    }
+
+    let total = classification_manifest.counts.total_cases;
+    let in_scope = direct + adapted;
+
+    if classification_manifest.counts.preserve_directly != direct
+        || classification_manifest.counts.preserve_through_adaptation != adapted
+        || classification_manifest.counts.out_of_scope != out_of_scope
+    {
+        return Err(
+            "classification manifest counts do not match derived compatibility baseline summary"
+                .to_string(),
+        );
+    }
+
+    Ok(CompatibilityBaselineSummary {
+        boundary: "upstream-derived in-scope embedded Vim core coverage; repo-owned contracts are tracked separately".to_string(),
+        total,
+        in_scope,
+        direct,
+        adapted,
+        out_of_scope,
+    })
+}
+
+fn build_adaptation_coverage_summary(
+    classification_manifest: &ClassificationManifest,
+) -> Result<AdaptationCoverageSummary, String> {
+    let mut total_units = 0usize;
+    let mut covered_units = 0usize;
+    let mut uncovered_units = 0usize;
+    let mut runtime_path_total_units = 0usize;
+    let mut runtime_path_covered_units = 0usize;
+    let mut runtime_path_uncovered_units = 0usize;
+
+    for behavior in &classification_manifest.adapted_behaviors {
+        total_units += 1;
+        match behavior.coverage_status {
+            CoverageStatus::Covered => covered_units += 1,
+            CoverageStatus::Uncovered => uncovered_units += 1,
+        }
+
+        if behavior.bucket.as_deref() == Some("runtime_path") {
+            runtime_path_total_units += 1;
+            match behavior.coverage_status {
+                CoverageStatus::Covered => runtime_path_covered_units += 1,
+                CoverageStatus::Uncovered => runtime_path_uncovered_units += 1,
+            }
+        }
+    }
+
+    if total_units != covered_units + uncovered_units {
+        return Err("adaptation coverage summary became inconsistent".to_string());
+    }
+
+    Ok(AdaptationCoverageSummary {
+        tracking_unit: "repo-owned adapted behavior".to_string(),
+        total_units,
+        covered_units,
+        uncovered_units,
+        runtime_path_total_units,
+        runtime_path_covered_units,
+        runtime_path_uncovered_units,
+    })
+}
+
+fn empty_compatibility_baseline_summary() -> CompatibilityBaselineSummary {
+    CompatibilityBaselineSummary {
+        boundary: "upstream-derived in-scope embedded Vim core coverage; repo-owned contracts are tracked separately".to_string(),
+        total: 0,
+        in_scope: 0,
+        direct: 0,
+        adapted: 0,
+        out_of_scope: 0,
+    }
+}
+
+fn empty_adaptation_coverage_summary() -> AdaptationCoverageSummary {
+    AdaptationCoverageSummary {
+        tracking_unit: "repo-owned adapted behavior".to_string(),
+        total_units: 0,
+        covered_units: 0,
+        uncovered_units: 0,
+        runtime_path_total_units: 0,
+        runtime_path_covered_units: 0,
+        runtime_path_uncovered_units: 0,
+    }
 }
 
 fn collect_cases(
@@ -222,6 +617,28 @@ fn collect_cases(
 
     cases.sort_by(|left, right| left.name.cmp(&right.name));
     Ok(cases)
+}
+
+fn collect_adapted_behaviors(
+    classification_manifest: &ClassificationManifest,
+) -> Vec<GeneratedAdaptedBehavior> {
+    let mut behaviors = classification_manifest
+        .adapted_behaviors
+        .iter()
+        .map(|behavior| GeneratedAdaptedBehavior {
+            id: behavior.id.clone(),
+            upstream_case_name: behavior.upstream_case_name.clone(),
+            relative_path: behavior.relative_path.clone(),
+            upstream_test_cases: behavior.upstream_test_cases.clone(),
+            bucket: behavior.bucket.clone(),
+            rationale: behavior.rationale.clone(),
+            related_contract_suites: behavior.related_contract_suites.clone(),
+            coverage_status: behavior.coverage_status,
+            coverage_evidence: behavior.coverage_evidence.clone(),
+        })
+        .collect::<Vec<_>>();
+    behaviors.sort_by(|left, right| left.id.cmp(&right.id));
+    behaviors
 }
 
 fn collect_vendored_cases(
@@ -360,10 +777,7 @@ fn determine_selection(
         UpstreamTestClassification::OutOfScope => Ok(CaseSelection {
             selected: false,
             status: GeneratedSelectionStatus::ExcludedByPolicy,
-            reason: Some(format!(
-                "Out of scope per {}.",
-                COMPATIBILITY_ADR
-            )),
+            reason: Some(format!("Out of scope per {}.", COMPATIBILITY_ADR)),
         }),
         UpstreamTestClassification::TemporarilyExcluded => {
             let reason = skiplist.get(&case.name).cloned().ok_or_else(|| {
@@ -413,7 +827,8 @@ fn write_generated_runner(
         .collect::<Vec<_>>();
 
     if selected_cases.is_empty() {
-        generated.push_str("// No upstream Vim test cases were selected for the generated runner.\n");
+        generated
+            .push_str("// No upstream Vim test cases were selected for the generated runner.\n");
     } else {
         for case in selected_cases {
             generated.push_str("#[test]\n");

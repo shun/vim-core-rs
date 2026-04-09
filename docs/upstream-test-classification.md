@@ -1,58 +1,154 @@
 # Upstream test classification
 
-This page summarizes the intended scope classification for vendored
-upstream Vim `src/testdir/test_*.vim` cases. It follows
+This page explains how `vim-core-rs` classifies vendored upstream Vim
+`src/testdir/test_*.vim` files and how it tracks repository-owned
+adaptation coverage. It follows
 `docs/adr/0002-define-compatibility-boundaries.md` and points to the
 machine-readable manifest in `upstream-test-classification.json`.
 
 ## Summary
 
-- Total cases: `311`
-- Preserve directly: `231`
-- Preserve through adaptation: `42`
-- Out of scope: `38`
-- Temporarily excluded: `0`
+- Vendored upstream files: `311`
+- In-scope compatibility denominator: `273`
+- Preserve directly files: `231`
+- Preserve through adaptation files: `42`
+- Out of scope files: `38`
+- Temporarily excluded files: `0`
+- Adapted behaviors: `50`
+- Covered adapted behaviors: `13`
+- Uncovered adapted behaviors: `37`
 
-## How to use this manifest
+The in-scope denominator is the upstream-derived embedded Vim core
+baseline. It is computed as `231 preserve_directly + 42
+preserve_through_adaptation = 273`, and it excludes the `38
+out_of_scope` files.
 
-Use the JSON manifest when you need to review test coverage, discuss
-whether a case belongs in the generated upstream runner, or map a Vim
-feature area to repository contract tests. `build_test_runner.rs` now
-consumes this manifest and emits a generated manifest that records both
-the selected cases and the exclusion reasons for everything else.
+## Manifest model
 
-Generated upstream tests now cover only `preserve_directly` cases.
-Repository contract tests are the source of truth for
-`preserve_through_adaptation` behavior. `out_of_scope` cases stay out of
-the generated runner, and there are currently no
-`temporarily_excluded` cases.
+The classification manifest intentionally tracks two different units.
+
+- `cases`: vendored upstream `test_*.vim` files and their generated-runner
+  selection policy
+- `adapted_behaviors`: repository-owned adaptation coverage units
+
+This split exists because upstream Vim is tested as one integrated
+binary, while `vim-core-rs` only owns the embedded core and its host
+boundary contracts. Some upstream files map cleanly to one adapted
+behavior. Others, such as `test_expand.vim`, mix multiple
+responsibilities and have to be split into multiple adapted behaviors.
+
+`build_test_runner.rs` consumes the manifest and emits a generated
+manifest with:
+
+- `compatibility_baseline` for file-level scope and generated-runner
+  selection
+- `adaptation_coverage` for behavior-level contract coverage
+
+Generated upstream tests still cover only `preserve_directly` files.
+Repository contract tests remain the source of truth for
+`preserve_through_adaptation` behavior, including the repository-owned
+contracts for VFS, VFD, session, events, runtime discovery, and other
+host-boundary flows. `out_of_scope` files stay out of the generated
+runner, and there are currently no `temporarily_excluded` files.
+In the generated manifest, `adaptation_coverage.tracking_unit` is
+`repo-owned adapted behavior` to make that behavior-level ownership
+explicit.
+
+Each `adapted_behaviors` entry carries machine-readable
+`coverage_status` and optional `coverage_evidence`. Any behavior marked
+`covered` must include `coverage_evidence` with a contract suite plus a
+locator such as `test_name` or `evidence_ref`. The manifest validation
+also requires the referenced contract suite to be declared in
+`related_contract_suites`, and `test_name` locators must resolve to a
+real repository contract test.
+
+## Runtime-path bucket
+
+The runtime-path bucket now has behavior-level traceability in
+repository contract tests and the generated manifest. The bucket
+contains `16` adapted behaviors: `10` covered and `6` uncovered.
+
+Covered runtime-path behaviors currently map to these contract tests:
+
+- `runtimepath.autoload_source` from `test_autoload.vim`:
+  `runtimepath_contract_supports_runtime_and_autoload_loading`
+- `runtimepath.checkpath_includeexpr_recursion` from
+  `test_checkpath.vim`:
+  `runtimepath_contract_supports_checkpath_includeexpr_recursion`
+- `runtimepath.expand.directory_wildcard_buffer_selection` from
+  `test_expand.vim::Test_with_directories`:
+  `runtimepath_contract_supports_wildcard_path_expansion_for_buffer_selection`
+- `runtimepath.filetype_detection_from_runtime` from `test_filetype.vim`:
+  `runtimepath_contract_supports_filetype_detection_from_runtime`
+- `runtimepath.findfile_path_discovery` from `test_findfile.vim`,
+  `runtimepath.fnameescape_path_quoting` from `test_fnameescape.vim`,
+  `runtimepath.fnamemodify_path_transforms` from `test_fnamemodify.vim`,
+  and `runtimepath.getcwd_working_directory_queries` from
+  `test_getcwd.vim`:
+  `runtimepath_contract_supports_path_discovery_and_fnameescape`
+- `runtimepath.help_local_additions_from_runtime_docs` from
+  `test_help.vim`:
+  `runtimepath_contract_supports_help_local_additions_from_runtime_docs`
+- `runtimepath.help_tagjump_from_runtime_docs` from
+  `test_help_tagjump.vim`:
+  `runtimepath_contract_supports_help_tagjump_from_runtime_docs`
+
+The remaining runtime-path behaviors stay `uncovered` for now:
+
+- `runtimepath.environ_home_and_environment_expansion` from
+  `test_environ.vim`: no repository contract currently fixes the
+  embedded environment mutation and `expand('~')` expectations
+- `runtimepath.escaped_glob_and_globpath` from `test_escaped_glob.vim`:
+  no repository contract currently fixes the escaped `glob()` or
+  `globpath()` cases
+- `runtimepath.expand_dllpath_options` from `test_expand_dllpath.vim`:
+  no repository contract currently fixes the `*dll` option expansion
+  behavior
+- `runtimepath.expand_function_semantics` from `test_expand_func.vim`:
+  no repository contract currently fixes the `expand()` function cases
+  such as `<sfile>`, `<stack>`, or `'wildignore'`
+- `runtimepath.glob2regpat_conversion` from `test_glob2regpat.vim`: no
+  repository contract currently fixes the glob-to-regex conversion rules
+- `runtimepath.global_command_path_sensitive_flows` from `test_global.vim`:
+  no repository contract currently ties `:global` behavior to a
+  runtime-path adaptation contract
+
+`test_expand.vim` is no longer tracked as one indivisible runtime-path
+case. The manifest now splits it into behavior entries, and only
+`Test_with_directories` remains in the runtime-path bucket. The tilde,
+environment, `expandcmd()`, and script-context functions from that file
+now live in their own adaptation buckets.
 
 ## Classification rules
 
-- **Preserve directly**: Modal editing semantics and runtime behavior that
-  `vim-core-rs` preserves as embedded Vim compatibility.
-- **Preserve through adaptation**: Behavior that crosses the host boundary
-  and is validated mainly through repository contract tests.
-- **Out of scope**: Behavior outside the embedded-core product boundary,
-  such as GUI, terminal-emulator parity, plugin hosting, clientserver, and
-  external language interpreter integrations.
-- **Temporarily excluded**: Cases that are conceptually adjacent to the
-  scope but are currently skipped for explicit repository reasons. The
-  current manifest has none.
+- **Preserve directly**: modal editing semantics and runtime behavior that
+  `vim-core-rs` preserves as embedded Vim compatibility
+- **Preserve through adaptation**: behavior that crosses the host
+  boundary and is validated mainly through repository contract tests
+- **Out of scope**: behavior outside the embedded-core product boundary,
+  such as GUI, terminal-emulator parity, plugin hosting, clientserver,
+  and external language interpreter integrations
+- **Temporarily excluded**: files that are conceptually adjacent to the
+  scope but are currently skipped for explicit repository reasons
 
 ## Operating rules
 
 - Keep vendored upstream coverage in the generated runner only for
-  `preserve_directly` cases.
+  `preserve_directly` files
+- Track adapted coverage by repository-owned behavior, not by upstream
+  file when a file mixes multiple responsibilities
 - Move host-boundary behavior into repository contract tests, even when
-  upstream Vim has script coverage for similar scenarios.
+  upstream Vim has script coverage for similar scenarios
 - Record policy exclusions in the classification manifest, not in the
-  skiplist.
-- Reserve the skiplist for future `temporarily_excluded` cases that still
-  fit the repository boundary but cannot run yet for explicit reasons.
+  skiplist
+- Reserve the skiplist for future `temporarily_excluded` files that
+  still fit the repository boundary but cannot run yet for explicit
+  reasons
 
 ## Next steps
 
-- Refine per-case rationales when a feature area gains or loses scope.
-- Add or tighten repository contract tests when an adapted area gains new
-  host-facing behavior.
+- Split additional mixed upstream files into multiple adapted behaviors
+  when their responsibilities cross buckets
+- Refine per-behavior rationales as feature areas gain or lose scope
+- Add or tighten repository contract tests when an adapted behavior
+  gains new host-facing coverage

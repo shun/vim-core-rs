@@ -63,11 +63,18 @@ fn run() -> Result<(), String> {
             &skiplist_path,
             &classification_manifest_path,
             &upstream_testdir_path,
+            &repo_root.join("vendor/upstream/vim/runtime"),
         ]);
         let artifact_config = resolve_artifact_config_from_env()?;
         let prepared = install_prebuilt_artifact(&artifact_config, &out_dir)?;
+        refresh_prebuilt_runtime_contract(
+            &repo_root,
+            &out_dir,
+            &prepared.manifest.upstream_vim_tag,
+        )?;
         generate_bindings(&bridge_header, &out_dir)?;
         compile_native_overlay_archive(&repo_root, &out_dir)?;
+        compile_prebuilt_runtime_contract_archive(&repo_root, &out_dir)?;
         build_test_runner::generate_upstream_tests(&out_dir)?;
         if verbose_build_requested() {
             println!(
@@ -76,6 +83,7 @@ fn run() -> Result<(), String> {
             );
         }
         println!("cargo:rustc-link-search=native={}", out_dir.display());
+        println!("cargo:rustc-link-lib=static=vimcore_prebuilt_runtime_contract");
         println!("cargo:rustc-link-lib=static=vimcore_native_overlay");
         println!("cargo:rustc-link-lib=static=vimcore");
         if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
@@ -104,7 +112,7 @@ fn run() -> Result<(), String> {
     let compile_plan = create_compile_plan(&repo_root, &native_dir, &manifest_path, &allowlist)?;
     emit_plan_rerun_if_changed(&compile_plan);
     let generated_vim_build =
-        prepare_generated_vim_build(&vendor_dir.join("src"), &out_dir, &metadata)?;
+        prepare_generated_vim_build(&repo_root, &vendor_dir.join("src"), &out_dir, &metadata)?;
 
     let native_archive =
         compile_native_archive(&repo_root, &out_dir, &compile_plan, &generated_vim_build)?;
@@ -145,6 +153,22 @@ fn compile_native_overlay_archive(repo_root: &Path, out_dir: &Path) -> Result<Pa
         out_dir,
         "vimcore_native_overlay",
         &files,
+        &generated_include_root,
+        WarningPolicy::Strict,
+        &[],
+    )
+}
+
+fn compile_prebuilt_runtime_contract_archive(
+    repo_root: &Path,
+    out_dir: &Path,
+) -> Result<PathBuf, String> {
+    let generated_include_root = out_dir.join("vim_build");
+    compile_archive(
+        repo_root,
+        out_dir,
+        "vimcore_prebuilt_runtime_contract",
+        &[generated_include_root.join("auto").join("pathdef.c")],
         &generated_include_root,
         WarningPolicy::Strict,
         &[],
@@ -317,6 +341,7 @@ fn compile_archive(
 }
 
 fn prepare_generated_vim_build(
+    repo_root: &Path,
     vendor_src_dir: &Path,
     out_dir: &Path,
     metadata: &UpstreamMetadata,
@@ -377,8 +402,7 @@ fn prepare_generated_vim_build(
 
     generate_osdef_header(vendor_src_dir, &build_root)?;
 
-    let config_mk_path = auto_dir.join("config.mk");
-    let vim_paths = resolve_vim_paths(&config_mk_path, metadata)?;
+    let vim_paths = prepare_bundled_runtime(repo_root, out_dir, &metadata.tag)?;
     write_generated_pathdef(&auto_dir.join("pathdef.c"), &vim_paths)?;
 
     Ok(GeneratedVimBuildArtifacts {
@@ -435,47 +459,51 @@ struct VimPaths {
     vimruntime_dir: String,
 }
 
-fn resolve_vim_paths(
-    config_mk_path: &Path,
-    metadata: &UpstreamMetadata,
-) -> Result<VimPaths, String> {
-    let prefix = parse_prefix_from_config_mk(config_mk_path)?;
-    let version_dir_name = vim_version_dir_name(&metadata.tag)?;
+fn refresh_prebuilt_runtime_contract(
+    repo_root: &Path,
+    out_dir: &Path,
+    upstream_tag: &str,
+) -> Result<(), String> {
+    let vim_paths = prepare_bundled_runtime(repo_root, out_dir, upstream_tag)?;
+    write_generated_pathdef(
+        &out_dir.join("vim_build").join("auto").join("pathdef.c"),
+        &vim_paths,
+    )
+}
 
-    let vim_dir = format!("{prefix}/share/vim");
-    let vimruntime_dir = format!("{prefix}/share/vim/{version_dir_name}");
+fn prepare_bundled_runtime(
+    repo_root: &Path,
+    out_dir: &Path,
+    upstream_tag: &str,
+) -> Result<VimPaths, String> {
+    let version_dir_name = vim_version_dir_name(upstream_tag)?;
+    let bundled_vim_dir = out_dir.join("share").join("vim");
+    let bundled_vimruntime_dir = bundled_vim_dir.join(&version_dir_name);
+    let vendored_runtime_dir = repo_root.join("vendor/upstream/vim/runtime");
+
+    if bundled_vimruntime_dir.exists() {
+        fs::remove_dir_all(&bundled_vimruntime_dir).map_err(|error| {
+            format!(
+                "failed to remove stale bundled runtime directory {}: {error}",
+                bundled_vimruntime_dir.display()
+            )
+        })?;
+    }
+    fs::create_dir_all(&bundled_vim_dir).map_err(|error| {
+        format!(
+            "failed to create bundled Vim runtime root {}: {error}",
+            bundled_vim_dir.display()
+        )
+    })?;
+    copy_directory_recursively(&vendored_runtime_dir, &bundled_vimruntime_dir)?;
+
+    let vim_dir = bundled_vim_dir.to_string_lossy().into_owned();
+    let vimruntime_dir = bundled_vimruntime_dir.to_string_lossy().into_owned();
 
     Ok(VimPaths {
         vim_dir,
         vimruntime_dir,
     })
-}
-
-fn parse_prefix_from_config_mk(config_mk_path: &Path) -> Result<String, String> {
-    let content = fs::read_to_string(config_mk_path).map_err(|error| {
-        format!(
-            "failed to read config.mk {}: {error}",
-            config_mk_path.display()
-        )
-    })?;
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("prefix") {
-            let rest = rest.trim();
-            if let Some(value) = rest.strip_prefix('=') {
-                let value = value.trim();
-                if !value.is_empty() {
-                    return Ok(value.to_string());
-                }
-            }
-        }
-    }
-
-    Err(format!(
-        "config.mk {} does not contain a prefix definition",
-        config_mk_path.display()
-    ))
 }
 
 fn vim_version_dir_name(tag: &str) -> Result<String, String> {

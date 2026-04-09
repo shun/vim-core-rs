@@ -570,6 +570,75 @@ mod build_test_runner_contract_tests {
         fs::write(path, content).expect("should write file");
     }
 
+    fn adapted_behaviors<'a>(manifest: &'a serde_json::Value) -> &'a [serde_json::Value] {
+        manifest
+            .get("adapted_behaviors")
+            .and_then(|value| value.as_array())
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    fn find_adapted_behavior<'a>(
+        manifest: &'a serde_json::Value,
+        behavior_id: &str,
+    ) -> &'a serde_json::Value {
+        adapted_behaviors(manifest)
+            .iter()
+            .find(|behavior| {
+                behavior.get("id") == Some(&serde_json::Value::String(behavior_id.to_string()))
+            })
+            .unwrap_or_else(|| panic!("expected adapted behavior {behavior_id} in manifest"))
+    }
+
+    fn write_covered_adapted_case_fixture(repo_root: &Path, include_evidence: bool) {
+        write_file(
+            &repo_root.join("vendor/vim_src/src/testdir/test_delta.vim"),
+            "quit!\n",
+        );
+        write_file(
+            &repo_root.join("tests/integration_contract.rs"),
+            "#[test]\nfn generate_upstream_tests_writes_manifest_and_generated_runner() {}\n",
+        );
+
+        let case = serde_json::json!({
+            "name": "test_delta.vim",
+            "relative_path": "vendor/vim_src/src/testdir/test_delta.vim",
+            "classification": "preserve_through_adaptation"
+        });
+        let behavior = serde_json::json!({
+            "id": "delta.behavior",
+            "upstream_case_name": "test_delta.vim",
+            "relative_path": "vendor/vim_src/src/testdir/test_delta.vim",
+            "related_contract_suites": ["integration_contract.rs"],
+            "coverage_status": "covered",
+            "coverage_evidence": if include_evidence {
+                serde_json::json!({
+                    "contract_suite": "integration_contract.rs",
+                    "test_name": "generate_upstream_tests_writes_manifest_and_generated_runner",
+                })
+            } else {
+                serde_json::Value::Null
+            }
+        });
+
+        write_file(
+            &repo_root.join("upstream-test-classification.json"),
+            &serde_json::to_string_pretty(&serde_json::json!({
+                "metadata": { "version": 2 },
+                "counts": {
+                    "total_cases": 1,
+                    "preserve_directly": 0,
+                    "preserve_through_adaptation": 1,
+                    "out_of_scope": 0,
+                    "temporarily_excluded": 0,
+                },
+                "cases": [case],
+                "adapted_behaviors": [behavior],
+            }))
+            .expect("fixture should serialize"),
+        );
+    }
+
     #[test]
     fn parse_skiplist_accepts_comment_and_reason_format() {
         let dir = create_temp_dir("skiplist_parse");
@@ -618,7 +687,7 @@ mod build_test_runner_contract_tests {
         write_file(
             &repo_root.join("upstream-test-classification.json"),
             r#"{
-  "metadata": { "version": 1 },
+  "metadata": { "version": 2 },
   "counts": {
     "total_cases": 3,
     "preserve_directly": 1,
@@ -641,6 +710,15 @@ mod build_test_runner_contract_tests {
       "name": "test_gamma.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_gamma.vim",
       "classification": "preserve_through_adaptation"
+    }
+  ],
+  "adapted_behaviors": [
+    {
+      "id": "gamma.behavior",
+      "upstream_case_name": "test_gamma.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_gamma.vim",
+      "related_contract_suites": ["integration_contract.rs"],
+      "coverage_status": "uncovered"
     }
   ]
 }
@@ -725,6 +803,604 @@ mod build_test_runner_contract_tests {
     }
 
     #[test]
+    fn generate_upstream_tests_writes_machine_readable_compatibility_baseline_summary() {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set");
+        let repo_root = Path::new(&manifest_dir);
+        let out_dir = create_temp_dir("compatibility_baseline_summary");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        generate_upstream_tests_from(repo_root, &out_dir)
+            .expect("upstream test runner should generate");
+
+        let manifest = fs::read_to_string(out_dir.join("upstream_test_manifest.json"))
+            .expect("manifest should be written");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should deserialize");
+
+        let baseline = manifest
+            .get("compatibility_baseline")
+            .expect("manifest should expose a compatibility baseline summary");
+        assert_eq!(
+            baseline.get("total").and_then(|value| value.as_u64()),
+            Some(311)
+        );
+        assert_eq!(
+            baseline.get("in_scope").and_then(|value| value.as_u64()),
+            Some(273)
+        );
+        assert_eq!(
+            baseline.get("direct").and_then(|value| value.as_u64()),
+            Some(231)
+        );
+        assert_eq!(
+            baseline.get("adapted").and_then(|value| value.as_u64()),
+            Some(42)
+        );
+        assert_eq!(
+            baseline
+                .get("out_of_scope")
+                .and_then(|value| value.as_u64()),
+            Some(38)
+        );
+        let adaptation = manifest
+            .get("adaptation_coverage")
+            .expect("manifest should expose adaptation coverage summary");
+        assert_eq!(
+            adaptation
+                .get("tracking_unit")
+                .and_then(|value| value.as_str()),
+            Some("repo-owned adapted behavior")
+        );
+        assert_eq!(
+            adaptation
+                .get("runtime_path_total_units")
+                .and_then(|value| value.as_u64()),
+            Some(16)
+        );
+        assert_eq!(
+            adaptation
+                .get("runtime_path_covered_units")
+                .and_then(|value| value.as_u64()),
+            Some(10)
+        );
+        assert_eq!(
+            adaptation
+                .get("runtime_path_uncovered_units")
+                .and_then(|value| value.as_u64()),
+            Some(6)
+        );
+        let adapted_behavior = adapted_behaviors(&manifest)
+            .iter()
+            .find(|behavior| behavior.get("id").is_some())
+            .expect("at least one adapted behavior should exist");
+        assert!(
+            adapted_behavior
+                .get("coverage_status")
+                .and_then(|value| value.as_str())
+                .is_some(),
+            "adapted behaviors should expose machine-readable coverage state"
+        );
+    }
+
+    #[test]
+    fn generate_upstream_tests_reflects_promoted_runtime_path_cases_as_covered() {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set");
+        let repo_root = Path::new(&manifest_dir);
+        let out_dir = create_temp_dir("promoted_runtime_path_cases");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        generate_upstream_tests_from(repo_root, &out_dir)
+            .expect("upstream test runner should generate");
+
+        let manifest = fs::read_to_string(out_dir.join("upstream_test_manifest.json"))
+            .expect("manifest should be written");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should deserialize");
+
+        let adaptation = manifest
+            .get("adaptation_coverage")
+            .expect("manifest should expose adaptation coverage summary");
+        assert_eq!(
+            adaptation
+                .get("covered_units")
+                .and_then(|value| value.as_u64()),
+            Some(13)
+        );
+        assert_eq!(
+            adaptation
+                .get("runtime_path_covered_units")
+                .and_then(|value| value.as_u64()),
+            Some(10)
+        );
+
+        for (behavior_id, expected_case_name, expected_test_name) in [
+            (
+                "runtimepath.autoload_source",
+                "test_autoload.vim",
+                "runtimepath_contract_supports_runtime_and_autoload_loading",
+            ),
+            (
+                "runtimepath.checkpath_includeexpr_recursion",
+                "test_checkpath.vim",
+                "runtimepath_contract_supports_checkpath_includeexpr_recursion",
+            ),
+            (
+                "runtimepath.filetype_detection_from_runtime",
+                "test_filetype.vim",
+                "runtimepath_contract_supports_filetype_detection_from_runtime",
+            ),
+            (
+                "runtimepath.findfile_path_discovery",
+                "test_findfile.vim",
+                "runtimepath_contract_supports_path_discovery_and_fnameescape",
+            ),
+            (
+                "runtimepath.fnameescape_path_quoting",
+                "test_fnameescape.vim",
+                "runtimepath_contract_supports_path_discovery_and_fnameescape",
+            ),
+            (
+                "runtimepath.fnamemodify_path_transforms",
+                "test_fnamemodify.vim",
+                "runtimepath_contract_supports_path_discovery_and_fnameescape",
+            ),
+            (
+                "runtimepath.getcwd_working_directory_queries",
+                "test_getcwd.vim",
+                "runtimepath_contract_supports_path_discovery_and_fnameescape",
+            ),
+            (
+                "runtimepath.expand.directory_wildcard_buffer_selection",
+                "test_expand.vim",
+                "runtimepath_contract_supports_wildcard_path_expansion_for_buffer_selection",
+            ),
+        ] {
+            let behavior = find_adapted_behavior(&manifest, behavior_id);
+
+            assert_eq!(
+                behavior
+                    .get("upstream_case_name")
+                    .and_then(|value| value.as_str()),
+                Some(expected_case_name),
+                "promoted runtime-path behavior should point back to the upstream case"
+            );
+
+            assert_eq!(
+                behavior
+                    .get("coverage_status")
+                    .and_then(|value| value.as_str()),
+                Some("covered"),
+                "promoted runtime-path behavior should be marked covered"
+            );
+            let evidence = behavior
+                .get("coverage_evidence")
+                .expect("promoted runtime-path behavior should expose coverage evidence");
+            assert_eq!(
+                evidence
+                    .get("contract_suite")
+                    .and_then(|value| value.as_str()),
+                Some("runtime_path_contract.rs"),
+                "coverage evidence should identify the runtime-path contract suite"
+            );
+            assert_eq!(
+                evidence.get("test_name").and_then(|value| value.as_str()),
+                Some(expected_test_name),
+                "coverage evidence should point to the exact runtime-path contract test"
+            );
+        }
+    }
+
+    #[test]
+    fn generate_upstream_tests_keeps_remaining_runtime_path_units_uncovered() {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set");
+        let repo_root = Path::new(&manifest_dir);
+        let out_dir = create_temp_dir("remaining_runtime_path_cases");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        generate_upstream_tests_from(repo_root, &out_dir)
+            .expect("upstream test runner should generate");
+
+        let manifest = fs::read_to_string(out_dir.join("upstream_test_manifest.json"))
+            .expect("manifest should be written");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should deserialize");
+
+        let expected_remaining_units = [
+            "runtimepath.environ_home_and_environment_expansion",
+            "runtimepath.escaped_glob_and_globpath",
+            "runtimepath.expand_dllpath_options",
+            "runtimepath.expand_function_semantics",
+            "runtimepath.glob2regpat_conversion",
+            "runtimepath.global_command_path_sensitive_flows",
+        ];
+        let remaining_runtime_path_units: Vec<_> = adapted_behaviors(&manifest)
+            .iter()
+            .filter(|behavior| {
+                behavior.get("bucket").and_then(|value| value.as_str()) == Some("runtime_path")
+                    && behavior
+                        .get("coverage_status")
+                        .and_then(|value| value.as_str())
+                        == Some("uncovered")
+            })
+            .map(|behavior| {
+                behavior
+                    .get("id")
+                    .and_then(|value| value.as_str())
+                    .expect("remaining runtime-path behavior should have an id")
+            })
+            .collect();
+
+        assert_eq!(
+            remaining_runtime_path_units, expected_remaining_units,
+            "remaining runtime-path adapted behaviors should stay explicitly uncovered"
+        );
+    }
+
+    #[test]
+    fn generate_upstream_tests_reflects_promoted_message_log_case_as_covered() {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set");
+        let repo_root = Path::new(&manifest_dir);
+        let out_dir = create_temp_dir("promoted_message_log_case");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        generate_upstream_tests_from(repo_root, &out_dir)
+            .expect("upstream test runner should generate");
+
+        let manifest = fs::read_to_string(out_dir.join("upstream_test_manifest.json"))
+            .expect("manifest should be written");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should deserialize");
+
+        let behavior = find_adapted_behavior(&manifest, "test_messages");
+
+        assert_eq!(
+            behavior
+                .get("coverage_status")
+                .and_then(|value| value.as_str()),
+            Some("covered"),
+            "promoted message-log behavior should be marked covered"
+        );
+        let evidence = behavior
+            .get("coverage_evidence")
+            .expect("promoted message-log behavior should expose coverage evidence");
+        assert_eq!(
+            evidence
+                .get("contract_suite")
+                .and_then(|value| value.as_str()),
+            Some("message_log_contract.rs")
+        );
+        assert_eq!(
+            evidence.get("test_name").and_then(|value| value.as_str()),
+            Some("execute_ex_command_accepts_echomsg_without_host_action")
+        );
+    }
+
+    #[test]
+    fn generate_upstream_tests_reflects_promoted_exists_autocmd_case_as_covered() {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set");
+        let repo_root = Path::new(&manifest_dir);
+        let out_dir = create_temp_dir("promoted_exists_autocmd_case");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        generate_upstream_tests_from(repo_root, &out_dir)
+            .expect("upstream test runner should generate");
+
+        let manifest = fs::read_to_string(out_dir.join("upstream_test_manifest.json"))
+            .expect("manifest should be written");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should deserialize");
+
+        let behavior = find_adapted_behavior(&manifest, "test_exists_autocmd");
+
+        assert_eq!(
+            behavior
+                .get("coverage_status")
+                .and_then(|value| value.as_str()),
+            Some("covered"),
+            "promoted exists-autocmd behavior should be marked covered"
+        );
+        let evidence = behavior
+            .get("coverage_evidence")
+            .expect("promoted exists-autocmd behavior should expose coverage evidence");
+        assert_eq!(
+            evidence
+                .get("contract_suite")
+                .and_then(|value| value.as_str()),
+            Some("message_log_contract.rs")
+        );
+        assert_eq!(
+            evidence.get("test_name").and_then(|value| value.as_str()),
+            Some("exists_reports_autocmd_group_event_pattern_and_buffer_scope")
+        );
+    }
+
+    #[test]
+    fn generate_upstream_tests_reflects_promoted_help_tagjump_case_as_covered() {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set");
+        let repo_root = Path::new(&manifest_dir);
+        let out_dir = create_temp_dir("promoted_help_tagjump_case");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        generate_upstream_tests_from(repo_root, &out_dir)
+            .expect("upstream test runner should generate");
+
+        let manifest = fs::read_to_string(out_dir.join("upstream_test_manifest.json"))
+            .expect("manifest should be written");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should deserialize");
+
+        let behavior =
+            find_adapted_behavior(&manifest, "runtimepath.help_tagjump_from_runtime_docs");
+
+        assert_eq!(
+            behavior
+                .get("coverage_status")
+                .and_then(|value| value.as_str()),
+            Some("covered"),
+            "promoted help-tagjump behavior should be marked covered"
+        );
+        let evidence = behavior
+            .get("coverage_evidence")
+            .expect("promoted help-tagjump behavior should expose coverage evidence");
+        assert_eq!(
+            evidence
+                .get("contract_suite")
+                .and_then(|value| value.as_str()),
+            Some("runtime_path_contract.rs")
+        );
+        assert_eq!(
+            evidence.get("test_name").and_then(|value| value.as_str()),
+            Some("runtimepath_contract_supports_help_tagjump_from_runtime_docs")
+        );
+    }
+
+    #[test]
+    fn generate_upstream_tests_reflects_promoted_help_case_as_covered() {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set");
+        let repo_root = Path::new(&manifest_dir);
+        let out_dir = create_temp_dir("promoted_help_case");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        generate_upstream_tests_from(repo_root, &out_dir)
+            .expect("upstream test runner should generate");
+
+        let manifest = fs::read_to_string(out_dir.join("upstream_test_manifest.json"))
+            .expect("manifest should be written");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should deserialize");
+
+        let behavior = find_adapted_behavior(
+            &manifest,
+            "runtimepath.help_local_additions_from_runtime_docs",
+        );
+
+        assert_eq!(
+            behavior
+                .get("coverage_status")
+                .and_then(|value| value.as_str()),
+            Some("covered"),
+            "promoted help behavior should be marked covered"
+        );
+        let evidence = behavior
+            .get("coverage_evidence")
+            .expect("promoted help behavior should expose coverage evidence");
+        assert_eq!(
+            evidence
+                .get("contract_suite")
+                .and_then(|value| value.as_str()),
+            Some("runtime_path_contract.rs")
+        );
+        assert_eq!(
+            evidence.get("test_name").and_then(|value| value.as_str()),
+            Some("runtimepath_contract_supports_help_local_additions_from_runtime_docs")
+        );
+    }
+
+    #[test]
+    fn generate_upstream_tests_reflects_promoted_autocmd_case_as_covered() {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set");
+        let repo_root = Path::new(&manifest_dir);
+        let out_dir = create_temp_dir("promoted_autocmd_case");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        generate_upstream_tests_from(repo_root, &out_dir)
+            .expect("upstream test runner should generate");
+
+        let manifest = fs::read_to_string(out_dir.join("upstream_test_manifest.json"))
+            .expect("manifest should be written");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should deserialize");
+
+        let behavior = find_adapted_behavior(&manifest, "test_autocmd");
+
+        assert_eq!(
+            behavior
+                .get("coverage_status")
+                .and_then(|value| value.as_str()),
+            Some("covered"),
+            "promoted autocmd behavior should be marked covered"
+        );
+        let evidence = behavior
+            .get("coverage_evidence")
+            .expect("promoted autocmd behavior should expose coverage evidence");
+        assert_eq!(
+            evidence
+                .get("contract_suite")
+                .and_then(|value| value.as_str()),
+            Some("integration_contract.rs")
+        );
+        assert_eq!(
+            evidence.get("test_name").and_then(|value| value.as_str()),
+            Some("autocmd_bufunload_event_order_matches_vim_slice")
+        );
+    }
+
+    #[test]
+    fn generate_upstream_tests_writes_coverage_evidence_for_covered_adapted_behavior() {
+        let dir = create_temp_dir("covered_adapted_behavior_evidence");
+        let repo_root = dir.join("repo");
+        let out_dir = dir.join("out");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+        write_covered_adapted_case_fixture(&repo_root, true);
+
+        generate_upstream_tests_from(&repo_root, &out_dir)
+            .expect("upstream test runner should generate");
+
+        let manifest = fs::read_to_string(out_dir.join("upstream_test_manifest.json"))
+            .expect("manifest should be written");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should deserialize");
+
+        let adapted_behavior = find_adapted_behavior(&manifest, "delta.behavior");
+        assert_eq!(
+            adapted_behavior
+                .get("coverage_status")
+                .and_then(|value| value.as_str()),
+            Some("covered"),
+            "covered adapted behaviors should preserve their machine-readable status"
+        );
+        let evidence = adapted_behavior
+            .get("coverage_evidence")
+            .expect("covered adapted behaviors should expose coverage evidence");
+        assert_eq!(
+            evidence
+                .get("contract_suite")
+                .and_then(|value| value.as_str()),
+            Some("integration_contract.rs")
+        );
+        assert!(
+            evidence
+                .get("test_name")
+                .and_then(|value| value.as_str())
+                .is_some()
+                || evidence
+                    .get("evidence_ref")
+                    .and_then(|value| value.as_str())
+                    .is_some(),
+            "coverage evidence should include at least one locator"
+        );
+    }
+
+    #[test]
+    fn generate_upstream_tests_rejects_covered_adapted_behavior_without_coverage_evidence() {
+        let dir = create_temp_dir("covered_adapted_behavior_missing_evidence");
+        let repo_root = dir.join("repo");
+        let out_dir = dir.join("out");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+        write_covered_adapted_case_fixture(&repo_root, false);
+
+        let error = generate_upstream_tests_from(&repo_root, &out_dir)
+            .expect_err("covered adapted behavior without evidence should fail");
+        assert!(
+            error.contains("coverage_evidence"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn generate_upstream_tests_rejects_coverage_evidence_outside_related_contract_suites() {
+        let dir = create_temp_dir("covered_adapted_behavior_wrong_suite");
+        let repo_root = dir.join("repo");
+        let out_dir = dir.join("out");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+        write_covered_adapted_case_fixture(&repo_root, true);
+
+        write_file(
+            &repo_root.join("tests/runtime_path_contract.rs"),
+            "#[test]\nfn runtimepath_contract_supports_runtime_and_autoload_loading() {}\n",
+        );
+        write_file(
+            &repo_root.join("upstream-test-classification.json"),
+            &serde_json::to_string_pretty(&serde_json::json!({
+                "metadata": { "version": 2 },
+                "counts": {
+                    "total_cases": 1,
+                    "preserve_directly": 0,
+                    "preserve_through_adaptation": 1,
+                    "out_of_scope": 0,
+                    "temporarily_excluded": 0,
+                },
+                "cases": [{
+                    "name": "test_delta.vim",
+                    "relative_path": "vendor/vim_src/src/testdir/test_delta.vim",
+                    "classification": "preserve_through_adaptation"
+                }],
+                "adapted_behaviors": [{
+                    "id": "delta.behavior",
+                    "upstream_case_name": "test_delta.vim",
+                    "relative_path": "vendor/vim_src/src/testdir/test_delta.vim",
+                    "related_contract_suites": ["integration_contract.rs"],
+                    "coverage_status": "covered",
+                    "coverage_evidence": {
+                        "contract_suite": "runtime_path_contract.rs",
+                        "test_name": "runtimepath_contract_supports_runtime_and_autoload_loading"
+                    }
+                }],
+            }))
+            .expect("fixture should serialize"),
+        );
+
+        let error = generate_upstream_tests_from(&repo_root, &out_dir)
+            .expect_err("coverage evidence outside related suites should fail");
+        assert!(
+            error.contains("related_contract_suites"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn generate_upstream_tests_rejects_coverage_evidence_with_missing_test_locator() {
+        let dir = create_temp_dir("covered_adapted_behavior_missing_test");
+        let repo_root = dir.join("repo");
+        let out_dir = dir.join("out");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+        write_covered_adapted_case_fixture(&repo_root, true);
+
+        write_file(
+            &repo_root.join("upstream-test-classification.json"),
+            &serde_json::to_string_pretty(&serde_json::json!({
+                "metadata": { "version": 2 },
+                "counts": {
+                    "total_cases": 1,
+                    "preserve_directly": 0,
+                    "preserve_through_adaptation": 1,
+                    "out_of_scope": 0,
+                    "temporarily_excluded": 0,
+                },
+                "cases": [{
+                    "name": "test_delta.vim",
+                    "relative_path": "vendor/vim_src/src/testdir/test_delta.vim",
+                    "classification": "preserve_through_adaptation"
+                }],
+                "adapted_behaviors": [{
+                    "id": "delta.behavior",
+                    "upstream_case_name": "test_delta.vim",
+                    "relative_path": "vendor/vim_src/src/testdir/test_delta.vim",
+                    "related_contract_suites": ["integration_contract.rs"],
+                    "coverage_status": "covered",
+                    "coverage_evidence": {
+                        "contract_suite": "integration_contract.rs",
+                        "test_name": "missing_behavior_locator"
+                    }
+                }],
+            }))
+            .expect("fixture should serialize"),
+        );
+
+        let error = generate_upstream_tests_from(&repo_root, &out_dir)
+            .expect_err("missing coverage-evidence locator should fail");
+        assert!(error.contains("missing test"), "unexpected error: {error}");
+    }
+
+    #[test]
     fn generate_upstream_tests_without_vendored_testdir_writes_empty_runner() {
         let dir = create_temp_dir("empty_runner");
         let repo_root = dir.join("repo");
@@ -739,6 +1415,10 @@ mod build_test_runner_contract_tests {
         let manifest: GeneratedUpstreamTestManifest =
             serde_json::from_str(&manifest).expect("manifest should deserialize");
         assert!(manifest.cases.is_empty(), "expected no generated cases");
+        assert!(
+            manifest.adapted_behaviors.is_empty(),
+            "expected no adapted behaviors"
+        );
 
         let generated = fs::read_to_string(out_dir.join("upstream_vim_tests.rs"))
             .expect("generated runner should be written");

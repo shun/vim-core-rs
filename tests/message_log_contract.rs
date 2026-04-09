@@ -1,3 +1,4 @@
+use std::fs;
 #[cfg(unix)]
 use std::fs::File;
 #[cfg(unix)]
@@ -5,11 +6,12 @@ use std::io::Read;
 #[cfg(unix)]
 use std::os::fd::{FromRawFd, RawFd};
 use std::sync::{Mutex, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(unix)]
 use std::{sync::mpsc, thread, time::Duration};
 use vim_core_rs::{
-    CoreEvent, CoreMessageCategory, CoreMessageEvent, CoreMessageSeverity, CorePagerPromptKind,
-    VimCoreSession,
+    CoreEvent, CoreHostAction, CoreMessageCategory, CoreMessageEvent, CoreMessageSeverity,
+    CorePagerPromptKind, CoreVfsRequest, CoreVfsResponse, VimCoreSession,
 };
 
 fn session_test_lock() -> &'static Mutex<()> {
@@ -21,6 +23,29 @@ fn acquire_session_test_lock() -> std::sync::MutexGuard<'static, ()> {
     session_test_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn edit_local_file_via_resolved_fallback(session: &mut VimCoreSession, path: &std::path::Path) {
+    let outcome = session
+        .execute_ex_command(&format!("edit {}", path.display()))
+        .expect("edit should queue a resolve request");
+    let request_id = outcome
+        .host_actions
+        .into_iter()
+        .find_map(|action| match action {
+            CoreHostAction::VfsRequest(CoreVfsRequest::Resolve { request_id, .. }) => {
+                Some(request_id)
+            }
+            _ => None,
+        })
+        .expect("edit should issue a resolve request");
+
+    session
+        .submit_vfs_response(CoreVfsResponse::ResolvedLocalFallback {
+            request_id,
+            locator: path.to_string_lossy().into_owned(),
+        })
+        .expect("local fallback edit should succeed");
 }
 
 // === Task 5.1: C FFI API の単体テスト ===
@@ -135,6 +160,79 @@ fn execute_ex_command_returns_message_events_without_scraping() {
         stdout,
         stderr
     );
+}
+
+#[test]
+fn exists_reports_autocmd_group_event_pattern_and_buffer_scope() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("hello").expect("セッション初期化に失敗");
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock should be monotonic")
+        .as_nanos();
+    let temp_dir = std::env::temp_dir();
+    let first_path = temp_dir.join(format!("vim-core-rs-exists-autocmd-{unique}-1.my"));
+    let second_path = temp_dir.join(format!("vim-core-rs-exists-autocmd-{unique}-2.my"));
+    fs::write(&first_path, "first buffer\n").expect("first temp file should be written");
+    fs::write(&second_path, "second buffer\n").expect("second temp file should be written");
+
+    session
+        .execute_ex_command("augroup myagroup")
+        .expect("augroup should succeed");
+    assert_eq!(
+        session.eval_string("exists('#myagroup')"),
+        Some("1".to_string()),
+        "empty autocmd group should be observable through exists('#group')"
+    );
+    assert_eq!(
+        session.eval_string("exists('#BufEnter')"),
+        Some("0".to_string()),
+        "BufEnter should not exist before any BufEnter autocmd is defined"
+    );
+    session
+        .execute_ex_command("autocmd!")
+        .expect("autocmd! should succeed");
+    session
+        .execute_ex_command(r#"autocmd BufEnter *.my echo "myfile edited""#)
+        .expect("autocmd definition should succeed");
+    session
+        .execute_ex_command("augroup END")
+        .expect("augroup END should succeed");
+
+    assert_eq!(
+        session.eval_string("exists('#myagroup#BufEnter')"),
+        Some("1".to_string()),
+        "autocmd group and event should be observable through exists('#group#event')"
+    );
+    assert_eq!(
+        session.eval_string("exists('#BufEnter')"),
+        Some("1".to_string()),
+        "BufEnter should be observable through exists('#event')"
+    );
+    assert_eq!(
+        session.eval_string("exists('#BufEnter#*.my')"),
+        Some("1".to_string()),
+        "autocmd event and pattern should be observable through exists('#event#pattern')"
+    );
+
+    edit_local_file_via_resolved_fallback(&mut session, &first_path);
+    session
+        .execute_ex_command("autocmd BufEnter <buffer> let g:entered=1")
+        .expect("buffer-local autocmd definition should succeed");
+    assert_eq!(
+        session.eval_string("exists('#BufEnter#<buffer>')"),
+        Some("1".to_string()),
+        "buffer-local autocmd should be observable through exists('#event#<buffer>')"
+    );
+    edit_local_file_via_resolved_fallback(&mut session, &second_path);
+    assert_eq!(
+        session.eval_string("exists('#BufEnter#<buffer>')"),
+        Some("0".to_string()),
+        "buffer-local autocmd should disappear from the previous buffer scope"
+    );
+
+    let _ = fs::remove_file(first_path);
+    let _ = fs::remove_file(second_path);
 }
 
 #[cfg(unix)]

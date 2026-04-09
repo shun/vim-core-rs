@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "version": 1,
+    "version": 2,
     "generated_on": "2026-03-28",
     "source_directory": "vendor/vim_src/src/testdir",
     "adr": "docs/adr/0002-define-compatibility-boundaries.md",
@@ -181,9 +181,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_behave.vim",
@@ -434,9 +432,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_clipmethod.vim",
@@ -576,9 +572,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_conceal.vim",
@@ -1484,9 +1478,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_gui_init.vim",
@@ -1496,9 +1488,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_hardcopy.vim",
@@ -1906,9 +1896,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_makeencoding.vim",
@@ -2074,9 +2062,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_mksession_utf8.vim",
@@ -2151,9 +2137,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_nested_function.vim",
@@ -2176,9 +2160,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_normal.vim",
@@ -2241,9 +2223,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_partial.vim",
@@ -2279,9 +2259,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plugin_comment.vim",
@@ -2291,9 +2269,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plugin_glvs.vim",
@@ -2303,9 +2279,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plugin_helpcurwin.vim",
@@ -2315,9 +2289,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plugin_helptoc.vim",
@@ -2327,9 +2299,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plugin_man.vim",
@@ -2339,9 +2309,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plugin_matchparen.vim",
@@ -2351,9 +2319,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plugin_netrw.vim",
@@ -2363,9 +2329,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plugin_osc52.vim",
@@ -2375,9 +2339,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plugin_tar.vim",
@@ -2387,9 +2349,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plugin_termdebug.vim",
@@ -2399,9 +2359,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plugin_tohtml.vim",
@@ -2411,9 +2369,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plugin_tutor.vim",
@@ -2423,9 +2379,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plugin_zip.vim",
@@ -2435,9 +2389,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_plus_arg_edit.vim",
@@ -2554,9 +2506,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_python3.vim",
@@ -2566,9 +2516,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_pyx2.vim",
@@ -2578,9 +2526,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_pyx3.vim",
@@ -2590,9 +2536,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_quickfix.vim",
@@ -2720,9 +2664,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_rename.vim",
@@ -2772,9 +2714,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_scriptnames.vim",
@@ -3010,9 +2950,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_source.vim",
@@ -3364,9 +3302,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_termcodes.vim",
@@ -3402,9 +3338,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_terminal2.vim",
@@ -3414,9 +3348,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_terminal3.vim",
@@ -3426,9 +3358,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_terminal_fail.vim",
@@ -3438,9 +3368,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_textformat.vim",
@@ -3818,9 +3746,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_vim9_script.vim",
@@ -3910,9 +3836,7 @@
       "intended_harness": "excluded",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
-      "related_contract_suites": [
-
-      ]
+      "related_contract_suites": []
     },
     {
       "name": "test_winbar.vim",
@@ -4058,6 +3982,715 @@
         "public_api_contract.rs",
         "integration_contract.rs"
       ]
+    }
+  ],
+  "adapted_behaviors": [
+    {
+      "id": "environment.chdir_literal_tilde_path",
+      "upstream_case_name": "test_expand.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_expand.vim",
+      "upstream_test_cases": [
+        "Test_with_tilde"
+      ],
+      "bucket": "environment",
+      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "environment.expand_env_pathsep",
+      "upstream_case_name": "test_expand.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_expand.vim",
+      "upstream_test_cases": [
+        "Test_expand_env_pathsep"
+      ],
+      "bucket": "environment",
+      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "environment.expand_tilde_filename",
+      "upstream_case_name": "test_expand.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_expand.vim",
+      "upstream_test_cases": [
+        "Test_expand_tilde_filename"
+      ],
+      "bucket": "environment",
+      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "expansion.expandcmd_general",
+      "upstream_case_name": "test_expand.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_expand.vim",
+      "upstream_test_cases": [
+        "Test_expandcmd"
+      ],
+      "bucket": "expansion",
+      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "expansion.expandcmd_shell_nonomatch",
+      "upstream_case_name": "test_expand.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_expand.vim",
+      "upstream_test_cases": [
+        "Test_expandcmd_shell_nonomatch"
+      ],
+      "bucket": "expansion",
+      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "expansion.filename_multicmd_reexpansion",
+      "upstream_case_name": "test_expand.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_expand.vim",
+      "upstream_test_cases": [
+        "Test_expand_filename_multicmd"
+      ],
+      "bucket": "expansion",
+      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "runtimepath.autoload_source",
+      "upstream_case_name": "test_autoload.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_autoload.vim",
+      "upstream_test_cases": [
+        "Test_source_autoload"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Runtime loading behavior is preserved through repository-specific runtime discovery contracts.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_runtime_and_autoload_loading"
+      }
+    },
+    {
+      "id": "runtimepath.checkpath_includeexpr_recursion",
+      "upstream_case_name": "test_checkpath.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_checkpath.vim",
+      "upstream_test_cases": [
+        "Test_checkpath1"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Path and runtime discovery behavior belongs to adaptation around the host filesystem boundary.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_checkpath_includeexpr_recursion"
+      }
+    },
+    {
+      "id": "runtimepath.environ_home_and_environment_expansion",
+      "upstream_case_name": "test_environ.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_environ.vim",
+      "upstream_test_cases": [
+        "Test_environ",
+        "Test_getenv",
+        "Test_setenv"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Environment-dependent behavior is adapted at the host boundary.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "runtimepath.escaped_glob_and_globpath",
+      "upstream_case_name": "test_escaped_glob.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_escaped_glob.vim",
+      "upstream_test_cases": [
+        "Test_glob",
+        "Test_globpath"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Path globbing near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "runtimepath.expand.directory_wildcard_buffer_selection",
+      "upstream_case_name": "test_expand.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_expand.vim",
+      "upstream_test_cases": [
+        "Test_with_directories"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_wildcard_path_expansion_for_buffer_selection"
+      }
+    },
+    {
+      "id": "runtimepath.expand_dllpath_options",
+      "upstream_case_name": "test_expand_dllpath.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_expand_dllpath.vim",
+      "upstream_test_cases": [
+        "Test_expand_luadll",
+        "Test_expand_perldll",
+        "Test_expand_pythondll",
+        "Test_expand_pythonthreedll",
+        "Test_expand_rubydll",
+        "Test_expand_tcldll"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "runtimepath.expand_function_semantics",
+      "upstream_case_name": "test_expand_func.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_expand_func.vim",
+      "upstream_test_cases": [
+        "Test_expand"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "runtimepath.filetype_detection_from_runtime",
+      "upstream_case_name": "test_filetype.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_filetype.vim",
+      "upstream_test_cases": [
+        "Test_detection"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Runtime filetype discovery is preserved through runtime-path and runtime loading contracts.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_filetype_detection_from_runtime"
+      }
+    },
+    {
+      "id": "runtimepath.findfile_path_discovery",
+      "upstream_case_name": "test_findfile.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_findfile.vim",
+      "upstream_test_cases": [
+        "Test_findfile"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Path and runtime discovery behavior belongs to adaptation around the host filesystem boundary.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_path_discovery_and_fnameescape"
+      }
+    },
+    {
+      "id": "runtimepath.fnameescape_path_quoting",
+      "upstream_case_name": "test_fnameescape.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_fnameescape.vim",
+      "upstream_test_cases": [
+        "Test_fnameescape"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Filename and path transformation near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_path_discovery_and_fnameescape"
+      }
+    },
+    {
+      "id": "runtimepath.fnamemodify_path_transforms",
+      "upstream_case_name": "test_fnamemodify.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_fnamemodify.vim",
+      "upstream_test_cases": [
+        "Test_fnamemodify"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Filename and path transformation near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_path_discovery_and_fnameescape"
+      }
+    },
+    {
+      "id": "runtimepath.getcwd_working_directory_queries",
+      "upstream_case_name": "test_getcwd.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_getcwd.vim",
+      "upstream_test_cases": [
+        "Test_GetCwd"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Working-directory behavior crosses the host filesystem boundary and is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_path_discovery_and_fnameescape"
+      }
+    },
+    {
+      "id": "runtimepath.glob2regpat_conversion",
+      "upstream_case_name": "test_glob2regpat.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_glob2regpat.vim",
+      "upstream_test_cases": [
+        "Test_glob2regpat_valid",
+        "Test_glob2regpat_invalid"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Path globbing near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "runtimepath.global_command_path_sensitive_flows",
+      "upstream_case_name": "test_global.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_global.vim",
+      "upstream_test_cases": [
+        "Test_nested_global",
+        "Test_global_print"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Path globbing near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "runtimepath.help_local_additions_from_runtime_docs",
+      "upstream_case_name": "test_help.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_help.vim",
+      "upstream_test_cases": [
+        "Test_help_local_additions"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Help and runtime lookup behavior depend on runtime discovery rather than standalone Vim UI ownership.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "message_log_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_help_local_additions_from_runtime_docs"
+      }
+    },
+    {
+      "id": "runtimepath.help_tagjump_from_runtime_docs",
+      "upstream_case_name": "test_help_tagjump.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_help_tagjump.vim",
+      "upstream_test_cases": [
+        "Test_help_tagjump"
+      ],
+      "bucket": "runtime_path",
+      "rationale": "Help and runtime lookup behavior depend on runtime discovery rather than standalone Vim UI ownership.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "message_log_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_help_tagjump_from_runtime_docs"
+      }
+    },
+    {
+      "id": "script_context.expand_script_source_levels",
+      "upstream_case_name": "test_expand.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_expand.vim",
+      "upstream_test_cases": [
+        "Test_expand_script_source"
+      ],
+      "bucket": "script_context",
+      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "script_context.source_placeholders_outside_source",
+      "upstream_case_name": "test_expand.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_expand.vim",
+      "upstream_test_cases": [
+        "Test_source_sfile"
+      ],
+      "bucket": "script_context",
+      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "related_contract_suites": [
+        "runtime_path_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_autocmd",
+      "upstream_case_name": "test_autocmd.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_autocmd.vim",
+      "rationale": "Autocmd behavior affects host-visible integration flows and is tracked as adapted behavior.",
+      "related_contract_suites": [
+        "integration_contract.rs",
+        "message_log_contract.rs"
+      ],
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "integration_contract.rs",
+        "test_name": "autocmd_bufunload_event_order_matches_vim_slice"
+      }
+    },
+    {
+      "id": "test_backup",
+      "upstream_case_name": "test_backup.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_backup.vim",
+      "rationale": "Filesystem-facing behavior must be mediated by host-side storage contracts.",
+      "related_contract_suites": [
+        "ex_command_contract.rs",
+        "vfs_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_channel",
+      "upstream_case_name": "test_channel.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_channel.vim",
+      "rationale": "Channel behavior is preserved through the host-facing job and VFD bridge.",
+      "related_contract_suites": [
+        "job_api_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_conceal",
+      "upstream_case_name": "test_conceal.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_conceal.vim",
+      "rationale": "Conceal and highlight extraction are treated as repository-specific rendering-adjacent contracts.",
+      "related_contract_suites": [
+        "syntax_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_exists_autocmd",
+      "upstream_case_name": "test_exists_autocmd.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_exists_autocmd.vim",
+      "rationale": "Autocmd behavior affects host-visible integration flows and is tracked as adapted behavior.",
+      "related_contract_suites": [
+        "integration_contract.rs",
+        "message_log_contract.rs"
+      ],
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "message_log_contract.rs",
+        "test_name": "exists_reports_autocmd_group_event_pattern_and_buffer_scope"
+      }
+    },
+    {
+      "id": "test_file_perm",
+      "upstream_case_name": "test_file_perm.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_file_perm.vim",
+      "rationale": "Filesystem permission behavior crosses the host storage boundary and is treated as adapted behavior.",
+      "related_contract_suites": [
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_file_size",
+      "upstream_case_name": "test_file_size.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_file_size.vim",
+      "rationale": "Filesystem metadata behavior crosses the host storage boundary and is treated as adapted behavior.",
+      "related_contract_suites": [
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_filechanged",
+      "upstream_case_name": "test_filechanged.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_filechanged.vim",
+      "rationale": "Filesystem change detection crosses the host storage boundary and is treated as adapted behavior.",
+      "related_contract_suites": [
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_filecopy",
+      "upstream_case_name": "test_filecopy.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_filecopy.vim",
+      "rationale": "Filesystem-facing copy behavior must be mediated by host-side storage contracts.",
+      "related_contract_suites": [
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_highlight",
+      "upstream_case_name": "test_highlight.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_highlight.vim",
+      "rationale": "Highlight-related behavior is preserved through repository extraction contracts rather than full rendering fidelity.",
+      "related_contract_suites": [
+        "syntax_contract.rs",
+        "search_highlight_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_job_fails",
+      "upstream_case_name": "test_job_fails.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_job_fails.vim",
+      "rationale": "Job requests must be adapted into host-managed process contracts.",
+      "related_contract_suites": [
+        "job_contract.rs",
+        "job_api_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_matchadd_conceal",
+      "upstream_case_name": "test_matchadd_conceal.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_matchadd_conceal.vim",
+      "rationale": "Conceal and highlight extraction are treated as repository-specific rendering-adjacent contracts.",
+      "related_contract_suites": [
+        "syntax_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_matchadd_conceal_utf8",
+      "upstream_case_name": "test_matchadd_conceal_utf8.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_matchadd_conceal_utf8.vim",
+      "rationale": "Conceal and highlight extraction are treated as repository-specific rendering-adjacent contracts.",
+      "related_contract_suites": [
+        "syntax_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_menu",
+      "upstream_case_name": "test_menu.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_menu.vim",
+      "rationale": "Menu and related runtime UI state are treated as adapted behavior, not full standalone UI ownership.",
+      "related_contract_suites": [
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_messages",
+      "upstream_case_name": "test_messages.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_messages.vim",
+      "rationale": "Message behavior is preserved through repository-specific event delivery contracts.",
+      "related_contract_suites": [
+        "message_log_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "message_log_contract.rs",
+        "test_name": "execute_ex_command_accepts_echomsg_without_host_action"
+      }
+    },
+    {
+      "id": "test_popup",
+      "upstream_case_name": "test_popup.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_popup.vim",
+      "rationale": "Popup and popupwin behavior is consumed through repository extraction contracts rather than full UI ownership.",
+      "related_contract_suites": [
+        "pum_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_popupwin",
+      "upstream_case_name": "test_popupwin.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_popupwin.vim",
+      "rationale": "Popup and popupwin behavior is consumed through repository extraction contracts rather than full UI ownership.",
+      "related_contract_suites": [
+        "pum_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_popupwin_textprop",
+      "upstream_case_name": "test_popupwin_textprop.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_popupwin_textprop.vim",
+      "rationale": "Popup and popupwin behavior is consumed through repository extraction contracts rather than full UI ownership.",
+      "related_contract_suites": [
+        "pum_contract.rs",
+        "syntax_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_recover",
+      "upstream_case_name": "test_recover.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_recover.vim",
+      "rationale": "Filesystem-facing recovery behavior must be mediated by host-side storage contracts.",
+      "related_contract_suites": [
+        "vfs_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_rename",
+      "upstream_case_name": "test_rename.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_rename.vim",
+      "rationale": "Filesystem-facing rename behavior must be mediated by host-side storage contracts.",
+      "related_contract_suites": [
+        "vfs_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_shortpathname",
+      "upstream_case_name": "test_shortpathname.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_shortpathname.vim",
+      "rationale": "Platform-specific path handling crosses the host filesystem boundary and is treated as adapted behavior.",
+      "related_contract_suites": [
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_swap",
+      "upstream_case_name": "test_swap.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_swap.vim",
+      "rationale": "Filesystem-facing swap behavior must be mediated by host-side storage contracts.",
+      "related_contract_suites": [
+        "vfs_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_syntax",
+      "upstream_case_name": "test_syntax.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_syntax.vim",
+      "rationale": "Syntax-related behavior is preserved through repository extraction contracts rather than full rendering fidelity.",
+      "related_contract_suites": [
+        "syntax_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_textprop",
+      "upstream_case_name": "test_textprop.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_textprop.vim",
+      "rationale": "Text property and popup extraction are preserved through repository extraction contracts.",
+      "related_contract_suites": [
+        "pum_contract.rs",
+        "syntax_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_windows_home",
+      "upstream_case_name": "test_windows_home.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_windows_home.vim",
+      "rationale": "Platform-specific home-directory handling crosses the host filesystem boundary and is treated as adapted behavior.",
+      "related_contract_suites": [
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_xdg",
+      "upstream_case_name": "test_xdg.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_xdg.vim",
+      "rationale": "XDG and host-environment discovery are adapted at the host boundary.",
+      "related_contract_suites": [
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
     }
   ]
 }
