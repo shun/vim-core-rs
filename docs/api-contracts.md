@@ -19,11 +19,15 @@ You can understand the crate as a composition of four contracts.
 The rendering state family is the vocabulary we use to keep the current
 read-only extraction boundary stable. It names the current members, the
 future placeholder, and the exclusion boundary without introducing a new
-runtime facade.
+runtime facade. It is an additive explanation layer over the existing
+`VimCoreSession` surface, not a new runtime owner and not a replacement
+surface.
 
 - `Search` and `Syntax` are the current family members.
 - `Annotations` is the future placeholder for text-property extraction.
 - `popupwin` stays outside the family as host-owned presentation.
+- popup placement, popup composition, popup borders, and overlay layout stay
+  outside the family as host-owned presentation policy.
 - Issue #14 owns any later facade or public-contract promotion work.
 
 ## Session contract
@@ -237,11 +241,19 @@ The search and syntax methods are read-only rendering helpers. They expose
 Vim-owned state for host rendering, but they do not move rendering policy into
 the crate.
 
+For the current Search family boundary, this means `incsearch`, inactive
+window queries, and byte-column search ranges are contract data, while popup
+ownership stays host-owned presentation.
+
 - Search highlight methods return plain ranges. They do not own rendering.
 - `query_visible_search_state()` and
   `query_visible_search_state_for_window()` are the stable pane-local search
   contract. They bundle mode, pattern, visible ranges, and `hlsearch` /
   `incsearch` state without moving rendering policy into the core.
+- `search_capability_contract()` is the structured Search family summary for
+  this boundary. It reports live-state availability, inactive-window support,
+  visible-row scoping, byte-column semantics, the data-only payload contract,
+  and the host-owned presentation boundary.
 - `query_visible_search_state_for_window(window_id, ...)` accepts inactive
   windows as long as the `window_id` exists in the current snapshot.
 - Search columns are byte offsets. Hosts that render by grapheme or display
@@ -251,9 +263,13 @@ the crate.
 - `get_line_syntax()` groups consecutive columns with the same syntax ID into
   `CoreSyntaxChunk` values, and `get_syntax_name()` resolves the group name.
 - This is the public syntax extraction boundary. It does not expose
-  `:highlight` definition tables or resolved highlight attribute tables yet.
+  highlight definition tables, including `:highlight` definition tables, or
+  resolved highlight attribute tables yet.
 - `textprop` is deferred as future annotation-state extraction. The crate does
   not expose it as a public contract yet.
+- popup placement, popup composition, popup borders, and overlay layout stay
+  outside this contract even when hosts render search ranges, syntax chunks,
+  or future annotations.
 - `get_syntax_name()` may return `None` when Vim does not provide a non-empty
   group name for the ID.
 

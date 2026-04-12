@@ -444,9 +444,13 @@ pub enum CoreSearchHighlightMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CoreSearchCapabilityContract {
     pub live_state_query_available: bool,
+    pub inactive_window_query_available: bool,
     pub visible_rows_only: bool,
     pub start_col_inclusive: bool,
     pub end_col_exclusive: bool,
+    pub byte_columns: bool,
+    pub data_only_payload: bool,
+    pub host_owned_presentation: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2080,9 +2084,13 @@ impl VimCoreSession {
     pub fn search_capability_contract() -> CoreSearchCapabilityContract {
         CoreSearchCapabilityContract {
             live_state_query_available: true,
+            inactive_window_query_available: true,
             visible_rows_only: true,
             start_col_inclusive: true,
             end_col_exclusive: true,
+            byte_columns: true,
+            data_only_payload: true,
+            host_owned_presentation: true,
         }
     }
 

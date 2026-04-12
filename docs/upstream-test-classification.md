@@ -43,6 +43,14 @@ stay current members, `Annotations` stays a future placeholder for
 text-property extraction, and `popupwin` remains host-owned presentation.
 Issue #14 is the later facade/public-contract promotion step.
 
+Within that Search family boundary, `incsearch` stays part of the
+repository's search contract coverage. The contract keeps inactive window
+queries and byte columns observable through `VimCoreSession`, while popup
+ownership remains host-owned presentation instead of a crate rendering
+contract. `search_capability_contract()` is the typed summary of that
+boundary, so classification text and docs should agree with the public
+contract fields instead of introducing a parallel vocabulary.
+
 Some adapted behaviors also mix Vim-owned state with host-owned
 presentation. For saya-like hosts that implement their own popup UI,
 `popupwin` rendering stays host-owned and is not a crate extraction
@@ -51,6 +59,9 @@ ranges and syntax chunk extraction, but `:highlight` definition tables
 and resolved attribute tables remain outside the public contract.
 `textprop` remains Vim-owned annotation state and is deferred until the
 repository defines a narrow read-only extraction surface.
+Popup placement, popup composition, popup borders, and overlay layout also
+remain host-owned presentation policy rather than crate extraction
+contracts.
 
 `build_test_runner.rs` consumes the manifest and emits a generated
 manifest with:
@@ -75,7 +86,9 @@ Each `adapted_behaviors` entry carries machine-readable
 locator such as `test_name` or `evidence_ref`. The manifest validation
 also requires the referenced contract suite to be declared in
 `related_contract_suites`, and `test_name` locators must resolve to a
-real repository contract test.
+real repository contract test. When a rendering-state family member or
+accessor is promoted, add the repository contract test before treating
+that adapted behavior as covered.
 
 ## Runtime-path bucket
 

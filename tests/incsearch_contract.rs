@@ -60,6 +60,27 @@ fn incsearch_active_query_exposes_live_preview_state() {
 }
 
 #[test]
+fn incsearch_active_query_is_stable_until_input_changes() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("alpha\nhello world hello\nomega\n")
+        .expect("session should initialize");
+
+    session
+        .execute_ex_command("set incsearch hlsearch")
+        .unwrap();
+    session.execute_normal_command("/hello").unwrap();
+
+    let first = session
+        .query_visible_search_state(1, 3)
+        .expect("first live search state should be queryable");
+    let second = session
+        .query_visible_search_state(1, 3)
+        .expect("second live search state should be queryable");
+
+    assert_eq!(first, second);
+}
+
+#[test]
 fn incsearch_disabled_keeps_input_pattern_but_returns_no_preview_ranges() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("alpha\nhello world hello\nomega\n")
@@ -152,6 +173,13 @@ fn enter_commits_preview_into_regular_search_state() {
             .iter()
             .any(|range| range.match_type == CoreMatchType::CurSearch)
     );
+    assert!(
+        after_enter
+            .ranges
+            .iter()
+            .filter(|range| range.match_type != CoreMatchType::CurSearch)
+            .all(|range| range.match_type == CoreMatchType::Regular)
+    );
 }
 
 #[test]
@@ -175,6 +203,23 @@ fn query_visible_search_state_marks_current_match_and_limits_rows() {
             .iter()
             .any(|range| range.match_type == CoreMatchType::CurSearch)
     );
+}
+
+#[test]
+fn query_visible_search_state_returns_empty_ranges_when_matches_are_outside_viewport() {
+    let _guard = acquire_session_test_lock();
+    let mut session =
+        VimCoreSession::new("hit\nmiss\nhit hit\n").expect("session should initialize");
+
+    session.execute_ex_command("set hlsearch").unwrap();
+    session.execute_ex_command("let @/ = 'hit'").unwrap();
+
+    let state = session.query_visible_search_state(2, 2).unwrap();
+
+    assert_eq!(state.mode, CoreSearchHighlightMode::HlSearch);
+    assert_eq!(state.start_row, 2);
+    assert_eq!(state.end_row, 2);
+    assert!(state.ranges.is_empty());
 }
 
 #[test]
@@ -212,13 +257,34 @@ fn query_visible_search_state_uses_byte_columns_for_fullwidth_matches() {
 }
 
 #[test]
-fn search_capability_contract_is_available_and_documents_column_semantics() {
+fn query_visible_search_state_preserves_byte_columns_for_mixed_width_matches() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("AあA AあA\n").expect("session should initialize");
+
+    session.execute_ex_command("set hlsearch").unwrap();
+    session.execute_ex_command("let @/ = 'AあA'").unwrap();
+
+    let state = session.query_visible_search_state(1, 1).unwrap();
+
+    assert_eq!(state.ranges.len(), 2);
+    assert_eq!(state.ranges[0].start_col, 0);
+    assert_eq!(state.ranges[0].end_col, 5);
+    assert_eq!(state.ranges[1].start_col, 6);
+    assert_eq!(state.ranges[1].end_col, 11);
+}
+
+#[test]
+fn search_capability_contract_is_available_and_documents_search_family_boundary() {
     let contract = VimCoreSession::search_capability_contract();
 
     assert!(contract.live_state_query_available);
+    assert!(contract.inactive_window_query_available);
     assert!(contract.visible_rows_only);
     assert!(contract.start_col_inclusive);
     assert!(contract.end_col_exclusive);
+    assert!(contract.byte_columns);
+    assert!(contract.data_only_payload);
+    assert!(contract.host_owned_presentation);
 }
 
 #[test]

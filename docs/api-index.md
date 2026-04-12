@@ -14,7 +14,8 @@ gaps. Only after that should you descend into the API reference pages.
 crate exposes today. `Annotations` is the future placeholder for
 text-property extraction, and issue #14 owns any later public facade
 promotion. `popupwin` stays outside the family because it is host-owned
-presentation.
+presentation. The family does not add a new runtime facade, and it does not
+expose popup layout/composition or highlight definition and attribute tables.
 
 ## What each document covers
 
@@ -87,8 +88,15 @@ The public session methods are grouped by role.
   `query_visible_search_state`, `query_visible_search_state_for_window`,
   `search_capability_contract`, `get_syntax_name`, `get_line_syntax`
 - These accessors cover the current `Search` and `Syntax` family members.
-  `textprop` stays deferred as the `Annotations` placeholder, and the crate
-  does not expose a public popupwin extractor.
+  The Search family summary includes inactive window queries, byte columns,
+  and `incsearch` state as contract data. `textprop` stays deferred as the
+  `Annotations` placeholder, and popup ownership stays host-owned presentation
+  because the crate does not expose a public popupwin extractor or
+  highlight-table extractor.
+- `search_capability_contract` is the typed summary for this Search family
+  boundary. It reports live-state availability, inactive-window support,
+  byte-column semantics, data-only payload rules, and host-owned
+  presentation.
 - Undo and backend metadata: `get_undo_tree`, `undo_jump`,
   `backend_identity`
 - Job and VFD bridge helpers: `inject_vfd_data`, `notify_job_status`

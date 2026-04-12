@@ -182,26 +182,65 @@ fn rendering_state_family_boundary_is_documented_and_classified() {
             && scope.contains("Search")
             && scope.contains("Syntax")
             && scope.contains("Annotations")
-            && scope.contains("issue #14"),
+            && scope.contains("issue #14")
+            && scope.contains("overlay composition")
+            && scope.contains("popup window")
+            && scope.contains("resolved highlight attribute tables"),
         "scope should fix the family vocabulary and phase boundary"
     );
     assert!(
         api_contracts.contains("Rendering State Family")
             && api_contracts.contains("Search and syntax contract")
-            && api_contracts.contains("textprop"),
+            && api_contracts.contains("textprop")
+            && api_contracts.contains("popup placement")
+            && api_contracts.contains("overlay layout")
+            && api_contracts.contains("resolved highlight attribute tables"),
         "api contracts should map the current family boundary to existing extraction APIs"
     );
     assert!(
         classification_doc.contains("`popupwin` rendering stays host-owned")
-            && classification_doc.contains("`textprop` remains Vim-owned annotation state"),
-        "classification doc should explain the popupwin exclusion and textprop deferment"
+            && classification_doc.contains("`textprop` remains Vim-owned annotation state")
+            && classification_doc.contains("`:highlight` definition tables")
+            && classification_doc.contains("resolved attribute tables"),
+        "classification doc should explain the popupwin exclusion, textprop deferment, and highlight-table exclusion"
     );
     assert!(
         manifest.contains("\"id\": \"test_textprop\"")
             && manifest.contains("\"id\": \"test_popupwin\"")
             && manifest.contains("\"id\": \"test_popupwin_textprop\"")
+            && manifest.contains("\"id\": \"test_highlight\"")
             && manifest.contains("deferred annotation-state extraction")
-            && manifest.contains("host-owned presentation"),
-        "classification manifest should preserve the family boundary rationales"
+            && manifest.contains("host-owned presentation")
+            && manifest.contains("popup placement")
+            && manifest.contains("resolved attribute tables"),
+        "classification manifest should preserve the family boundary rationales for popupwin, textprop, and highlight tables"
+    );
+}
+
+#[test]
+fn incsearch_search_family_contract_is_documented_in_classification_metadata() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let classification_doc =
+        fs::read_to_string(repo_root.join("docs/upstream-test-classification.md"))
+            .expect("docs/upstream-test-classification.md should be readable");
+    let manifest = fs::read_to_string(repo_root.join("upstream-test-classification.json"))
+        .expect("upstream-test-classification.json should be readable");
+
+    assert!(
+        classification_doc.contains("Search family")
+            && classification_doc.contains("incsearch")
+            && classification_doc.contains("inactive window")
+            && classification_doc.contains("byte columns"),
+        "classification doc should describe incsearch as part of the Search family contract boundary"
+    );
+    assert!(
+        manifest.contains("\"name\": \"test_search.vim\"")
+            && manifest.contains("\"name\": \"test_search_stat.vim\"")
+            && manifest.contains("\"name\": \"test_searchpos.vim\"")
+            && manifest.contains("incsearch_contract.rs")
+            && manifest.contains("Search family")
+            && manifest.contains("inactive window")
+            && manifest.contains("byte columns"),
+        "classification manifest should map search cases to incsearch contract coverage and Search family boundary terms"
     );
 }

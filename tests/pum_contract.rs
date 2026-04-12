@@ -78,3 +78,21 @@ fn buffer_keyword_completion_payload_parity_from_upstream_cases() {
         "alpine"
     );
 }
+
+#[test]
+fn pum_contract_stays_separate_from_popupwin_presentation_ownership() {
+    let public_api_reference = std::fs::read_to_string("docs/public-api-reference.md")
+        .expect("public API reference should be readable");
+    let api_index =
+        std::fs::read_to_string("docs/api-index.md").expect("API index should be readable");
+
+    assert!(
+        public_api_reference.contains("popupwin is host-owned presentation")
+            && public_api_reference.contains("does not expose a public popupwin extractor"),
+        "public API reference should keep popupwin outside the public PUM extraction contract"
+    );
+    assert!(
+        api_index.contains("does not expose a public popupwin extractor"),
+        "API index should distinguish PUM extraction from popupwin ownership"
+    );
+}

@@ -9,6 +9,9 @@ the data model, and the behavioral intent without reopening the source code.
 The public surface is intentionally concentrated in one place.
 
 - The crate root exposes `VimCoreSession` as the main stateful facade.
+- The rendering-state family is an additive grouping over existing
+  `VimCoreSession` accessors, not a new runtime owner and not a replacement
+  surface.
 - The crate root also exposes plain data types that describe snapshots,
   transactions, events, host actions, VFS contracts, options, undo trees,
   and rendering data.
@@ -222,22 +225,52 @@ These methods expose rendering-relevant state that the host can draw directly.
   start_row: i32, end_row: i32)
   -> Result<CoreVisibleSearchState, CoreSearchQueryError>`
   Returns the specified window's search state for a 1-based inclusive
-  viewport.
+  viewport, including inactive window queries.
 - `search_capability_contract() -> CoreSearchCapabilityContract`
-  Returns the stable rendering contract for search ranges.
+  Returns the stable Search family contract for live search extraction.
 - `get_syntax_name(&self, syn_id: i32) -> Option<String>`
   Maps a syntax ID to its human-readable syntax group name.
 - `get_line_syntax(&self, win_id: i32, lnum: i64)
   -> Result<Vec<CoreSyntaxChunk>, CoreCommandError>`
   Returns syntax chunks for one line in one window.
 
-Search ranges now follow one fixed contract: `start_col` is inclusive,
+Search ranges now follow one fixed contract: `start_col` is inclusive and
 `end_col` is exclusive, both are byte columns, and results are limited to the
-requested visible rows. `CoreVisibleSearchState` also separates
+requested visible rows. Hosts can call
+`query_visible_search_state_for_window()` for inactive window viewports
+without promoting a new rendering owner. `CoreVisibleSearchState` also
+separates
 `hlsearch_enabled`, `hlsearch_suspended`, `incsearch_active`, `pattern`,
 `input_pattern`, and per-range `CoreMatchType` values so hosts can render
 persistent matches, incremental preview matches, and the current match
 without reimplementing Vim search semantics.
+
+This is the current Search family extraction boundary for `VimCoreSession`.
+It keeps inactive window queries, byte columns, and `incsearch` preview state
+inside the Search family contract while leaving popup ownership as
+host-owned presentation.
+
+`search_capability_contract()` is the structured summary of that boundary.
+Its fields report live-state availability, inactive-window query support,
+visible-row scoping, inclusive/exclusive byte-column semantics, the data-only
+payload guarantee, and the host-owned presentation boundary.
+
+In plain terms, start_col is inclusive and end_col is exclusive.
+The search family member keeps &mut self because it issues live viewport queries against session state.
+The syntax family member keeps &self because it is read-only line extraction over existing state.
+
+The rendering-state family keeps `popupwin` outside the family because
+popupwin is host-owned presentation. `textprop` stays deferred as the
+`Annotations` placeholder, and the crate does not expose a public popupwin
+extractor or a public textprop extractor.
+Popup placement, popup composition, popup borders, and overlay layout stay
+out of scope for this crate.
+In plain terms, textprop stays deferred until a narrower annotation contract
+exists.
+The crate does not expose a public popupwin extractor.
+The crate does not expose a public textprop extractor.
+The crate does not expose highlight definition tables or resolved highlight
+attribute tables as a public extraction surface.
 
 ### Undo and backend methods
 
@@ -432,8 +465,9 @@ These types capture message and search metadata.
   `{ window_id, start_row, end_row, mode, pattern, input_pattern,
   hlsearch_enabled, hlsearch_suspended, incsearch_active, ranges }`
 - `CoreSearchCapabilityContract`
-  `{ live_state_query_available, visible_rows_only, start_col_inclusive,
-  end_col_exclusive }`
+  `{ live_state_query_available, inactive_window_query_available,
+  visible_rows_only, start_col_inclusive, end_col_exclusive, byte_columns,
+  data_only_payload, host_owned_presentation }`
 - `CoreSearchQueryError`
   `NoActiveWindow`, `InvalidViewport { start_row, end_row }`,
   `WindowNotFound { window_id }`

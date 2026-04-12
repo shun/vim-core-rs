@@ -130,3 +130,64 @@ fn synstack_and_synidtrans_parity_from_upstream_test_syntax() {
         Some("['Comment', 'Todo']")
     );
 }
+
+#[test]
+fn get_line_syntax_is_line_scoped_and_does_not_leak_adjacent_line_groups() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("").expect("session should initialize");
+    let win_id = session.windows()[0].id;
+
+    session
+        .execute_ex_command("syntax on")
+        .expect("syntax should be enabled");
+    session
+        .execute_ex_command("syntax clear")
+        .expect("syntax should be cleared before adding local rules");
+    session
+        .execute_ex_command("highlight default link ScopedTodo Todo")
+        .expect("todo highlight link should be installed");
+    session
+        .execute_ex_command("syntax match ScopedTodo /\\%1lTODO/")
+        .expect("line-scoped syntax rule should be installed");
+    session
+        .execute_ex_command("call setline(1, ['TODO', 'TODO'])")
+        .expect("test lines should be installed");
+
+    let first_line_chunks = session
+        .get_line_syntax(win_id, 1)
+        .expect("first line syntax should be available");
+    assert!(
+        first_line_chunks
+            .iter()
+            .any(|chunk| chunk.name.as_deref() == Some("ScopedTodo")),
+        "first line should include the line-scoped syntax group"
+    );
+
+    let second_line_chunks = session
+        .get_line_syntax(win_id, 2)
+        .expect("second line syntax should be available");
+    assert!(
+        second_line_chunks
+            .iter()
+            .all(|chunk| chunk.name.as_deref() != Some("ScopedTodo")),
+        "second line should not inherit syntax groups from adjacent lines"
+    );
+}
+
+#[test]
+fn syntax_contract_docs_exclude_highlight_tables_from_public_surface() {
+    let api_contracts =
+        std::fs::read_to_string("docs/api-contracts.md").expect("API contracts should be readable");
+    let scope = std::fs::read_to_string("docs/SCOPE.md").expect("scope doc should be readable");
+
+    assert!(
+        api_contracts.contains("highlight definition tables")
+            && api_contracts.contains("resolved highlight attribute tables"),
+        "API contracts should keep highlight definition and attribute tables outside the syntax public surface"
+    );
+    assert!(
+        scope.contains("resolved highlight attribute tables")
+            || scope.contains("resolved highlight state derived"),
+        "scope doc should define the boundary around syntax output and highlight-table exclusion"
+    );
+}

@@ -259,6 +259,161 @@ fn session_options_disable_debug_log_output_by_default() {
 }
 
 #[test]
+fn public_api_reference_documents_search_contract_for_inactive_windows_and_byte_columns() {
+    let public_api_reference = fs::read_to_string("docs/public-api-reference.md")
+        .expect("public API reference should be readable");
+
+    assert!(
+        public_api_reference.contains("query_visible_search_state_for_window"),
+        "public API reference should mention the inactive-window search accessor"
+    );
+    assert!(
+        public_api_reference.contains("inactive window"),
+        "public API reference should document inactive-window queries"
+    );
+    assert!(
+        public_api_reference.contains("both are byte columns"),
+        "public API reference should document byte-column search ranges"
+    );
+    assert!(
+        public_api_reference.contains("start_col is inclusive")
+            && public_api_reference.contains("end_col is exclusive"),
+        "public API reference should document inclusive/exclusive search columns"
+    );
+    assert!(
+        public_api_reference.contains("inactive_window_query_available")
+            && public_api_reference.contains("byte_columns")
+            && public_api_reference.contains("data_only_payload")
+            && public_api_reference.contains("host_owned_presentation"),
+        "public API reference should expose the structured Search family capability fields"
+    );
+}
+
+#[test]
+fn public_api_reference_excludes_popupwin_and_keeps_textprop_deferred() {
+    let public_api_reference = fs::read_to_string("docs/public-api-reference.md")
+        .expect("public API reference should be readable");
+
+    assert!(
+        public_api_reference.contains("popupwin is host-owned presentation")
+            || public_api_reference.contains("popupwin stays outside the family"),
+        "public API reference should document popupwin as outside the rendering-state family"
+    );
+    assert!(
+        public_api_reference.contains("textprop stays deferred")
+            || public_api_reference.contains("textprop remains deferred"),
+        "public API reference should document textprop as deferred"
+    );
+    assert!(
+        public_api_reference.contains("does not expose a public popupwin extractor")
+            || public_api_reference.contains("does not expose a public textprop extractor"),
+        "public API reference should document the missing popupwin/textprop extraction surface"
+    );
+    assert!(
+        public_api_reference.contains("overlay")
+            && public_api_reference.contains("composition")
+            && public_api_reference.contains("border"),
+        "public API reference should document popup layout, composition, and border ownership as out of scope"
+    );
+    assert!(
+        public_api_reference.contains("resolved highlight attribute tables")
+            || public_api_reference.contains("highlight definition tables"),
+        "public API reference should document highlight-table exclusion from the public extraction surface"
+    );
+}
+
+#[test]
+fn public_docs_map_rendering_state_family_to_existing_vimcoresession_surface() {
+    let public_api_reference = fs::read_to_string("docs/public-api-reference.md")
+        .expect("public API reference should be readable");
+    let api_contracts =
+        fs::read_to_string("docs/api-contracts.md").expect("API contracts should be readable");
+    let api_index = fs::read_to_string("docs/api-index.md").expect("API index should be readable");
+
+    assert!(
+        public_api_reference.contains("VimCoreSession")
+            && public_api_reference.contains("main stateful facade"),
+        "public API reference should identify VimCoreSession as the main stateful facade"
+    );
+    assert!(
+        api_contracts.contains("without introducing a new")
+            && api_contracts.contains("runtime facade"),
+        "API contracts should document that the family does not introduce a new runtime facade"
+    );
+    assert!(
+        api_index.contains("Search` and `Syntax` are the current rendering-state family members")
+            || api_index
+                .contains("Search and Syntax are the current rendering-state family members"),
+        "API index should map Search and Syntax into the rendering-state family"
+    );
+    assert!(
+        public_api_reference.contains("query_visible_search_state")
+            && public_api_reference.contains("get_line_syntax"),
+        "public API reference should describe the existing search and syntax accessors"
+    );
+}
+
+#[test]
+fn rendering_state_family_docs_describe_additive_grouping_and_mixed_mutability() {
+    let public_api_reference = fs::read_to_string("docs/public-api-reference.md")
+        .expect("public API reference should be readable");
+    let api_contracts =
+        fs::read_to_string("docs/api-contracts.md").expect("API contracts should be readable");
+    let api_index = fs::read_to_string("docs/api-index.md").expect("API index should be readable");
+
+    assert!(
+        api_contracts.contains("vocabulary")
+            && (api_contracts.contains("without introducing a new runtime facade")
+                || api_contracts.contains("not a new runtime owner")),
+        "API contracts should describe the family as an additive explanation layer"
+    );
+    assert!(
+        api_index
+            .contains("These accessors cover the current `Search` and `Syntax` family members")
+            || api_index
+                .contains("These accessors cover the current Search and Syntax family members"),
+        "API index should describe Search and Syntax as grouped existing accessors"
+    );
+    assert!(
+        public_api_reference.contains("search family member")
+            && public_api_reference.contains("&mut self")
+            && public_api_reference.contains("syntax family member")
+            && public_api_reference.contains("&self"),
+        "public API reference should document mixed mutability across family members"
+    );
+}
+
+#[test]
+fn search_family_docs_keep_incsearch_boundary_vocab_in_public_contracts() {
+    let public_api_reference = fs::read_to_string("docs/public-api-reference.md")
+        .expect("public API reference should be readable");
+    let api_contracts =
+        fs::read_to_string("docs/api-contracts.md").expect("API contracts should be readable");
+    let api_index = fs::read_to_string("docs/api-index.md").expect("API index should be readable");
+
+    assert!(
+        public_api_reference.contains("Search family")
+            && public_api_reference.contains("inactive window")
+            && public_api_reference.contains("byte columns")
+            && public_api_reference.contains("host-owned presentation"),
+        "public API reference should keep Search family vocabulary for inactive windows, byte columns, and host-owned presentation"
+    );
+    assert!(
+        api_contracts.contains("Search family")
+            && api_contracts.contains("incsearch")
+            && api_contracts.contains("host-owned presentation"),
+        "API contracts should describe incsearch as part of the Search family boundary without moving presentation ownership"
+    );
+    assert!(
+        api_index.contains("Search family")
+            && api_index.contains("inactive window")
+            && api_index.contains("byte columns")
+            && api_index.contains("host-owned presentation"),
+        "API index should summarize the Search family boundary for inactive windows, byte columns, and host-owned presentation"
+    );
+}
+
+#[test]
 fn host_action_queue_is_empty_by_default() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("buffer").expect("session should initialize");

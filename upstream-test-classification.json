@@ -2759,11 +2759,12 @@
       "name": "test_search.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_search.vim",
       "classification": "preserve_directly",
-      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly.",
+      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly. It also anchors the Search family contract for incsearch, inactive window queries, and byte columns without moving popup ownership out of host-owned presentation. The repository summarizes that boundary through search_capability_contract().",
       "intended_harness": "upstream_generated",
       "currently_collected_by_generated_runner": true,
       "current_generated_runner_status": "active",
       "related_contract_suites": [
+        "incsearch_contract.rs",
         "search_highlight_contract.rs",
         "search_highlight_c_contract.rs",
         "public_api_contract.rs",
@@ -2774,11 +2775,12 @@
       "name": "test_search_stat.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_search_stat.vim",
       "classification": "preserve_directly",
-      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly.",
+      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly. It also reinforces the Search family contract for incsearch-related search status, inactive window queries, and byte columns while popup ownership stays host-owned presentation. The repository summarizes that boundary through search_capability_contract().",
       "intended_harness": "upstream_generated",
       "currently_collected_by_generated_runner": true,
       "current_generated_runner_status": "active",
       "related_contract_suites": [
+        "incsearch_contract.rs",
         "search_highlight_contract.rs",
         "search_highlight_c_contract.rs",
         "public_api_contract.rs",
@@ -2789,11 +2791,12 @@
       "name": "test_searchpos.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_searchpos.vim",
       "classification": "preserve_directly",
-      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly.",
+      "rationale": "This case primarily exercises embedded Vim editing semantics that the crate preserves directly. It keeps Search family byte columns, incsearch-adjacent search positions, and inactive window expectations tied to host-owned presentation boundaries. The repository summarizes that boundary through search_capability_contract().",
       "intended_harness": "upstream_generated",
       "currently_collected_by_generated_runner": true,
       "current_generated_runner_status": "active",
       "related_contract_suites": [
+        "incsearch_contract.rs",
         "search_highlight_contract.rs",
         "search_highlight_c_contract.rs",
         "public_api_contract.rs",
@@ -4505,7 +4508,7 @@
       "id": "test_highlight",
       "upstream_case_name": "test_highlight.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_highlight.vim",
-      "rationale": "Highlight-related behavior is only partially extractable today: search highlight ranges and syntax chunks are covered by search_highlight_contract.rs and syntax_contract.rs, but :highlight definition/resolved attribute tables and popup/textprop rendering remain outside the current public extraction APIs.",
+      "rationale": "Highlight-related behavior is only partially extractable today: search highlight ranges and syntax chunks are covered by search_highlight_contract.rs and syntax_contract.rs, but :highlight definition/resolved attribute tables remain outside the current public extraction APIs, and popup placement/composition stays host-owned presentation policy.",
       "related_contract_suites": [
         "syntax_contract.rs",
         "search_highlight_contract.rs",
@@ -4587,7 +4590,7 @@
       "id": "test_popupwin",
       "upstream_case_name": "test_popupwin.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_popupwin.vim",
-      "rationale": "Popup-window behavior is still host-owned presentation: the crate exposes PUM payload extraction, but no public popup window extractor exists yet to make test_popupwin.vim a crate-level contract.",
+      "rationale": "Popup-window behavior is still host-owned presentation: the crate exposes PUM payload extraction, but no public popup window extractor exists yet, and popup placement/composition/border policy stays in the host rather than the crate contract.",
       "related_contract_suites": [
         "pum_contract.rs",
         "integration_contract.rs"
@@ -4598,7 +4601,7 @@
       "id": "test_popupwin_textprop",
       "upstream_case_name": "test_popupwin_textprop.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_popupwin_textprop.vim",
-      "rationale": "Popup/textprop placement is still a terminal-rendering concern. The repository has no public textprop or popup-window extraction API to bind this case to a crate contract yet, so popupwin stays host-owned and textprop stays deferred.",
+      "rationale": "Popup/textprop placement is still a host-owned presentation concern. The repository has no public textprop or popup-window extraction API to bind this case to a crate contract yet, so popupwin stays host-owned, popup placement/composition stays in the host, and textprop stays deferred.",
       "related_contract_suites": [
         "pum_contract.rs",
         "syntax_contract.rs",
@@ -4664,7 +4667,7 @@
       "id": "test_textprop",
       "upstream_case_name": "test_textprop.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_textprop.vim",
-      "rationale": "Text property behavior remains deferred annotation-state extraction today: there is no public textprop extraction API, so the case cannot be promoted to an extraction contract without a new surface.",
+      "rationale": "Text property behavior remains deferred annotation-state extraction today: there is no public textprop extraction API, so the case cannot be promoted to an extraction contract without a new surface, and any later promotion must define narrow contract-test coverage first.",
       "related_contract_suites": [
         "pum_contract.rs",
         "syntax_contract.rs",

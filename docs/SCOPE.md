@@ -64,8 +64,8 @@ The crate may expose data that a host renderer can consume directly.
 - Snapshot buffers and windows.
 - Search pattern state and search match ranges for the current `Search`
   family member.
-- Syntax chunks and resolved highlight state derived from the embedded Vim
-  runtime for the current `Syntax` family member.
+- Syntax chunks and syntax group names derived from the embedded Vim runtime
+  for the current `Syntax` family member.
 - Pop-up menu state and items.
 - Text properties as Vim-owned annotation state for the future
   `Annotations` placeholder, once a narrow read-only surface is defined.
@@ -116,9 +116,12 @@ layout.
 - Do not move inline hints, diagnostics overlays, popup window rendering, or
   virtual text layout into the embedded Vim core.
 - Keep overlay composition in Rust-side rendering systems.
+- Keep popup placement, popup composition, and popup border rendering in the
+  host.
 - Treat text properties as Vim-owned annotation state, not host rendering
   itself. The crate may expose them later through the `Annotations` family
   placeholder.
+- Do not expose `:highlight` definition tables or resolved highlight attribute tables as part of the public rendering-state family.
 
 ### Terminal emulator ownership
 
