@@ -4439,7 +4439,7 @@
       "id": "test_conceal",
       "upstream_case_name": "test_conceal.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_conceal.vim",
-      "rationale": "Conceal and highlight extraction are treated as repository-specific rendering-adjacent contracts.",
+      "rationale": "Repository contracts cover a narrow syntax-conceal extraction slice, but they do not justify treating the full upstream conceal file as covered yet. Current public extraction APIs also do not provide stable matchadd conceal parity.",
       "related_contract_suites": [
         "syntax_contract.rs",
         "integration_contract.rs"
@@ -4505,7 +4505,7 @@
       "id": "test_highlight",
       "upstream_case_name": "test_highlight.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_highlight.vim",
-      "rationale": "Highlight-related behavior is preserved through repository extraction contracts rather than full rendering fidelity.",
+      "rationale": "Highlight-related behavior is only partially extractable today: search highlight ranges and syntax chunks are covered by search_highlight_contract.rs and syntax_contract.rs, but :highlight definition/resolved attribute tables and popup/textprop rendering remain outside the current public extraction APIs.",
       "related_contract_suites": [
         "syntax_contract.rs",
         "search_highlight_contract.rs",
@@ -4529,7 +4529,7 @@
       "id": "test_matchadd_conceal",
       "upstream_case_name": "test_matchadd_conceal.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_matchadd_conceal.vim",
-      "rationale": "Conceal and highlight extraction are treated as repository-specific rendering-adjacent contracts.",
+      "rationale": "Current public extraction APIs do not provide stable matchadd conceal parity yet.",
       "related_contract_suites": [
         "syntax_contract.rs",
         "integration_contract.rs"
@@ -4540,7 +4540,7 @@
       "id": "test_matchadd_conceal_utf8",
       "upstream_case_name": "test_matchadd_conceal_utf8.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_matchadd_conceal_utf8.vim",
-      "rationale": "Conceal and highlight extraction are treated as repository-specific rendering-adjacent contracts.",
+      "rationale": "Current public extraction APIs do not provide stable matchadd conceal parity yet.",
       "related_contract_suites": [
         "syntax_contract.rs",
         "integration_contract.rs"
@@ -4576,7 +4576,7 @@
       "id": "test_popup",
       "upstream_case_name": "test_popup.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_popup.vim",
-      "rationale": "Popup and popupwin behavior is consumed through repository extraction contracts rather than full UI ownership.",
+      "rationale": "Repository contracts cover popup-menu payload extraction, but they do not justify treating the full upstream popup file as covered. Popup-window presentation remains host-owned rather than a full crate-owned UI contract.",
       "related_contract_suites": [
         "pum_contract.rs",
         "integration_contract.rs"
@@ -4587,7 +4587,7 @@
       "id": "test_popupwin",
       "upstream_case_name": "test_popupwin.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_popupwin.vim",
-      "rationale": "Popup and popupwin behavior is consumed through repository extraction contracts rather than full UI ownership.",
+      "rationale": "Popup-window behavior is still host-owned presentation: the crate exposes PUM payload extraction, but no public popup window extractor exists yet to make test_popupwin.vim a crate-level contract.",
       "related_contract_suites": [
         "pum_contract.rs",
         "integration_contract.rs"
@@ -4598,7 +4598,7 @@
       "id": "test_popupwin_textprop",
       "upstream_case_name": "test_popupwin_textprop.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_popupwin_textprop.vim",
-      "rationale": "Popup and popupwin behavior is consumed through repository extraction contracts rather than full UI ownership.",
+      "rationale": "Popup/textprop placement is still a terminal-rendering concern. The repository has no public textprop or popup-window extraction API to bind this case to a crate contract yet, so popupwin stays host-owned and textprop stays deferred.",
       "related_contract_suites": [
         "pum_contract.rs",
         "syntax_contract.rs",
@@ -4653,7 +4653,7 @@
       "id": "test_syntax",
       "upstream_case_name": "test_syntax.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_syntax.vim",
-      "rationale": "Syntax-related behavior is preserved through repository extraction contracts rather than full rendering fidelity.",
+      "rationale": "Repository contracts cover specific syntax extraction slices, but they do not yet justify treating the full upstream syntax file as covered.",
       "related_contract_suites": [
         "syntax_contract.rs",
         "integration_contract.rs"
@@ -4664,7 +4664,7 @@
       "id": "test_textprop",
       "upstream_case_name": "test_textprop.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_textprop.vim",
-      "rationale": "Text property and popup extraction are preserved through repository extraction contracts.",
+      "rationale": "Text property behavior remains deferred annotation-state extraction today: there is no public textprop extraction API, so the case cannot be promoted to an extraction contract without a new surface.",
       "related_contract_suites": [
         "pum_contract.rs",
         "syntax_contract.rs",

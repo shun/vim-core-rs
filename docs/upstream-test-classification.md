@@ -37,6 +37,21 @@ boundary contracts. Some upstream files map cleanly to one adapted
 behavior. Others, such as `test_expand.vim`, mix multiple
 responsibilities and have to be split into multiple adapted behaviors.
 
+`Rendering State Family` phase 1 uses the same vocabulary across this
+document, the scope page, and the contract tests. `Search` and `Syntax`
+stay current members, `Annotations` stays a future placeholder for
+text-property extraction, and `popupwin` remains host-owned presentation.
+Issue #14 is the later facade/public-contract promotion step.
+
+Some adapted behaviors also mix Vim-owned state with host-owned
+presentation. For saya-like hosts that implement their own popup UI,
+`popupwin` rendering stays host-owned and is not a crate extraction
+contract. `highlight` is currently traceable through search highlight
+ranges and syntax chunk extraction, but `:highlight` definition tables
+and resolved attribute tables remain outside the public contract.
+`textprop` remains Vim-owned annotation state and is deferred until the
+repository defines a narrow read-only extraction surface.
+
 `build_test_runner.rs` consumes the manifest and emits a generated
 manifest with:
 
@@ -137,6 +152,9 @@ now live in their own adaptation buckets.
   `preserve_directly` files
 - Track adapted coverage by repository-owned behavior, not by upstream
   file when a file mixes multiple responsibilities
+- Reclassify cases when host-owned presentation and Vim-owned state need
+  separate treatment, especially for popup windows, highlight state, and
+  text properties
 - Move host-boundary behavior into repository contract tests, even when
   upstream Vim has script coverage for similar scenarios
 - Record policy exclusions in the classification manifest, not in the

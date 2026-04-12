@@ -163,3 +163,45 @@ fn cargo_manifest_uses_license_file_for_mixed_licensing() {
         "Cargo.toml should avoid a single SPDX license field for this mixed-license package"
     );
 }
+
+#[test]
+fn rendering_state_family_boundary_is_documented_and_classified() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let scope = fs::read_to_string(repo_root.join("docs/SCOPE.md"))
+        .expect("docs/SCOPE.md should be readable");
+    let api_contracts = fs::read_to_string(repo_root.join("docs/api-contracts.md"))
+        .expect("docs/api-contracts.md should be readable");
+    let classification_doc =
+        fs::read_to_string(repo_root.join("docs/upstream-test-classification.md"))
+            .expect("docs/upstream-test-classification.md should be readable");
+    let manifest = fs::read_to_string(repo_root.join("upstream-test-classification.json"))
+        .expect("upstream-test-classification.json should be readable");
+
+    assert!(
+        scope.contains("Rendering State Family")
+            && scope.contains("Search")
+            && scope.contains("Syntax")
+            && scope.contains("Annotations")
+            && scope.contains("issue #14"),
+        "scope should fix the family vocabulary and phase boundary"
+    );
+    assert!(
+        api_contracts.contains("Rendering State Family")
+            && api_contracts.contains("Search and syntax contract")
+            && api_contracts.contains("textprop"),
+        "api contracts should map the current family boundary to existing extraction APIs"
+    );
+    assert!(
+        classification_doc.contains("`popupwin` rendering stays host-owned")
+            && classification_doc.contains("`textprop` remains Vim-owned annotation state"),
+        "classification doc should explain the popupwin exclusion and textprop deferment"
+    );
+    assert!(
+        manifest.contains("\"id\": \"test_textprop\"")
+            && manifest.contains("\"id\": \"test_popupwin\"")
+            && manifest.contains("\"id\": \"test_popupwin_textprop\"")
+            && manifest.contains("deferred annotation-state extraction")
+            && manifest.contains("host-owned presentation"),
+        "classification manifest should preserve the family boundary rationales"
+    );
+}

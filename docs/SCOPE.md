@@ -22,6 +22,18 @@ architecture.
 Because of that split, the crate must behave like a modal text-editing engine
 with a host integration boundary. It must not try to become the whole editor.
 
+## Rendering State Family boundary
+
+`vim-core-rs` treats rendering-adjacent extraction as a family boundary, not
+as a general rendering surface. This phase 1 family is governed by a shared
+vocabulary so that docs, classification, and tests stay aligned.
+
+- `Search` and `Syntax` are the current family members.
+- `Annotations` is a future placeholder for text-property style extraction.
+- `popupwin` stays outside the family and remains host-owned presentation.
+- The family promotion work for a public facade belongs to issue #14, not
+  this phase.
+
 ## In scope
 
 These capabilities are inside the intended product boundary.
@@ -50,9 +62,13 @@ The crate owns Vim-like input behavior.
 The crate may expose data that a host renderer can consume directly.
 
 - Snapshot buffers and windows.
-- Search pattern state and search match ranges.
-- Syntax chunks derived from the embedded Vim runtime.
+- Search pattern state and search match ranges for the current `Search`
+  family member.
+- Syntax chunks and resolved highlight state derived from the embedded Vim
+  runtime for the current `Syntax` family member.
 - Pop-up menu state and items.
+- Text properties as Vim-owned annotation state for the future
+  `Annotations` placeholder, once a narrow read-only surface is defined.
 
 ### Host-mediated file and job integration
 
@@ -94,11 +110,15 @@ The crate is not the main syntax or semantic analysis engine.
 
 ### Virtual text and overlay composition
 
-The crate is not responsible for host-side overlay rendering.
+The crate is not responsible for host-side overlay rendering or popup window
+layout.
 
-- Do not move inline hints, diagnostics overlays, or virtual text layout into
-  the embedded Vim core.
+- Do not move inline hints, diagnostics overlays, popup window rendering, or
+  virtual text layout into the embedded Vim core.
 - Keep overlay composition in Rust-side rendering systems.
+- Treat text properties as Vim-owned annotation state, not host rendering
+  itself. The crate may expose them later through the `Annotations` family
+  placeholder.
 
 ### Terminal emulator ownership
 

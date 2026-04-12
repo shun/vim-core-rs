@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 #[cfg(unix)]
 use std::{
@@ -131,6 +132,41 @@ fn second_session_is_rejected_while_first_is_alive() {
 
     let third = VimCoreSession::new("gamma").expect("session should initialize after drop");
     assert_eq!(third.snapshot().text.trim_end_matches('\n'), "gamma");
+}
+
+#[test]
+fn dropping_tab_using_session_restores_side_effect_commands_for_next_session() {
+    let _guard = acquire_session_test_lock();
+
+    {
+        let mut first = VimCoreSession::new("alpha").expect("first session should initialize");
+        first
+            .execute_ex_command("tabedit")
+            .expect("tabedit should create a second tab");
+        first
+            .execute_ex_command("tabfirst")
+            .expect("tabfirst should switch back to the original tab");
+    }
+
+    let mut second = VimCoreSession::new("beta").expect("second session should initialize");
+
+    let zz = second
+        .execute_normal_command("ZZ")
+        .expect("ZZ should not crash after a prior tab-using session");
+    assert!(matches!(zz.outcome, CoreCommandOutcome::HostActionQueued));
+    assert!(
+        !zz.host_actions.is_empty(),
+        "ZZ should still produce host coordination after a prior tab-using session"
+    );
+
+    let zq = second
+        .execute_normal_command("ZQ")
+        .expect("ZQ should not crash after a prior tab-using session");
+    assert!(matches!(zq.outcome, CoreCommandOutcome::HostActionQueued));
+    assert!(matches!(
+        zq.host_actions.first(),
+        Some(CoreHostAction::Quit { force: true, .. })
+    ));
 }
 
 #[test]
@@ -1359,4 +1395,25 @@ fn normal_movement_command_changes_cursor() {
     let snapshot2 = session.snapshot();
     assert_eq!(snapshot2.cursor_row, 1);
     assert_eq!(snapshot2.cursor_col, 1);
+}
+
+#[test]
+fn api_index_maps_rendering_state_family_without_new_surface() {
+    let api_index_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/api-index.md");
+    let content = fs::read_to_string(&api_index_path).expect("api-index should be readable");
+
+    assert!(
+        content.contains("Rendering State Family")
+            && content.contains("Search")
+            && content.contains("Syntax")
+            && content.contains("Annotations")
+            && content.contains("issue #14"),
+        "api index should document the family boundary and phase split"
+    );
+    assert!(
+        content.contains("get_search_pattern")
+            && content.contains("get_line_syntax")
+            && content.contains("textprop"),
+        "api index should map the existing search/syntax accessors to the family boundary and keep textprop deferred"
+    );
 }

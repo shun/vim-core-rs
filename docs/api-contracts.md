@@ -14,6 +14,18 @@ You can understand the crate as a composition of four contracts.
 - VFS contract: the host owns document storage and answers explicit requests
 - VFD contract: the host owns process execution and feeds bytes back into Vim
 
+## Rendering State Family contract
+
+The rendering state family is the vocabulary we use to keep the current
+read-only extraction boundary stable. It names the current members, the
+future placeholder, and the exclusion boundary without introducing a new
+runtime facade.
+
+- `Search` and `Syntax` are the current family members.
+- `Annotations` is the future placeholder for text-property extraction.
+- `popupwin` stays outside the family as host-owned presentation.
+- Issue #14 owns any later facade or public-contract promotion work.
+
 ## Session contract
 
 The session contract defines object lifetime and process-level exclusivity.
@@ -221,7 +233,9 @@ The option system is typed and scope-aware.
 
 ## Search and syntax contract
 
-The search and syntax methods are read-only rendering helpers.
+The search and syntax methods are read-only rendering helpers. They expose
+Vim-owned state for host rendering, but they do not move rendering policy into
+the crate.
 
 - Search highlight methods return plain ranges. They do not own rendering.
 - `query_visible_search_state()` and
@@ -234,9 +248,13 @@ The search and syntax methods are read-only rendering helpers.
   cell must convert explicitly.
 - `get_cursor_match_info` can signal `TimedOut` or `MaxReached` instead of a
   concrete full count.
-- Syntax extraction groups consecutive columns with the same syntax ID into one
-  `CoreSyntaxChunk`.
-- `get_syntax_name` may return `None` when Vim does not provide a non-empty
+- `get_line_syntax()` groups consecutive columns with the same syntax ID into
+  `CoreSyntaxChunk` values, and `get_syntax_name()` resolves the group name.
+- This is the public syntax extraction boundary. It does not expose
+  `:highlight` definition tables or resolved highlight attribute tables yet.
+- `textprop` is deferred as future annotation-state extraction. The crate does
+  not expose it as a public contract yet.
+- `get_syntax_name()` may return `None` when Vim does not provide a non-empty
   group name for the ID.
 
 ## VFD and job contract

@@ -76,6 +76,58 @@ fn runtimepath_exposes_non_empty_defaults_and_vim_dir() {
 }
 
 #[test]
+fn runtimepath_defaults_are_restored_across_sessions_after_helpfile_override() {
+    let _guard = acquire_session_test_lock();
+    let expected_vim_dir = Path::new(env!("OUT_DIR")).join("share").join("vim");
+    let vendored_helpfile =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("vendor/upstream/vim/runtime/doc/help.txt");
+    let vendored_runtime_dir =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("vendor/upstream/vim/runtime");
+
+    {
+        let mut session = VimCoreSession::new("").expect("failed to create first session");
+        session
+            .execute_ex_command(&format!(
+                "let &helpfile = {}",
+                vim_string_literal(&vendored_helpfile.to_string_lossy())
+            ))
+            .expect("helpfile override should succeed");
+        assert_eq!(
+            eval_required(&mut session, "$VIM"),
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("vendor/upstream/vim")
+                .to_string_lossy(),
+            "the first session should reproduce the vendored-runtime derivation path"
+        );
+    }
+
+    let mut session = VimCoreSession::new("").expect("failed to create second session");
+    let vim_dir = eval_required(&mut session, "$VIM");
+    let vimruntime_dir = eval_required(&mut session, "$VIMRUNTIME");
+    let runtimepath = eval_required(&mut session, "&runtimepath");
+
+    assert_eq!(
+        Path::new(&vim_dir),
+        expected_vim_dir.as_path(),
+        "a new session should reset $VIM back to the bundled runtime root"
+    );
+    assert!(
+        Path::new(&vimruntime_dir).starts_with(&expected_vim_dir),
+        "a new session should reset $VIMRUNTIME back under the bundled runtime root: {vimruntime_dir}"
+    );
+    assert!(
+        runtimepath.split(',').any(|entry| entry == vimruntime_dir),
+        "a new session should restore runtimepath to include the bundled runtime dir: {runtimepath}"
+    );
+    assert!(
+        !runtimepath
+            .split(',')
+            .any(|entry| Path::new(entry) == vendored_runtime_dir),
+        "a new session should not keep the vendored runtime dir in runtimepath: {runtimepath}"
+    );
+}
+
+#[test]
 fn runtimepath_contract_supports_runtime_and_autoload_loading() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("").expect("failed to create session");

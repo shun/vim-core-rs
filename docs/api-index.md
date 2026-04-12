@@ -8,6 +8,14 @@ Start with the repository-root `README.md` for purpose and invariants, then
 `SCOPE.md` for design boundaries, then `known-limitations.md` for current
 gaps. Only after that should you descend into the API reference pages.
 
+## Rendering State Family boundary
+
+`Search` and `Syntax` are the current rendering-state family members that the
+crate exposes today. `Annotations` is the future placeholder for
+text-property extraction, and issue #14 owns any later public facade
+promotion. `popupwin` stays outside the family because it is host-owned
+presentation.
+
 ## What each document covers
 
 Read the pages in this order when you need the full mental model.
@@ -78,6 +86,9 @@ The public session methods are grouped by role.
   `get_incsearch_pattern`, `get_search_input_pattern`,
   `query_visible_search_state`, `query_visible_search_state_for_window`,
   `search_capability_contract`, `get_syntax_name`, `get_line_syntax`
+- These accessors cover the current `Search` and `Syntax` family members.
+  `textprop` stays deferred as the `Annotations` placeholder, and the crate
+  does not expose a public popupwin extractor.
 - Undo and backend metadata: `get_undo_tree`, `undo_jump`,
   `backend_identity`
 - Job and VFD bridge helpers: `inject_vfd_data`, `notify_job_status`

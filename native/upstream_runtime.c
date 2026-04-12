@@ -641,33 +641,44 @@ upstream_runtime_session_t* upstream_runtime_session_new(const char* initial_tex
      * vi 互換モードでは 'more' がデフォルト OFF のため、明示的に有効化する。 */
     p_more = TRUE;
 
+    /* Session-local tests may override 'helpfile', which changes how Vim
+     * re-derives $VIM and $VIMRUNTIME. Reset those globals before each
+     * session so runtime discovery falls back to the generated pathdef
+     * values instead of a previous session's helpfile path. */
+    set_string_option_direct((char_u *)"hf", -1, (char_u *)DFLT_HELPFILE, 0, SID_NONE);
+    vim_unsetenv_ext((char_u *)"VIM");
+    vim_unsetenv_ext((char_u *)"VIMRUNTIME");
+
     /* Clear any leftover typeahead from previous sessions/tests */
     if (typebuf.tb_len > 0) {
         del_typebuf(typebuf.tb_len, 0);
     }
-    
+
     /* Requirement 6.3: Reset Vim's global state for isolation */
+    /* Collapse leftover tabpages first so firstwin/curwin and tabpage lists
+     * are rebuilt from a single active tab before per-window/per-buffer reset. */
+    while (first_tabpage != NULL && first_tabpage->tp_next != NULL) {
+        tabpage_close(TRUE);
+    }
+
     /* Close all windows except the current one */
-    
+
     while (firstwin != lastwin) {
         win_close(lastwin == curwin ? firstwin : lastwin, TRUE);
     }
-    
 
     /* Close all buffers except the current one */
-    
+
     while (firstbuf != lastbuf) {
         buf_T* target = (lastbuf == curbuf) ? firstbuf : lastbuf;
         close_buffer(NULL, target, DOBUF_WIPE, FALSE, FALSE);
     }
-    
 
     /* Re-allocate screen after closing windows to keep Vim's internal state consistent */
     if (Rows > 0 && Columns > 0) {
         screenalloc(TRUE);
         shell_new_rows();
         shell_new_columns();
-        
     }
 
     /* Clear current buffer content (keep at least one line) */
