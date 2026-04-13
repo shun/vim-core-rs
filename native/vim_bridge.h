@@ -293,6 +293,11 @@ typedef struct vim_core_option_set_result {
     uintptr_t error_message_len;
 } vim_core_option_set_result_t;
 
+typedef struct vim_core_register_get_result {
+    const char* payload_ptr;
+    uintptr_t payload_len;
+} vim_core_register_get_result_t;
+
 vim_bridge_state_t* vim_bridge_state_new(
     const char* initial_text,
     uintptr_t text_len
@@ -323,7 +328,10 @@ vim_runtime_backend_identity_t vim_bridge_backend_identity(
     const vim_bridge_state_t* state
 );
 
-char* vim_bridge_get_register(const vim_bridge_state_t* state, char regname);
+vim_core_register_get_result_t vim_bridge_get_register(
+    const vim_bridge_state_t* state,
+    char regname
+);
 void vim_bridge_set_register(vim_bridge_state_t* state, char regname, const char* text, uintptr_t text_len);
 void vim_bridge_free_string(char* ptr);
 vim_core_option_get_result_t vim_bridge_get_option(

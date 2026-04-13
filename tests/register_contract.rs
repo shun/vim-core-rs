@@ -72,6 +72,45 @@ fn test_register_multiline() {
 }
 
 #[test]
+fn test_register_multiline_readback_returns_full_contents() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("line1\nline2").unwrap();
+
+    session.set_register('m', "rust line 1\nrust line 2\n");
+
+    assert_eq!(
+        session.register('m'),
+        Some("rust line 1\nrust line 2\n".to_string())
+    );
+}
+
+#[test]
+fn test_register_readback_preserves_trailing_newline() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("line1\nline2").unwrap();
+
+    session.set_register('m', "rust line 1\nrust line 2\n");
+
+    assert_eq!(
+        session.register('m'),
+        Some("rust line 1\nrust line 2\n".to_string())
+    );
+}
+
+#[test]
+fn test_register_readback_does_not_add_trailing_newline() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("line1\nline2").unwrap();
+
+    session.set_register('m', "rust line 1\nrust line 2");
+
+    assert_eq!(
+        session.register('m'),
+        Some("rust line 1\nrust line 2".to_string())
+    );
+}
+
+#[test]
 fn test_unnamed_register() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("top secret").unwrap();

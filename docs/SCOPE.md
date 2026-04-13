@@ -26,13 +26,18 @@ with a host integration boundary. It must not try to become the whole editor.
 
 `vim-core-rs` treats rendering-adjacent extraction as a family boundary, not
 as a general rendering surface. This phase 1 family is governed by a shared
-vocabulary so that docs, classification, and tests stay aligned.
+vocabulary so that docs, classification, and tests stay aligned. The
+authoritative source for this boundary is this page, `docs/api-contracts.md`,
+`docs/api-index.md`, `docs/public-api-reference.md`,
+`docs/upstream-test-classification.md`, `tests/quality_gate_contract.rs`,
+and `upstream-test-classification.json`. The family is a Vim-owned read-only extraction boundary.
 
-- `Search` and `Syntax` are the current family members.
-- `Annotations` is a future placeholder for text-property style extraction.
-- `popupwin` stays outside the family and remains host-owned presentation.
-- The family promotion work for a public facade belongs to issue #14, not
-  this phase.
+- `Search` and `Syntax` are the current members.
+- `Annotations` is the deferred placeholder for text-property style
+  extraction.
+- `popupwin` is the exclusion and remains host-owned presentation, not
+  popup window rendering.
+- This phase does not add a new family descriptor or facade.
 
 ## In scope
 

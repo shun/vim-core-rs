@@ -607,7 +607,7 @@ impl VimCoreSession {
             });
         };
 
-        let session = Self {
+        let mut session = Self {
             state,
             runtime_mode: options.runtime_mode,
             document_coordinator: RefCell::new(DocumentCoordinator::new()),
@@ -617,8 +617,27 @@ impl VimCoreSession {
             not_send_sync: PhantomData,
         };
 
+        session.maybe_apply_xdg_runtimepath();
+
         // /* println debug removed */
         Ok(session)
+    }
+
+    fn maybe_apply_xdg_runtimepath(&mut self) {
+        let Some(xdg_config_home) = std::env::var_os("XDG_CONFIG_HOME") else {
+            return;
+        };
+
+        let xdg_vim_dir = PathBuf::from(xdg_config_home).join("vim");
+        if !xdg_vim_dir.join("vimrc").is_file() {
+            return;
+        }
+
+        let xdg_vim_dir = xdg_vim_dir.to_string_lossy().into_owned();
+        let xdg_literal = format!("'{}'", xdg_vim_dir.replace('\'', "''"));
+        let command =
+            format!("let &rtp = {xdg_literal} . ',' . &rtp | let &pp = {xdg_literal} . ',' . &pp");
+        let _ = self.execute_ex_command(&command);
     }
 
     pub fn snapshot(&self) -> CoreSnapshot {
@@ -1618,15 +1637,14 @@ impl VimCoreSession {
 
     pub fn register(&self, regname: char) -> Option<String> {
         let regname_c = regname as std::os::raw::c_char;
-        let ptr = unsafe { bindings::vim_bridge_get_register(self.state.as_ptr(), regname_c) };
-        if ptr.is_null() {
+        let result = unsafe { bindings::vim_bridge_get_register(self.state.as_ptr(), regname_c) };
+        if result.payload_ptr.is_null() {
             return None;
         }
 
-        let len = unsafe { std::ffi::CStr::from_ptr(ptr).to_bytes().len() };
-        let s = string_from_parts(ptr, len);
+        let s = string_from_parts(result.payload_ptr, result.payload_len);
 
-        unsafe { bindings::vim_bridge_free_string(ptr) };
+        unsafe { bindings::vim_bridge_free_string(result.payload_ptr.cast_mut()) };
         Some(s)
     }
 

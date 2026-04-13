@@ -532,6 +532,208 @@ fn write_with_target_on_vfs_buffer_passes_target_locator_to_host() {
 }
 
 #[test]
+fn vfs_save_request_preserves_full_buffer_text_for_size_observation() {
+    let _guard = acquire_session_test_lock();
+    let observed_text = "alpha\nbeta\ngamma";
+    let mut session =
+        VimCoreSession::new(observed_text).expect("session should initialize with multiline text");
+
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/size")
+        .expect("edit should succeed");
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
+        CoreVfsRequest::Resolve { request_id, .. } => request_id,
+        other => panic!("unexpected: {other:?}"),
+    };
+    session
+        .submit_vfs_response(CoreVfsResponse::Resolved {
+            request_id: resolve_id,
+            document_id: "doc://notes/size".to_string(),
+            display_name: "notes/size".to_string(),
+        })
+        .expect("resolve should succeed");
+    let load_id = match take_next_vfs_request(&mut session) {
+        CoreVfsRequest::Load { request_id, .. } => request_id,
+        other => panic!("unexpected: {other:?}"),
+    };
+    session
+        .submit_vfs_response(CoreVfsResponse::Loaded {
+            request_id: load_id,
+            document_id: "doc://notes/size".to_string(),
+            text: observed_text.to_string(),
+        })
+        .expect("load should succeed");
+
+    let outcome = session
+        .execute_ex_command(":write")
+        .expect("write should queue save request");
+
+    let save_request = take_vfs_request(outcome.host_actions);
+    match save_request {
+        CoreVfsRequest::Save { text, .. } => {
+            assert_eq!(text, observed_text);
+        }
+        other => panic!("expected Save request, got {other:?}"),
+    }
+}
+
+#[test]
+fn vfs_save_failure_reports_permission_denied_to_buffer_state() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("hello").expect("session should initialize");
+
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/permission")
+        .expect("edit should succeed");
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
+        CoreVfsRequest::Resolve { request_id, .. } => request_id,
+        other => panic!("unexpected: {other:?}"),
+    };
+    session
+        .submit_vfs_response(CoreVfsResponse::Resolved {
+            request_id: resolve_id,
+            document_id: "doc://notes/permission".to_string(),
+            display_name: "notes/permission".to_string(),
+        })
+        .expect("resolve should succeed");
+    let load_id = match take_next_vfs_request(&mut session) {
+        CoreVfsRequest::Load { request_id, .. } => request_id,
+        other => panic!("unexpected: {other:?}"),
+    };
+    session
+        .submit_vfs_response(CoreVfsResponse::Loaded {
+            request_id: load_id,
+            document_id: "doc://notes/permission".to_string(),
+            text: "permission".to_string(),
+        })
+        .expect("load should succeed");
+
+    let outcome = session
+        .execute_ex_command(":write")
+        .expect("write should queue save request");
+    let save_id = match take_vfs_request(outcome.host_actions) {
+        CoreVfsRequest::Save { request_id, .. } => request_id,
+        other => panic!("unexpected: {other:?}"),
+    };
+
+    session
+        .submit_vfs_response(CoreVfsResponse::Failed {
+            request_id: save_id,
+            error: CoreVfsError {
+                kind: CoreVfsErrorKind::SaveFailed,
+                message: Some("permission denied".to_string()),
+            },
+        })
+        .expect("failed response should be handled");
+
+    let binding = session
+        .buffer_binding(
+            session
+                .snapshot()
+                .buffers
+                .iter()
+                .find(|buffer| buffer.is_active)
+                .expect("active buffer should exist")
+                .id,
+        )
+        .expect("binding should exist");
+    assert_eq!(
+        binding.last_vfs_error,
+        Some(CoreVfsError {
+            kind: CoreVfsErrorKind::SaveFailed,
+            message: Some("permission denied".to_string()),
+        })
+    );
+
+    let ledger = session.vfs_request_ledger();
+    let request = ledger
+        .iter()
+        .find(|entry| entry.request_id == save_id)
+        .expect("save request should be tracked in the ledger");
+    assert!(matches!(
+        &request.status,
+        CoreRequestStatus::Failed(CoreVfsError {
+            kind: CoreVfsErrorKind::SaveFailed,
+            message: Some(message),
+        }) if message == "permission denied"
+    ));
+}
+
+#[test]
+fn vfs_write_command_emits_distinct_save_requests_for_target_and_copy_destination() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("hello").expect("session should initialize");
+
+    let outcome = session
+        .execute_ex_command(":edit mem://notes/copy")
+        .expect("edit should succeed");
+    let resolve_id = match take_vfs_request(outcome.host_actions) {
+        CoreVfsRequest::Resolve { request_id, .. } => request_id,
+        other => panic!("unexpected: {other:?}"),
+    };
+    session
+        .submit_vfs_response(CoreVfsResponse::Resolved {
+            request_id: resolve_id,
+            document_id: "doc://notes/copy".to_string(),
+            display_name: "notes/copy".to_string(),
+        })
+        .expect("resolve should succeed");
+    let load_id = match take_next_vfs_request(&mut session) {
+        CoreVfsRequest::Load { request_id, .. } => request_id,
+        other => panic!("unexpected: {other:?}"),
+    };
+    session
+        .submit_vfs_response(CoreVfsResponse::Loaded {
+            request_id: load_id,
+            document_id: "doc://notes/copy".to_string(),
+            text: "copy source".to_string(),
+        })
+        .expect("load should succeed");
+
+    let outcome = session
+        .execute_ex_command(":write mem://backup/copy")
+        .expect("write with target should queue save request");
+    let save_id = match take_vfs_request(outcome.host_actions) {
+        CoreVfsRequest::Save {
+            request_id,
+            target_locator,
+            ..
+        } => {
+            assert_eq!(target_locator, Some("mem://backup/copy".to_string()));
+            request_id
+        }
+        other => panic!("expected Save request, got {other:?}"),
+    };
+
+    session
+        .submit_vfs_response(CoreVfsResponse::Saved {
+            request_id: save_id,
+            document_id: "doc://notes/copy".to_string(),
+        })
+        .expect("save should succeed");
+
+    let outcome = session
+        .execute_ex_command(":write")
+        .expect("follow-up write should queue a second save request");
+    let next_save_id = match take_vfs_request(outcome.host_actions) {
+        CoreVfsRequest::Save {
+            request_id,
+            target_locator,
+            ..
+        } => {
+            assert!(target_locator.is_none());
+            request_id
+        }
+        other => panic!("expected Save request, got {other:?}"),
+    };
+
+    assert_ne!(
+        save_id, next_save_id,
+        "copy destination save requests should remain distinct from the source write request"
+    );
+}
+
+#[test]
 fn update_command_on_clean_vfs_buffer_does_not_queue_save() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("hello").expect("session should initialize");

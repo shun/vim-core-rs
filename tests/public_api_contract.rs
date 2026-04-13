@@ -260,7 +260,8 @@ fn session_options_disable_debug_log_output_by_default() {
 
 #[test]
 fn public_api_reference_documents_search_contract_for_inactive_windows_and_byte_columns() {
-    let public_api_reference = fs::read_to_string("docs/public-api-reference.md")
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let public_api_reference = fs::read_to_string(repo_root.join("docs/public-api-reference.md"))
         .expect("public API reference should be readable");
 
     assert!(
@@ -291,7 +292,8 @@ fn public_api_reference_documents_search_contract_for_inactive_windows_and_byte_
 
 #[test]
 fn public_api_reference_excludes_popupwin_and_keeps_textprop_deferred() {
-    let public_api_reference = fs::read_to_string("docs/public-api-reference.md")
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let public_api_reference = fs::read_to_string(repo_root.join("docs/public-api-reference.md"))
         .expect("public API reference should be readable");
 
     assert!(
@@ -300,9 +302,10 @@ fn public_api_reference_excludes_popupwin_and_keeps_textprop_deferred() {
         "public API reference should document popupwin as outside the rendering-state family"
     );
     assert!(
-        public_api_reference.contains("textprop stays deferred")
-            || public_api_reference.contains("textprop remains deferred"),
-        "public API reference should document textprop as deferred"
+        public_api_reference.contains("textprop is the deferred placeholder")
+            || public_api_reference.contains("textprop stays deferred placeholder")
+            || public_api_reference.contains("textprop remains deferred placeholder"),
+        "public API reference should document textprop as the deferred placeholder"
     );
     assert!(
         public_api_reference.contains("does not expose a public popupwin extractor")
@@ -320,15 +323,21 @@ fn public_api_reference_excludes_popupwin_and_keeps_textprop_deferred() {
             || public_api_reference.contains("highlight definition tables"),
         "public API reference should document highlight-table exclusion from the public extraction surface"
     );
+    assert!(
+        !public_api_reference.contains("issue #14"),
+        "public API reference should not defer the family boundary to issue #14"
+    );
 }
 
 #[test]
 fn public_docs_map_rendering_state_family_to_existing_vimcoresession_surface() {
-    let public_api_reference = fs::read_to_string("docs/public-api-reference.md")
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let public_api_reference = fs::read_to_string(repo_root.join("docs/public-api-reference.md"))
         .expect("public API reference should be readable");
-    let api_contracts =
-        fs::read_to_string("docs/api-contracts.md").expect("API contracts should be readable");
-    let api_index = fs::read_to_string("docs/api-index.md").expect("API index should be readable");
+    let api_contracts = fs::read_to_string(repo_root.join("docs/api-contracts.md"))
+        .expect("API contracts should be readable");
+    let api_index = fs::read_to_string(repo_root.join("docs/api-index.md"))
+        .expect("API index should be readable");
 
     assert!(
         public_api_reference.contains("VimCoreSession")
@@ -336,15 +345,21 @@ fn public_docs_map_rendering_state_family_to_existing_vimcoresession_surface() {
         "public API reference should identify VimCoreSession as the main stateful facade"
     );
     assert!(
-        api_contracts.contains("without introducing a new")
-            && api_contracts.contains("runtime facade"),
-        "API contracts should document that the family does not introduce a new runtime facade"
+        api_contracts.contains("authoritative source")
+            && api_contracts.contains("Vim-owned read-only extraction boundary")
+            && !api_contracts.contains("issue #14"),
+        "API contracts should document the final family authority without issue #14 wording"
     );
     assert!(
         api_index.contains("Search` and `Syntax` are the current rendering-state family members")
             || api_index
                 .contains("Search and Syntax are the current rendering-state family members"),
         "API index should map Search and Syntax into the rendering-state family"
+    );
+    assert!(
+        api_index.contains("Vim-owned read-only extraction boundary")
+            && !api_index.contains("issue #14"),
+        "API index should describe the final boundary without issue #14 wording"
     );
     assert!(
         public_api_reference.contains("query_visible_search_state")
@@ -355,17 +370,20 @@ fn public_docs_map_rendering_state_family_to_existing_vimcoresession_surface() {
 
 #[test]
 fn rendering_state_family_docs_describe_additive_grouping_and_mixed_mutability() {
-    let public_api_reference = fs::read_to_string("docs/public-api-reference.md")
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let public_api_reference = fs::read_to_string(repo_root.join("docs/public-api-reference.md"))
         .expect("public API reference should be readable");
-    let api_contracts =
-        fs::read_to_string("docs/api-contracts.md").expect("API contracts should be readable");
-    let api_index = fs::read_to_string("docs/api-index.md").expect("API index should be readable");
+    let api_contracts = fs::read_to_string(repo_root.join("docs/api-contracts.md"))
+        .expect("API contracts should be readable");
+    let api_index = fs::read_to_string(repo_root.join("docs/api-index.md"))
+        .expect("API index should be readable");
 
     assert!(
         api_contracts.contains("vocabulary")
-            && (api_contracts.contains("without introducing a new runtime facade")
-                || api_contracts.contains("not a new runtime owner")),
-        "API contracts should describe the family as an additive explanation layer"
+            && (api_contracts.contains("additive stateless summary")
+                || api_contracts.contains("no new family descriptor")
+                || api_contracts.contains("without introducing a new runtime facade")),
+        "API contracts should describe the family as an additive explanation layer without a new descriptor"
     );
     assert!(
         api_index
@@ -375,21 +393,31 @@ fn rendering_state_family_docs_describe_additive_grouping_and_mixed_mutability()
         "API index should describe Search and Syntax as grouped existing accessors"
     );
     assert!(
-        public_api_reference.contains("search family member")
+        (public_api_reference.contains("search family member")
+            || public_api_reference.contains("Search family member"))
             && public_api_reference.contains("&mut self")
-            && public_api_reference.contains("syntax family member")
+            && (public_api_reference.contains("syntax family member")
+                || public_api_reference.contains("Syntax family member"))
             && public_api_reference.contains("&self"),
         "public API reference should document mixed mutability across family members"
+    );
+    assert!(
+        public_api_reference.contains("no new family descriptor")
+            || api_contracts.contains("no new family descriptor")
+            || public_api_reference.contains("additive stateless summary"),
+        "public API reference should keep the family mapping additive rather than introducing a descriptor"
     );
 }
 
 #[test]
 fn search_family_docs_keep_incsearch_boundary_vocab_in_public_contracts() {
-    let public_api_reference = fs::read_to_string("docs/public-api-reference.md")
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let public_api_reference = fs::read_to_string(repo_root.join("docs/public-api-reference.md"))
         .expect("public API reference should be readable");
-    let api_contracts =
-        fs::read_to_string("docs/api-contracts.md").expect("API contracts should be readable");
-    let api_index = fs::read_to_string("docs/api-index.md").expect("API index should be readable");
+    let api_contracts = fs::read_to_string(repo_root.join("docs/api-contracts.md"))
+        .expect("API contracts should be readable");
+    let api_index = fs::read_to_string(repo_root.join("docs/api-index.md"))
+        .expect("API index should be readable");
 
     assert!(
         public_api_reference.contains("Search family")
@@ -410,6 +438,38 @@ fn search_family_docs_keep_incsearch_boundary_vocab_in_public_contracts() {
             && api_index.contains("byte columns")
             && api_index.contains("host-owned presentation"),
         "API index should summarize the Search family boundary for inactive windows, byte columns, and host-owned presentation"
+    );
+    assert!(
+        !api_index.contains("issue #14"),
+        "API index should not defer the Search family boundary to issue #14"
+    );
+}
+
+#[test]
+fn register_docs_describe_multiline_full_readback_in_public_api_reference() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let public_api_reference = fs::read_to_string(repo_root.join("docs/public-api-reference.md"))
+        .expect("public API reference should be readable");
+
+    assert!(
+        public_api_reference.contains("register(&self, regname: char) -> Option<String>")
+            && public_api_reference.contains("multiline")
+            && public_api_reference.contains("full contents"),
+        "public API reference should describe register() as returning full multiline contents"
+    );
+}
+
+#[test]
+fn register_docs_pin_contract_tests_as_the_source_of_truth() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let api_contracts = fs::read_to_string(repo_root.join("docs/api-contracts.md"))
+        .expect("API contracts should be readable");
+
+    assert!(
+        api_contracts.contains("tests/register_contract.rs")
+            && (api_contracts.contains("source of truth")
+                || api_contracts.contains("authoritative source")),
+        "API contracts should point register readback behavior at the contract tests"
     );
 }
 
@@ -1562,7 +1622,8 @@ fn api_index_maps_rendering_state_family_without_new_surface() {
             && content.contains("Search")
             && content.contains("Syntax")
             && content.contains("Annotations")
-            && content.contains("issue #14"),
+            && content.contains("deferred placeholder")
+            && !content.contains("issue #14"),
         "api index should document the family boundary and phase split"
     );
     assert!(

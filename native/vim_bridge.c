@@ -81,9 +81,13 @@ vim_runtime_backend_identity_t vim_bridge_backend_identity(
     return upstream_runtime_backend_identity(state != NULL ? state->runtime : NULL);
 }
 
-char* vim_bridge_get_register(const vim_bridge_state_t* state, char regname) {
+vim_core_register_get_result_t vim_bridge_get_register(
+    const vim_bridge_state_t* state,
+    char regname
+) {
+    static const vim_core_register_get_result_t empty_result = {0};
     if (state == NULL) {
-        return NULL;
+        return empty_result;
     }
     return upstream_runtime_get_register(state->runtime, regname);
 }

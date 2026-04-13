@@ -1,3 +1,4 @@
+use std::fs;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use vim_core_rs::VimCoreSession;
 
@@ -189,5 +190,20 @@ fn syntax_contract_docs_exclude_highlight_tables_from_public_surface() {
         scope.contains("resolved highlight attribute tables")
             || scope.contains("resolved highlight state derived"),
         "scope doc should define the boundary around syntax output and highlight-table exclusion"
+    );
+}
+
+#[test]
+fn syntax_family_docs_keep_line_scoped_extraction_explicit() {
+    let public_api_reference = fs::read_to_string("docs/public-api-reference.md")
+        .expect("public API reference should be readable");
+
+    assert!(
+        public_api_reference.contains("line-scoped extraction"),
+        "public API reference should describe Syntax as line-scoped extraction"
+    );
+    assert!(
+        public_api_reference.contains("&self"),
+        "public API reference should keep Syntax immutable"
     );
 }

@@ -1,3 +1,4 @@
+use std::fs;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use vim_core_rs::VimCoreSession;
 
@@ -94,5 +95,21 @@ fn pum_contract_stays_separate_from_popupwin_presentation_ownership() {
     assert!(
         api_index.contains("does not expose a public popupwin extractor"),
         "API index should distinguish PUM extraction from popupwin ownership"
+    );
+}
+
+#[test]
+fn pum_contract_docs_keep_pum_separate_from_popupwin_exclusion() {
+    let public_api_reference = fs::read_to_string("docs/public-api-reference.md")
+        .expect("public API reference should be readable");
+    let api_index = fs::read_to_string("docs/api-index.md").expect("API index should be readable");
+
+    assert!(
+        public_api_reference.contains("pum stays separate from popupwin exclusion"),
+        "public API reference should keep PUM separate from popupwin exclusion"
+    );
+    assert!(
+        api_index.contains("pum stays separate from popupwin exclusion"),
+        "API index should keep PUM separate from popupwin exclusion"
     );
 }

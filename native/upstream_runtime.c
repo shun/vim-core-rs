@@ -107,6 +107,74 @@ static void upstream_runtime_debug_printf(const char* format, ...) {
     va_end(args);
 }
 
+static void upstream_runtime_sync_env_var(const char* name) {
+    const char* value = getenv(name);
+    if (value == NULL) {
+        vim_unsetenv_ext((char_u *)name);
+        return;
+    }
+
+    vim_setenv_ext((char_u *)name, (char_u *)value);
+}
+
+static void upstream_runtime_apply_xdg_runtimepath(void) {
+    const char* xdg_config_home = getenv("XDG_CONFIG_HOME");
+    if (xdg_config_home == NULL || *xdg_config_home == '\0') {
+        return;
+    }
+
+    const char* runtimepath = (const char*)p_rtp;
+    const char* packpath = (const char*)p_pp;
+    if (runtimepath == NULL || *runtimepath == '\0' || packpath == NULL || *packpath == '\0') {
+        return;
+    }
+
+    size_t vimrc_len = strlen(xdg_config_home) + strlen("/vim/vimrc") + 1;
+    char* vimrc_path = (char*)malloc(vimrc_len);
+    if (vimrc_path == NULL) {
+        return;
+    }
+    snprintf(vimrc_path, vimrc_len, "%s/vim/vimrc", xdg_config_home);
+
+    FILE* vimrc = fopen(vimrc_path, "r");
+    if (vimrc == NULL) {
+        free(vimrc_path);
+        return;
+    }
+    fclose(vimrc);
+
+    size_t xdg_dir_len = strlen(xdg_config_home) + strlen("/vim") + 1;
+    char* xdg_dir = (char*)malloc(xdg_dir_len);
+    if (xdg_dir == NULL) {
+        free(vimrc_path);
+        return;
+    }
+    snprintf(xdg_dir, xdg_dir_len, "%s/vim", xdg_config_home);
+
+    if (strstr(runtimepath, xdg_dir) == NULL) {
+        size_t merged_len = strlen(xdg_dir) + 1 + strlen(runtimepath) + 1;
+        char* merged = (char*)malloc(merged_len);
+        if (merged != NULL) {
+            snprintf(merged, merged_len, "%s,%s", xdg_dir, runtimepath);
+            set_option_value_give_err((char_u *)"rtp", 0L, (char_u *)merged, 0);
+            free(merged);
+        }
+    }
+
+    if (strstr(packpath, xdg_dir) == NULL) {
+        size_t merged_len = strlen(xdg_dir) + 1 + strlen(packpath) + 1;
+        char* merged = (char*)malloc(merged_len);
+        if (merged != NULL) {
+            snprintf(merged, merged_len, "%s,%s", xdg_dir, packpath);
+            set_option_value_give_err((char_u *)"pp", 0L, (char_u *)merged, 0);
+            free(merged);
+        }
+    }
+
+    free(xdg_dir);
+    free(vimrc_path);
+}
+
 void upstream_runtime_set_debug_log_path(const char* path, uintptr_t path_len) {
     if (upstream_runtime_debug_log_file != NULL) {
         fclose(upstream_runtime_debug_log_file);
@@ -648,6 +716,9 @@ upstream_runtime_session_t* upstream_runtime_session_new(const char* initial_tex
     set_string_option_direct((char_u *)"hf", -1, (char_u *)DFLT_HELPFILE, 0, SID_NONE);
     vim_unsetenv_ext((char_u *)"VIM");
     vim_unsetenv_ext((char_u *)"VIMRUNTIME");
+    upstream_runtime_sync_env_var("HOME");
+    upstream_runtime_sync_env_var("XDG_CONFIG_HOME");
+    upstream_runtime_apply_xdg_runtimepath();
 
     /* Clear any leftover typeahead from previous sessions/tests */
     if (typebuf.tb_len > 0) {
@@ -1901,12 +1972,32 @@ void upstream_runtime_set_register(upstream_runtime_session_t* session, char reg
     free(text_copy);
 }
 
-char* upstream_runtime_get_register(const upstream_runtime_session_t* session, char regname) {
+vim_core_register_get_result_t upstream_runtime_get_register(
+    const upstream_runtime_session_t* session,
+    char regname
+) {
     (void)session;
-    // Simplified: just return the first line for now
+    vim_core_register_get_result_t result = {0};
     char_u* text = get_reg_contents((int)regname, 0);
-    if (text == NULL) return NULL;
-    return strdup((const char*)text);
+    char* text_copy;
+
+    if (text == NULL) {
+        return result;
+    }
+
+    result.payload_len = (uintptr_t)STRLEN(text);
+    text_copy = (char*)malloc(result.payload_len + 1U);
+    if (text_copy == NULL) {
+        result.payload_len = 0;
+        return result;
+    }
+
+    if (result.payload_len > 0) {
+        memcpy(text_copy, text, result.payload_len);
+    }
+    text_copy[result.payload_len] = '\0';
+    result.payload_ptr = text_copy;
+    return result;
 }
 
 static int upstream_runtime_option_scope_to_vim_flags(vim_core_option_scope_t scope) {

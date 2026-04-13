@@ -41,7 +41,10 @@ vim_runtime_backend_identity_t upstream_runtime_backend_identity(
     const upstream_runtime_session_t* session
 );
 
-char* upstream_runtime_get_register(const upstream_runtime_session_t* session, char regname);
+vim_core_register_get_result_t upstream_runtime_get_register(
+    const upstream_runtime_session_t* session,
+    char regname
+);
 void upstream_runtime_set_register(upstream_runtime_session_t* session, char regname, const char* text, uintptr_t text_len);
 vim_core_option_get_result_t upstream_runtime_get_option(
     const upstream_runtime_session_t* session,

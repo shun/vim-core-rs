@@ -854,15 +854,27 @@ mod build_test_runner_contract_tests {
         );
         assert_eq!(
             adaptation
+                .get("covered_units")
+                .and_then(|value| value.as_u64()),
+            Some(17)
+        );
+        assert_eq!(
+            adaptation
+                .get("uncovered_units")
+                .and_then(|value| value.as_u64()),
+            Some(33)
+        );
+        assert_eq!(
+            adaptation
                 .get("runtime_path_total_units")
                 .and_then(|value| value.as_u64()),
-            Some(16)
+            Some(17)
         );
         assert_eq!(
             adaptation
                 .get("runtime_path_covered_units")
                 .and_then(|value| value.as_u64()),
-            Some(10)
+            Some(11)
         );
         assert_eq!(
             adaptation
@@ -881,6 +893,105 @@ mod build_test_runner_contract_tests {
                 .is_some(),
             "adapted behaviors should expose machine-readable coverage state"
         );
+    }
+
+    #[test]
+    fn generate_upstream_tests_reflects_promoted_filesystem_cases_as_covered() {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set");
+        let repo_root = Path::new(&manifest_dir);
+        let out_dir = create_temp_dir("promoted_filesystem_cases");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        generate_upstream_tests_from(repo_root, &out_dir)
+            .expect("upstream test runner should generate");
+
+        let manifest = fs::read_to_string(out_dir.join("upstream_test_manifest.json"))
+            .expect("manifest should be written");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should deserialize");
+
+        let adaptation = manifest
+            .get("adaptation_coverage")
+            .expect("manifest should expose adaptation coverage summary");
+        assert_eq!(
+            adaptation
+                .get("covered_units")
+                .and_then(|value| value.as_u64()),
+            Some(17)
+        );
+
+        for (behavior_id, expected_case_name, expected_test_name) in [
+            (
+                "test_file_perm",
+                "test_file_perm.vim",
+                "vfs_save_failure_reports_permission_denied_to_buffer_state",
+            ),
+            (
+                "test_file_size",
+                "test_file_size.vim",
+                "vfs_save_request_preserves_full_buffer_text_for_size_observation",
+            ),
+            (
+                "test_filecopy",
+                "test_filecopy.vim",
+                "vfs_write_command_emits_distinct_save_requests_for_target_and_copy_destination",
+            ),
+        ] {
+            let behavior = find_adapted_behavior(&manifest, behavior_id);
+
+            assert_eq!(
+                behavior
+                    .get("upstream_case_name")
+                    .and_then(|value| value.as_str()),
+                Some(expected_case_name),
+                "promoted filesystem behavior should point back to the upstream case"
+            );
+            assert_eq!(
+                behavior
+                    .get("coverage_status")
+                    .and_then(|value| value.as_str()),
+                Some("covered"),
+                "promoted filesystem behavior should be marked covered"
+            );
+
+            let suites = behavior
+                .get("related_contract_suites")
+                .and_then(|value| value.as_array())
+                .expect("promoted filesystem behavior should declare related suites");
+            assert!(
+                suites
+                    .iter()
+                    .any(|suite| suite.as_str() == Some("vfs_contract.rs")),
+                "promoted filesystem behavior should reference the VFS contract suite"
+            );
+            assert!(
+                suites
+                    .iter()
+                    .any(|suite| suite.as_str() == Some("integration_contract.rs")),
+                "promoted filesystem behavior should keep integration_contract as supporting evidence"
+            );
+            assert!(
+                suites.len() > 1,
+                "integration_contract.rs must not be the only related suite for promoted filesystem behavior"
+            );
+
+            let evidence = behavior
+                .get("coverage_evidence")
+                .expect("promoted filesystem behavior should expose coverage evidence");
+            assert_eq!(
+                evidence
+                    .get("contract_suite")
+                    .and_then(|value| value.as_str()),
+                Some("vfs_contract.rs"),
+                "coverage evidence should identify the VFS contract suite"
+            );
+            assert_eq!(
+                evidence.get("test_name").and_then(|value| value.as_str()),
+                Some(expected_test_name),
+                "coverage evidence should point to the exact VFS contract test"
+            );
+        }
     }
 
     #[test]
@@ -906,13 +1017,13 @@ mod build_test_runner_contract_tests {
             adaptation
                 .get("covered_units")
                 .and_then(|value| value.as_u64()),
-            Some(13)
+            Some(17)
         );
         assert_eq!(
             adaptation
                 .get("runtime_path_covered_units")
                 .and_then(|value| value.as_u64()),
-            Some(10)
+            Some(11)
         );
 
         for (behavior_id, expected_case_name, expected_test_name) in [
@@ -955,6 +1066,11 @@ mod build_test_runner_contract_tests {
                 "runtimepath.expand.directory_wildcard_buffer_selection",
                 "test_expand.vim",
                 "runtimepath_contract_supports_wildcard_path_expansion_for_buffer_selection",
+            ),
+            (
+                "test_xdg",
+                "test_xdg.vim",
+                "runtimepath_honors_xdg_config_home_for_user_runtime_dirs",
             ),
         ] {
             let behavior = find_adapted_behavior(&manifest, behavior_id);
@@ -1037,6 +1153,60 @@ mod build_test_runner_contract_tests {
             remaining_runtime_path_units, expected_remaining_units,
             "remaining runtime-path adapted behaviors should stay explicitly uncovered"
         );
+    }
+
+    #[test]
+    fn generate_upstream_tests_requires_explicit_reclassification_rationale_for_deferred_cases() {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set");
+        let repo_root = Path::new(&manifest_dir);
+        let out_dir = create_temp_dir("reclassified_filesystem_and_environment_cases");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        generate_upstream_tests_from(repo_root, &out_dir)
+            .expect("upstream test runner should generate");
+
+        let manifest = fs::read_to_string(out_dir.join("upstream_test_manifest.json"))
+            .expect("manifest should be written");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should deserialize");
+
+        for (behavior_id, required_terms) in [
+            ("test_filechanged", ["host-owned", "environment-dependent"]),
+            ("test_menu", ["host-owned", "out-of-scope"]),
+            (
+                "test_shortpathname",
+                ["platform-dependent", "environment-dependent"],
+            ),
+            (
+                "test_windows_home",
+                ["platform-dependent", "environment-dependent"],
+            ),
+        ] {
+            let behavior = find_adapted_behavior(&manifest, behavior_id);
+
+            assert_eq!(
+                behavior
+                    .get("coverage_status")
+                    .and_then(|value| value.as_str()),
+                Some("uncovered"),
+                "reclassified cases should remain uncovered in adapted behaviors"
+            );
+            assert!(
+                behavior.get("coverage_evidence").is_none(),
+                "reclassified cases should not claim dedicated coverage evidence"
+            );
+            let rationale = behavior
+                .get("rationale")
+                .and_then(|value| value.as_str())
+                .expect("reclassified cases should carry a rationale");
+            for term in required_terms {
+                assert!(
+                    rationale.contains(term),
+                    "reclassified case {behavior_id} should explain the boundary with `{term}`: {rationale}"
+                );
+            }
+        }
     }
 
     #[test]

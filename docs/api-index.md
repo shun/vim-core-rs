@@ -11,11 +11,13 @@ gaps. Only after that should you descend into the API reference pages.
 ## Rendering State Family boundary
 
 `Search` and `Syntax` are the current rendering-state family members that the
-crate exposes today. `Annotations` is the future placeholder for
-text-property extraction, and issue #14 owns any later public facade
-promotion. `popupwin` stays outside the family because it is host-owned
-presentation. The family does not add a new runtime facade, and it does not
-expose popup layout/composition or highlight definition and attribute tables.
+crate exposes today. `Annotations` is the deferred placeholder for
+text-property extraction, and `popupwin` is the exclusion because it is
+host-owned presentation. The family is a Vim-owned read-only extraction boundary,
+the authoritative source for it is the docs, tests, and classification metadata
+named in `docs/SCOPE.md`, and this feature does not add a new family descriptor
+or facade. It is a data-only extraction contract. It does not expose popup
+layout/composition or highlight definition and attribute tables. pum stays separate from popupwin exclusion because it is completion payload extraction, not popup-window presentation.
 
 ## What each document covers
 
@@ -89,10 +91,10 @@ The public session methods are grouped by role.
   `search_capability_contract`, `get_syntax_name`, `get_line_syntax`
 - These accessors cover the current `Search` and `Syntax` family members.
   The Search family summary includes inactive window queries, byte columns,
-  and `incsearch` state as contract data. `textprop` stays deferred as the
-  `Annotations` placeholder, and popup ownership stays host-owned presentation
-  because the crate does not expose a public popupwin extractor or
-  highlight-table extractor.
+  and `incsearch` state as contract data. `textprop` is the deferred
+  placeholder in `Annotations`, and popup ownership stays host-owned
+  presentation because the crate does not expose a public popupwin extractor
+  or highlight-table extractor.
 - `search_capability_contract` is the typed summary for this Search family
   boundary. It reports live-state availability, inactive-window support,
   byte-column semantics, data-only payload rules, and host-owned

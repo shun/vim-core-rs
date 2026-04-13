@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
@@ -39,6 +40,30 @@ fn eval_required(session: &mut VimCoreSession, expr: &str) -> String {
         .unwrap_or_else(|| panic!("expected eval result for {expr}"))
 }
 
+struct EnvVarGuard {
+    name: &'static str,
+    previous: Option<OsString>,
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        unsafe {
+            match &self.previous {
+                Some(value) => std::env::set_var(self.name, value),
+                None => std::env::remove_var(self.name),
+            }
+        }
+    }
+}
+
+fn set_env_var(name: &'static str, value: &Path) -> EnvVarGuard {
+    let previous = std::env::var_os(name);
+    unsafe {
+        std::env::set_var(name, value);
+    }
+    EnvVarGuard { name, previous }
+}
+
 #[test]
 fn runtimepath_exposes_non_empty_defaults_and_vim_dir() {
     let _guard = acquire_session_test_lock();
@@ -72,6 +97,40 @@ fn runtimepath_exposes_non_empty_defaults_and_vim_dir() {
         eval_required(&mut session, "isdirectory($VIMRUNTIME)"),
         "1",
         "$VIMRUNTIME should resolve to an existing bundled runtime dir: {vimruntime_dir}"
+    );
+}
+
+#[test]
+fn runtimepath_honors_xdg_config_home_for_user_runtime_dirs() {
+    let _guard = acquire_session_test_lock();
+    let temp = tempdir().expect("failed to create temp dir");
+    let home_dir = temp.path().join("home");
+    let xdg_config_home = temp.path().join("xdg-config-home");
+    let xdg_vim_dir = xdg_config_home.join("vim");
+    fs::create_dir_all(&home_dir).expect("failed to create HOME dir");
+    fs::create_dir_all(&xdg_vim_dir).expect("failed to create XDG vim dir");
+    fs::write(
+        xdg_vim_dir.join("vimrc"),
+        "\" xdg-driven runtimepath test\n",
+    )
+    .expect("failed to write XDG vimrc");
+
+    let _home_guard = set_env_var("HOME", &home_dir);
+    let _env_guard = set_env_var("XDG_CONFIG_HOME", &xdg_config_home);
+    let mut session = VimCoreSession::new("").expect("failed to create session");
+
+    let runtimepath = eval_required(&mut session, "&runtimepath");
+    assert!(
+        runtimepath
+            .split(',')
+            .any(|entry| Path::new(entry) == xdg_vim_dir.as_path()),
+        "runtimepath should honor XDG_CONFIG_HOME for user runtime directories: {runtimepath}"
+    );
+    let expected_vim_root = Path::new(env!("OUT_DIR")).join("share").join("vim");
+    assert!(
+        Path::new(&eval_required(&mut session, "$VIMRUNTIME"))
+            .starts_with(expected_vim_root.as_path()),
+        "XDG runtimepath promotion should not disturb the bundled runtime root"
     );
 }
 

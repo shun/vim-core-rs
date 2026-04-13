@@ -11,7 +11,7 @@ The public surface is intentionally concentrated in one place.
 - The crate root exposes `VimCoreSession` as the main stateful facade.
 - The rendering-state family is an additive grouping over existing
   `VimCoreSession` accessors, not a new runtime owner and not a replacement
-  surface.
+  surface. It is a Vim-owned read-only extraction boundary, has no new family descriptor, and this feature does not add a new family descriptor or facade.
 - The crate root also exposes plain data types that describe snapshots,
   transactions, events, host actions, VFS contracts, options, undo trees,
   and rendering data.
@@ -171,7 +171,8 @@ These methods extract structural information about the editor state.
 These methods expose register state and typed option accessors.
 
 - `register(&self, regname: char) -> Option<String>`
-  Returns the current contents of a register.
+  Returns the full contents of a register, including multiline text and
+  embedded newlines.
 - `set_register(&mut self, regname: char, text: &str)`
   Replaces the register contents.
 - `get_option_number(&self, name: &str, scope: CoreOptionScope)
@@ -225,14 +226,17 @@ These methods expose rendering-relevant state that the host can draw directly.
   start_row: i32, end_row: i32)
   -> Result<CoreVisibleSearchState, CoreSearchQueryError>`
   Returns the specified window's search state for a 1-based inclusive
-  viewport, including inactive window queries.
+  viewport, including inactive window queries. This is a live viewport query
+  and keeps the inactive-window query wording explicit.
 - `search_capability_contract() -> CoreSearchCapabilityContract`
-  Returns the stable Search family contract for live search extraction.
+  Returns the stable Search family contract for live search extraction. This
+  is a data-only extraction contract.
 - `get_syntax_name(&self, syn_id: i32) -> Option<String>`
   Maps a syntax ID to its human-readable syntax group name.
 - `get_line_syntax(&self, win_id: i32, lnum: i64)
   -> Result<Vec<CoreSyntaxChunk>, CoreCommandError>`
-  Returns syntax chunks for one line in one window.
+  Returns syntax chunks for one line in one window. This keeps Syntax as
+  line-scoped extraction.
 
 Search ranges now follow one fixed contract: `start_col` is inclusive and
 `end_col` is exclusive, both are byte columns, and results are limited to the
@@ -248,7 +252,11 @@ without reimplementing Vim search semantics.
 This is the current Search family extraction boundary for `VimCoreSession`.
 It keeps inactive window queries, byte columns, and `incsearch` preview state
 inside the Search family contract while leaving popup ownership as
-host-owned presentation.
+host-owned presentation. `textprop` is the deferred placeholder in the
+`Annotations` family, and the crate does not expose a public popupwin
+extractor or a public textprop extractor.
+In plain terms, textprop is the deferred placeholder until a narrower
+annotation contract exists.
 
 `search_capability_contract()` is the structured summary of that boundary.
 Its fields report live-state availability, inactive-window query support,
@@ -256,17 +264,17 @@ visible-row scoping, inclusive/exclusive byte-column semantics, the data-only
 payload guarantee, and the host-owned presentation boundary.
 
 In plain terms, start_col is inclusive and end_col is exclusive.
-The search family member keeps &mut self because it issues live viewport queries against session state.
-The syntax family member keeps &self because it is read-only line extraction over existing state.
+The Search family member keeps &mut self because it issues a live viewport
+query against session state and preserves inactive-window query behavior.
+The Syntax family member keeps &self because it is read-only line-scoped
+extraction over existing state.
 
 The rendering-state family keeps `popupwin` outside the family because
-popupwin is host-owned presentation. `textprop` stays deferred as the
-`Annotations` placeholder, and the crate does not expose a public popupwin
-extractor or a public textprop extractor.
-Popup placement, popup composition, popup borders, and overlay layout stay
-out of scope for this crate.
-In plain terms, textprop stays deferred until a narrower annotation contract
-exists.
+popupwin is host-owned presentation. `popupwin` is the exclusion, and popup
+placement, popup composition, popup borders, and overlay layout stay out of
+scope for this crate.
+pum stays separate from popupwin exclusion because it is completion payload
+extraction, not popup-window presentation.
 The crate does not expose a public popupwin extractor.
 The crate does not expose a public textprop extractor.
 The crate does not expose highlight definition tables or resolved highlight

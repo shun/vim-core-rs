@@ -1023,11 +1023,12 @@
       "name": "test_file_perm.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_file_perm.vim",
       "classification": "preserve_through_adaptation",
-      "rationale": "Filesystem permission behavior crosses the host storage boundary and is treated as adapted behavior.",
+      "rationale": "Filesystem permission behavior crosses the host storage boundary and is observed through VFS save failure handling.",
       "intended_harness": "contract_tests",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
       "related_contract_suites": [
+        "vfs_contract.rs",
         "integration_contract.rs"
       ]
     },
@@ -1035,11 +1036,12 @@
       "name": "test_file_size.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_file_size.vim",
       "classification": "preserve_through_adaptation",
-      "rationale": "Filesystem metadata behavior crosses the host storage boundary and is treated as adapted behavior.",
+      "rationale": "Filesystem size behavior crosses the host storage boundary and is observed through VFS save request text.",
       "intended_harness": "contract_tests",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
       "related_contract_suites": [
+        "vfs_contract.rs",
         "integration_contract.rs"
       ]
     },
@@ -1047,7 +1049,7 @@
       "name": "test_filechanged.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_filechanged.vim",
       "classification": "preserve_through_adaptation",
-      "rationale": "Filesystem change detection crosses the host storage boundary and is treated as adapted behavior.",
+      "rationale": "Filesystem change detection is host-owned coordination and remains environment-dependent rather than a dedicated contract.",
       "intended_harness": "contract_tests",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
@@ -1059,11 +1061,12 @@
       "name": "test_filecopy.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_filecopy.vim",
       "classification": "preserve_through_adaptation",
-      "rationale": "Filesystem-facing copy behavior must be mediated by host-side storage contracts.",
+      "rationale": "Filesystem-facing copy behavior is observed through host-mediated VFS save requests and target locators.",
       "intended_harness": "contract_tests",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
       "related_contract_suites": [
+        "vfs_contract.rs",
         "integration_contract.rs"
       ]
     },
@@ -2020,7 +2023,7 @@
       "name": "test_menu.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_menu.vim",
       "classification": "preserve_through_adaptation",
-      "rationale": "Menu and related runtime UI state are treated as adapted behavior, not full standalone UI ownership.",
+      "rationale": "Menu presentation is host-owned and out of scope for a crate-owned extraction contract.",
       "intended_harness": "contract_tests",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
@@ -2872,7 +2875,7 @@
       "name": "test_shortpathname.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_shortpathname.vim",
       "classification": "preserve_through_adaptation",
-      "rationale": "Platform-specific path handling crosses the host filesystem boundary and is treated as adapted behavior.",
+      "rationale": "platform-dependent path handling is environment-dependent and remains outside a dedicated crate-owned contract.",
       "intended_harness": "contract_tests",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
@@ -3901,7 +3904,7 @@
       "name": "test_windows_home.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_windows_home.vim",
       "classification": "preserve_through_adaptation",
-      "rationale": "Platform-specific home-directory handling crosses the host filesystem boundary and is treated as adapted behavior.",
+      "rationale": "platform-dependent home-directory handling is environment-dependent and remains outside a dedicated crate-owned contract.",
       "intended_harness": "contract_tests",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
@@ -3965,11 +3968,12 @@
       "name": "test_xdg.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_xdg.vim",
       "classification": "preserve_through_adaptation",
-      "rationale": "XDG and host-environment discovery are adapted at the host boundary.",
+      "rationale": "XDG and host-environment discovery are observed through the runtime/environment contract boundary.",
       "intended_harness": "contract_tests",
       "currently_collected_by_generated_runner": false,
       "current_generated_runner_status": "excluded",
       "related_contract_suites": [
+        "runtime_path_contract.rs",
         "integration_contract.rs"
       ]
     },
@@ -4468,27 +4472,37 @@
       "id": "test_file_perm",
       "upstream_case_name": "test_file_perm.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_file_perm.vim",
-      "rationale": "Filesystem permission behavior crosses the host storage boundary and is treated as adapted behavior.",
+      "rationale": "Filesystem permission behavior crosses the host storage boundary and is observed through VFS save failure handling.",
       "related_contract_suites": [
+        "vfs_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "vfs_contract.rs",
+        "test_name": "vfs_save_failure_reports_permission_denied_to_buffer_state"
+      }
     },
     {
       "id": "test_file_size",
       "upstream_case_name": "test_file_size.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_file_size.vim",
-      "rationale": "Filesystem metadata behavior crosses the host storage boundary and is treated as adapted behavior.",
+      "rationale": "Filesystem size behavior crosses the host storage boundary and is observed through VFS save request text.",
       "related_contract_suites": [
+        "vfs_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "vfs_contract.rs",
+        "test_name": "vfs_save_request_preserves_full_buffer_text_for_size_observation"
+      }
     },
     {
       "id": "test_filechanged",
       "upstream_case_name": "test_filechanged.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_filechanged.vim",
-      "rationale": "Filesystem change detection crosses the host storage boundary and is treated as adapted behavior.",
+      "rationale": "Filesystem change detection is host-owned coordination and remains environment-dependent rather than a dedicated contract.",
       "related_contract_suites": [
         "integration_contract.rs"
       ],
@@ -4498,11 +4512,16 @@
       "id": "test_filecopy",
       "upstream_case_name": "test_filecopy.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_filecopy.vim",
-      "rationale": "Filesystem-facing copy behavior must be mediated by host-side storage contracts.",
+      "rationale": "Filesystem-facing copy behavior is observed through host-mediated VFS save requests and target locators.",
       "related_contract_suites": [
+        "vfs_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "vfs_contract.rs",
+        "test_name": "vfs_write_command_emits_distinct_save_requests_for_target_and_copy_destination"
+      }
     },
     {
       "id": "test_highlight",
@@ -4554,7 +4573,7 @@
       "id": "test_menu",
       "upstream_case_name": "test_menu.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_menu.vim",
-      "rationale": "Menu and related runtime UI state are treated as adapted behavior, not full standalone UI ownership.",
+      "rationale": "Menu presentation is host-owned and out-of-scope for a crate-owned extraction contract.",
       "related_contract_suites": [
         "integration_contract.rs"
       ],
@@ -4590,7 +4609,7 @@
       "id": "test_popupwin",
       "upstream_case_name": "test_popupwin.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_popupwin.vim",
-      "rationale": "Popup-window behavior is still host-owned presentation: the crate exposes PUM payload extraction, but no public popup window extractor exists yet, and popup placement/composition/border policy stays in the host rather than the crate contract.",
+      "rationale": "Popup-window behavior is still host-owned presentation: the crate exposes PUM payload extraction, pum stays separate from popupwin exclusion, but no public popup window extractor exists yet, and popup placement/composition/border policy stays in the host rather than the crate contract.",
       "related_contract_suites": [
         "pum_contract.rs",
         "integration_contract.rs"
@@ -4601,7 +4620,7 @@
       "id": "test_popupwin_textprop",
       "upstream_case_name": "test_popupwin_textprop.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_popupwin_textprop.vim",
-      "rationale": "Popup/textprop placement is still a host-owned presentation concern. The repository has no public textprop or popup-window extraction API to bind this case to a crate contract yet, so popupwin stays host-owned, popup placement/composition stays in the host, and textprop stays deferred.",
+      "rationale": "Popup/textprop placement is still a host-owned presentation concern. The repository has no public textprop or popup-window extraction API to bind this case to a crate contract yet, so popupwin is host-owned exclusion, pum stays separate from popupwin exclusion, popup placement/composition stays in the host, and textprop stays the deferred placeholder.",
       "related_contract_suites": [
         "pum_contract.rs",
         "syntax_contract.rs",
@@ -4635,7 +4654,7 @@
       "id": "test_shortpathname",
       "upstream_case_name": "test_shortpathname.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_shortpathname.vim",
-      "rationale": "Platform-specific path handling crosses the host filesystem boundary and is treated as adapted behavior.",
+      "rationale": "platform-dependent path handling is environment-dependent and remains outside a dedicated crate-owned contract.",
       "related_contract_suites": [
         "integration_contract.rs"
       ],
@@ -4667,7 +4686,7 @@
       "id": "test_textprop",
       "upstream_case_name": "test_textprop.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_textprop.vim",
-      "rationale": "Text property behavior remains deferred annotation-state extraction today: there is no public textprop extraction API, so the case cannot be promoted to an extraction contract without a new surface, and any later promotion must define narrow contract-test coverage first.",
+      "rationale": "Text property behavior remains deferred annotation-state extraction today: the deferred placeholder has no public textprop extraction API, so the case cannot be promoted to an extraction contract without a new surface, and any later promotion must define narrow contract-test coverage first.",
       "related_contract_suites": [
         "pum_contract.rs",
         "syntax_contract.rs",
@@ -4679,7 +4698,7 @@
       "id": "test_windows_home",
       "upstream_case_name": "test_windows_home.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_windows_home.vim",
-      "rationale": "Platform-specific home-directory handling crosses the host filesystem boundary and is treated as adapted behavior.",
+      "rationale": "platform-dependent home-directory handling is environment-dependent and remains outside a dedicated crate-owned contract.",
       "related_contract_suites": [
         "integration_contract.rs"
       ],
@@ -4689,11 +4708,17 @@
       "id": "test_xdg",
       "upstream_case_name": "test_xdg.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_xdg.vim",
-      "rationale": "XDG and host-environment discovery are adapted at the host boundary.",
+      "bucket": "runtime_path",
+      "rationale": "XDG and host-environment discovery are observed through the runtime/environment contract boundary.",
       "related_contract_suites": [
+        "runtime_path_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_honors_xdg_config_home_for_user_runtime_dirs"
+      }
     }
   ]
 }

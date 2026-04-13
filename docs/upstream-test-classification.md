@@ -15,8 +15,8 @@ machine-readable manifest in `upstream-test-classification.json`.
 - Out of scope files: `38`
 - Temporarily excluded files: `0`
 - Adapted behaviors: `50`
-- Covered adapted behaviors: `13`
-- Uncovered adapted behaviors: `37`
+- Covered adapted behaviors: `14`
+- Uncovered adapted behaviors: `36`
 
 The in-scope denominator is the upstream-derived embedded Vim core
 baseline. It is computed as `231 preserve_directly + 42
@@ -38,10 +38,13 @@ behavior. Others, such as `test_expand.vim`, mix multiple
 responsibilities and have to be split into multiple adapted behaviors.
 
 `Rendering State Family` phase 1 uses the same vocabulary across this
-document, the scope page, and the contract tests. `Search` and `Syntax`
-stay current members, `Annotations` stays a future placeholder for
-text-property extraction, and `popupwin` remains host-owned presentation.
-Issue #14 is the later facade/public-contract promotion step.
+document, the scope page, and the contract tests. The authoritative source
+for the boundary is the docs, tests, and classification metadata named in
+`docs/SCOPE.md`. `Search` and `Syntax` stay current members, `Annotations`
+stays the deferred placeholder for text-property extraction, and `popupwin`
+is the exclusion because it remains host-owned presentation. This feature
+does not add a new family descriptor or facade.
+The family is a Vim-owned read-only extraction boundary.
 
 Within that Search family boundary, `incsearch` stays part of the
 repository's search contract coverage. The contract keeps inactive window
@@ -54,7 +57,9 @@ contract fields instead of introducing a parallel vocabulary.
 Some adapted behaviors also mix Vim-owned state with host-owned
 presentation. For saya-like hosts that implement their own popup UI,
 `popupwin` rendering stays host-owned and is not a crate extraction
-contract. `highlight` is currently traceable through search highlight
+contract. pum stays separate from popupwin exclusion because it is
+completion payload extraction, not popup-window presentation. `highlight` is
+currently traceable through search highlight
 ranges and syntax chunk extraction, but `:highlight` definition tables
 and resolved attribute tables remain outside the public contract.
 `textprop` remains Vim-owned annotation state and is deferred until the
@@ -90,11 +95,29 @@ real repository contract test. When a rendering-state family member or
 accessor is promoted, add the repository contract test before treating
 that adapted behavior as covered.
 
+## Filesystem and environment promotion
+
+The current promotion pass moves filesystem and environment behavior out
+of the broad integration gate and into dedicated contract suites when the
+crate can observe the behavior directly.
+
+- `test_file_perm.vim`, `test_file_size.vim`, and `test_filecopy.vim` are
+  now tracked through `vfs_contract.rs`, with `integration_contract.rs`
+  kept as supporting cross-cutting coverage rather than the primary
+  authority.
+- `test_xdg.vim` is now tracked through `runtime_path_contract.rs`, with
+  `integration_contract.rs` retained only as a broad gate and not the
+  primary authority.
+- `test_filechanged.vim`, `test_menu.vim`, `test_shortpathname.vim`, and
+  `test_windows_home.vim` stay outside dedicated promotion because their
+  observable boundary remains host-owned, out of scope, or
+  environment/platform dependent.
+
 ## Runtime-path bucket
 
 The runtime-path bucket now has behavior-level traceability in
 repository contract tests and the generated manifest. The bucket
-contains `16` adapted behaviors: `10` covered and `6` uncovered.
+contains `17` adapted behaviors: `11` covered and `6` uncovered.
 
 Covered runtime-path behaviors currently map to these contract tests:
 
@@ -120,6 +143,8 @@ Covered runtime-path behaviors currently map to these contract tests:
 - `runtimepath.help_tagjump_from_runtime_docs` from
   `test_help_tagjump.vim`:
   `runtimepath_contract_supports_help_tagjump_from_runtime_docs`
+- `runtimepath.xdg_user_runtime_dirs` from `test_xdg.vim`:
+  `runtimepath_honors_xdg_config_home_for_user_runtime_dirs`
 
 The remaining runtime-path behaviors stay `uncovered` for now:
 

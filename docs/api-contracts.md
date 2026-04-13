@@ -17,18 +17,32 @@ You can understand the crate as a composition of four contracts.
 ## Rendering State Family contract
 
 The rendering state family is the vocabulary we use to keep the current
-read-only extraction boundary stable. It names the current members, the
-future placeholder, and the exclusion boundary without introducing a new
-runtime facade. It is an additive explanation layer over the existing
+read-only extraction boundary stable. It names the current members, the deferred placeholder, and the exclusion boundary without introducing a new runtime facade. It is an additive explanation layer over the existing
 `VimCoreSession` surface, not a new runtime owner and not a replacement
-surface.
+surface. The authoritative source for this boundary is the set of docs,
+tests, and classification metadata named in `docs/SCOPE.md`. The family is a
+Vim-owned read-only extraction boundary.
 
-- `Search` and `Syntax` are the current family members.
-- `Annotations` is the future placeholder for text-property extraction.
-- `popupwin` stays outside the family as host-owned presentation.
+- `Search` and `Syntax` are the current members.
+- `Annotations` is the deferred placeholder for text-property extraction.
+- `popupwin` is the exclusion and stays outside the family as host-owned
+  presentation.
 - popup placement, popup composition, popup borders, and overlay layout stay
   outside the family as host-owned presentation policy.
-- Issue #14 owns any later facade or public-contract promotion work.
+- This feature does not add a new family descriptor or facade. If a future
+  family-level descriptor is introduced, it must remain an additive stateless
+  summary over `VimCoreSession`.
+
+## Register readback contract
+
+The public register readback promise is documented in
+`docs/public-api-reference.md`, but `tests/register_contract.rs` is the source
+of truth for observable behavior.
+
+- `VimCoreSession::register()` returns the full register contents, including
+  multiline text and trailing newlines.
+- The contract tests define the observable semantics for unnamed, black-hole,
+  and multiline register readback.
 
 ## Session contract
 
