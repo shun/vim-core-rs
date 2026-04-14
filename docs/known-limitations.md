@@ -56,9 +56,14 @@ Local buffers and VFS-backed buffers do not follow the same save path.
   natively.
 - For local buffers, `:write {path} | quit` and `:update {path} | quit` keep
   the same host coordination and enqueue `[Write, Quit]`.
-- For VFS-backed buffers, `:write | quit` is still not treated as `:wq`. Save
-  completion has to round-trip through `submit_vfs_response()`, so use `:wq`
-  or `:xit` when you need deferred close after a host-owned save.
+- For VFS-backed buffers, `:write [path] | quit-family`, `:write! [path] |
+  quit-family`, and dirty `:update [path] | quit-family` now enter the same
+  deferred close flows as `:wq` and `:xit`.
+- For VFS-backed buffers, `:update! [path] | quit-family`, range-prefixed
+  forms, and generalized pipeline semantics beyond the first quit-family
+  trailing segment remain outside this intercept path.
+- For VFS-backed buffers, clean `:update [path] | quit-family` still skips an
+  unnecessary save and follows the existing no-op contract.
 
 ## Build and feature limits
 

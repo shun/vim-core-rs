@@ -550,8 +550,8 @@ enum ParsedExIntent {
     Edit { locator: String },
     Write { path: String, force: bool },
     Update { path: String, force: bool },
-    SaveAndClose { force: bool },
-    SaveIfDirtyAndClose,
+    SaveAndClose { force: bool, path: String },
+    SaveIfDirtyAndClose { path: String },
     Quit { force: bool },
 }
 
@@ -1016,7 +1016,7 @@ impl VimCoreSession {
 
                 self.apply_write_intent(path, force, None)
             }
-            ParsedExIntent::SaveAndClose { force } => {
+            ParsedExIntent::SaveAndClose { force, path } => {
                 let snapshot = self.snapshot();
                 let active_buf = snapshot
                     .buffers
@@ -1034,7 +1034,7 @@ impl VimCoreSession {
                     self.document_coordinator
                         .borrow_mut()
                         .set_deferred_close(buf_id, CoreDeferredClose::SaveAndClose);
-                    self.apply_write_intent(String::new(), force, None)
+                    self.apply_write_intent(path, force, None)
                 } else {
                     // local buffer: :wq は Write → Quit の順でキューする（ホストが save-before-quit を調整）
                     let revision = snapshot.revision;
@@ -1056,7 +1056,7 @@ impl VimCoreSession {
                     Ok(CoreCommandOutcome::HostActionQueued)
                 }
             }
-            ParsedExIntent::SaveIfDirtyAndClose => {
+            ParsedExIntent::SaveIfDirtyAndClose { path } => {
                 let snapshot = self.snapshot();
                 let active_buf = snapshot
                     .buffers
@@ -1074,7 +1074,7 @@ impl VimCoreSession {
                     self.document_coordinator
                         .borrow_mut()
                         .set_deferred_close(buf_id, CoreDeferredClose::SaveIfDirtyAndClose);
-                    self.apply_write_intent(String::new(), false, None)
+                    self.apply_write_intent(path, false, None)
                 } else if is_vfs {
                     // clean VFS buffer -> そのまま close
                     let revision = snapshot.revision;
@@ -1420,6 +1420,7 @@ impl VimCoreSession {
                 }
                 // インターセプト対象のサブコマンドを処理
                 let intent = parse_single_ex_intent(segments[idx].trim()).unwrap();
+                let intent = rewrite_vfs_trailing_quit_intent(self, intent, &segments[idx + 1..]);
                 let should_chain_trailing_quit =
                     should_chain_trailing_quit_for_local_write(self, &intent, &segments[idx + 1..]);
                 let outcome = self.apply_intent(intent)?;
@@ -3034,8 +3035,13 @@ fn parse_single_ex_intent(trimmed: &str) -> Option<ParsedExIntent> {
             path: tail,
             force: bang,
         }),
-        "wq" | "wqall" => Some(ParsedExIntent::SaveAndClose { force: bang }),
-        "exit" | "xit" | "x" | "xall" => Some(ParsedExIntent::SaveIfDirtyAndClose),
+        "wq" | "wqall" => Some(ParsedExIntent::SaveAndClose {
+            force: bang,
+            path: String::new(),
+        }),
+        "exit" | "xit" | "x" | "xall" => Some(ParsedExIntent::SaveIfDirtyAndClose {
+            path: String::new(),
+        }),
         "quit" | "q" | "quitall" | "qall" | "qa" => Some(ParsedExIntent::Quit { force: bang }),
         _ => None,
     }
@@ -3066,8 +3072,8 @@ fn split_compound_ex(input: &str) -> Vec<&str> {
             }
             continue;
         }
-        // 正規表現区切り（:s/pat|ern/repl/）内はスキップ
-        if ch == b'/' {
+        // `:s/.../` 系だけを regex 区切りとして扱う。path の `/` は無視しない。
+        if ch == b'/' && is_substitution_like_segment(&input[start..i]) {
             i += 1;
             while i < len && bytes[i] != b'/' {
                 if bytes[i] == b'\\' {
@@ -3091,6 +3097,31 @@ fn split_compound_ex(input: &str) -> Vec<&str> {
     }
     segments.push(&input[start..]);
     segments
+}
+
+fn is_substitution_like_segment(segment: &str) -> bool {
+    let trimmed = segment.trim_start();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    if let Some(rest) = trimmed.strip_prefix("substitute") {
+        return rest.is_empty()
+            || matches!(
+                rest.as_bytes().first(),
+                Some(b' ' | b'/' | b'#' | b'?' | b'+')
+            );
+    }
+
+    if let Some(rest) = trimmed.strip_prefix('s') {
+        return rest.is_empty()
+            || matches!(
+                rest.as_bytes().first(),
+                Some(b' ' | b'/' | b'#' | b'?' | b'+')
+            );
+    }
+
+    false
 }
 
 fn parse_ex_intent(command: &str) -> Option<ParsedExIntent> {
@@ -3157,6 +3188,37 @@ fn should_chain_trailing_quit_for_local_write(
         .document_coordinator
         .borrow()
         .is_vfs_buffer(active_buf.id)
+}
+
+fn rewrite_vfs_trailing_quit_intent(
+    session: &VimCoreSession,
+    intent: ParsedExIntent,
+    trailing_segments: &[&str],
+) -> ParsedExIntent {
+    if find_first_trailing_quit_intent(trailing_segments).is_none() {
+        return intent;
+    }
+
+    let snapshot = session.snapshot();
+    let Some(active_buf) = snapshot.buffers.iter().find(|buffer| buffer.is_active) else {
+        return intent;
+    };
+
+    if !session
+        .document_coordinator
+        .borrow()
+        .is_vfs_buffer(active_buf.id)
+    {
+        return intent;
+    }
+
+    match intent {
+        ParsedExIntent::Write { force, path } => ParsedExIntent::SaveAndClose { force, path },
+        ParsedExIntent::Update { force: false, path } => {
+            ParsedExIntent::SaveIfDirtyAndClose { path }
+        }
+        other => other,
+    }
 }
 
 fn find_first_trailing_quit_intent(trailing_segments: &[&str]) -> Option<ParsedExIntent> {

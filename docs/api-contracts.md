@@ -108,12 +108,20 @@ The command contract explains how mutations report outcomes.
 The Ex command parser is part of the public behavior even though the parser
 type is private.
 
+- The contract tests in `tests/vfs_contract.rs` define the accepted and
+  excluded compound forms for this routing boundary.
 - `:edit` becomes a `CoreVfsRequest::Resolve` against the active buffer.
 - `:write` and `:update` become either `CoreHostAction::Write` for local
   buffers or `CoreVfsRequest::Save` for virtual buffers.
 - On local buffers, a compound Ex command with an intercepted `:write` or
   `:update` followed immediately by `:quit` also queues `Quit` so the host can
   keep save-before-quit ordering.
+- On VFS-backed buffers, `:write [path] | quit-family`, `:write! [path] |
+  quit-family`, and dirty `:update [path] | quit-family` enter the same
+  deferred close flows as `:wq` and `:xit`.
+- `:update! [path] | quit-family`, range-prefixed forms, and generalized
+  pipeline semantics beyond the first `quit-family` trailing segment stay
+  outside this contract.
 - `:update` on a clean VFS buffer becomes `CoreCommandOutcome::NoChange`.
 - `:wq` on a VFS buffer sets `CoreDeferredClose::SaveAndClose`, issues a save,
   and only later resumes quit after save success.
@@ -230,6 +238,9 @@ The VFS coordinator validates more than request IDs.
 Deferred close exists to support `:wq` and `:xit` on VFS-backed buffers.
 
 - The coordinator stores deferred close state on the active buffer binding.
+- The VFS-backed compound forms documented in the Ex intent routing contract
+  reuse these same deferred close states instead of introducing another close
+  model.
 - `SaveAndClose` means a quit must happen after save completion regardless of
   prior dirty state.
 - `SaveIfDirtyAndClose` means a quit must happen after save completion only for

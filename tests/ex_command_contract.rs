@@ -411,3 +411,30 @@ fn ex_compound_update_then_quit_preserves_host_coordination_on_local_buffer() {
         outcome.host_actions
     );
 }
+
+#[test]
+fn ex_range_prefixed_write_then_quit_keeps_range_write_on_native_path() {
+    let _guard = acquire_session_test_lock();
+    let mut session =
+        VimCoreSession::new("alpha\nbeta\ngamma\n").expect("session should initialize");
+
+    let test_file = "Xtest_range_prefixed_write.txt";
+    if fs::metadata(test_file).is_ok() {
+        fs::remove_file(test_file).ok();
+    }
+
+    let outcome = session
+        .execute_ex_command(&format!(":1,2write! {} | quit", test_file))
+        .expect("range-prefixed write|quit should succeed");
+
+    assert!(matches!(
+        outcome.host_actions.as_slice(),
+        [CoreHostAction::Quit { force: false, .. }]
+    ));
+
+    let file_content =
+        fs::read_to_string(test_file).expect("range-prefixed write should run on native path");
+    assert_eq!(file_content, "alpha\nbeta\n");
+
+    fs::remove_file(test_file).ok();
+}
