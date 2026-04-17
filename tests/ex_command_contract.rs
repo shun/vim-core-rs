@@ -413,6 +413,60 @@ fn ex_compound_update_then_quit_preserves_host_coordination_on_local_buffer() {
 }
 
 #[test]
+fn ex_compound_non_slash_repeat_last_then_write_and_quit_preserves_local_coordination() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("foo|bar foo|bar").expect("session should initialize");
+
+    session
+        .execute_ex_command(":s#foo|bar#baz#")
+        .expect("non-slash substitute should succeed");
+
+    let outcome = session
+        .execute_ex_command(":s g | write compound_repeat.txt | quit")
+        .expect("repeat-last compound command should succeed");
+
+    assert_eq!(outcome.snapshot.text.trim_end_matches('\n'), "baz baz");
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::HostActionQueued
+    ));
+    assert!(
+        matches!(
+            outcome.host_actions.as_slice(),
+            [CoreHostAction::Write { path, force: false, .. }, CoreHostAction::Quit { force: false, .. }]
+            if path == "compound_repeat.txt"
+        ),
+        "Expected [Write, Quit] after repeat-last substitute, got {:?}",
+        outcome.host_actions
+    );
+}
+
+#[test]
+fn ex_compound_magic_abbreviation_then_update_and_quit_preserves_local_coordination() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("foo|bar").expect("session should initialize");
+
+    let outcome = session
+        .execute_ex_command(":sm#foo|bar#baz# | update compound_magic.txt | quit")
+        .expect("magic abbreviation compound command should succeed");
+
+    assert_eq!(outcome.snapshot.text.trim_end_matches('\n'), "baz");
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::HostActionQueued
+    ));
+    assert!(
+        matches!(
+            outcome.host_actions.as_slice(),
+            [CoreHostAction::Write { path, force: false, .. }, CoreHostAction::Quit { force: false, .. }]
+            if path == "compound_magic.txt"
+        ),
+        "Expected [Write, Quit] after sm#...#...# | update | quit, got {:?}",
+        outcome.host_actions
+    );
+}
+
+#[test]
 fn ex_range_prefixed_write_then_quit_keeps_range_write_on_native_path() {
     let _guard = acquire_session_test_lock();
     let mut session =

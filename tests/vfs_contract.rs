@@ -1118,6 +1118,77 @@ fn write_pipe_quit_on_vfs_buffer_preserves_target_locator_and_resumes_quit_after
 }
 
 #[test]
+fn non_slash_substitute_then_write_pipe_quit_on_vfs_buffer_preserves_save_coordination() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("hello").expect("session should initialize");
+
+    prepare_vfs_buffer(
+        &mut session,
+        "mem://notes/write_pipe_quit_hash",
+        "doc://notes/write_pipe_quit_hash",
+        "notes/write_pipe_quit_hash",
+        "write|pipe quit content",
+    );
+
+    let outcome = session
+        .execute_ex_command(":s#write|pipe#WRITE# | write mem://backup/write_pipe_quit_hash | quit")
+        .expect("non-slash compound write|quit should queue save request");
+    assert!(matches!(
+        outcome.outcome,
+        vim_core_rs::CoreCommandOutcome::HostActionQueued
+    ));
+    assert_eq!(
+        outcome.snapshot.text.trim_end_matches('\n'),
+        "WRITE quit content"
+    );
+
+    let save_request = take_vfs_request(outcome.host_actions);
+    let save_id = match &save_request {
+        CoreVfsRequest::Save { request_id, .. } => *request_id,
+        other => panic!("expected Save, got {other:?}"),
+    };
+    assert!(
+        matches!(
+            save_request,
+            CoreVfsRequest::Save {
+                target_locator: Some(ref target_locator),
+                force: false,
+                ..
+            } if target_locator == "mem://backup/write_pipe_quit_hash"
+        ),
+        "unexpected save request: {save_request:?}"
+    );
+
+    let active_buf = session
+        .snapshot()
+        .buffers
+        .iter()
+        .find(|b| b.is_active)
+        .expect("active buffer should exist")
+        .clone();
+    assert_eq!(
+        active_buf.deferred_close,
+        Some(CoreDeferredClose::SaveAndClose)
+    );
+
+    session
+        .submit_vfs_response(CoreVfsResponse::Saved {
+            request_id: save_id,
+            document_id: "doc://notes/write_pipe_quit_hash".to_string(),
+        })
+        .expect("saved response should succeed");
+
+    let found_quit = session
+        .take_pending_host_action()
+        .map(|action| matches!(action, CoreHostAction::Quit { force: false, .. }))
+        .unwrap_or(false);
+    assert!(
+        found_quit,
+        "quit should resume after non-slash :write | quit save success"
+    );
+}
+
+#[test]
 fn write_bang_pipe_quit_on_vfs_buffer_preserves_target_locator_and_force() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("hello").expect("session should initialize");
@@ -1257,6 +1328,83 @@ fn update_pipe_quit_on_dirty_vfs_buffer_preserves_target_locator_and_resumes_qui
     assert!(
         found_quit,
         "quit should resume after dirty :update | quit save success"
+    );
+}
+
+#[test]
+fn non_slash_magic_substitute_then_update_pipe_quit_on_dirty_vfs_buffer_preserves_coordination() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("hello").expect("session should initialize");
+
+    prepare_vfs_buffer(
+        &mut session,
+        "mem://notes/update_pipe_quit_hash",
+        "doc://notes/update_pipe_quit_hash",
+        "notes/update_pipe_quit_hash",
+        "update|pipe quit content",
+    );
+
+    let outcome = session
+        .execute_ex_command(
+            ":sm#update|pipe#UPDATE# | update mem://backup/update_pipe_quit_hash | quit",
+        )
+        .expect("non-slash compound update|quit should queue save request");
+    assert!(matches!(
+        outcome.outcome,
+        vim_core_rs::CoreCommandOutcome::HostActionQueued
+    ));
+    assert_eq!(
+        outcome.snapshot.text.trim_end_matches('\n'),
+        "UPDATE quit content"
+    );
+    assert!(
+        outcome.snapshot.dirty,
+        "substitute should leave buffer dirty"
+    );
+
+    let save_request = take_vfs_request(outcome.host_actions);
+    let save_id = match &save_request {
+        CoreVfsRequest::Save { request_id, .. } => *request_id,
+        other => panic!("expected Save, got {other:?}"),
+    };
+    assert!(
+        matches!(
+            save_request,
+            CoreVfsRequest::Save {
+                target_locator: Some(ref target_locator),
+                force: false,
+                ..
+            } if target_locator == "mem://backup/update_pipe_quit_hash"
+        ),
+        "unexpected save request: {save_request:?}"
+    );
+
+    let active_buf = session
+        .snapshot()
+        .buffers
+        .iter()
+        .find(|b| b.is_active)
+        .expect("active buffer should exist")
+        .clone();
+    assert_eq!(
+        active_buf.deferred_close,
+        Some(CoreDeferredClose::SaveIfDirtyAndClose)
+    );
+
+    session
+        .submit_vfs_response(CoreVfsResponse::Saved {
+            request_id: save_id,
+            document_id: "doc://notes/update_pipe_quit_hash".to_string(),
+        })
+        .expect("saved response should succeed");
+
+    let found_quit = session
+        .take_pending_host_action()
+        .map(|action| matches!(action, CoreHostAction::Quit { force: false, .. }))
+        .unwrap_or(false);
+    assert!(
+        found_quit,
+        "quit should resume after non-slash dirty :update | quit save success"
     );
 }
 
