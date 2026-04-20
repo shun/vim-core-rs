@@ -34,6 +34,20 @@ fn edit_with_fnameescape(session: &mut VimCoreSession, path: &Path) {
         .expect("edit should succeed through fnameescape");
 }
 
+fn source_with_fnameescape(session: &mut VimCoreSession, path: &Path) {
+    let path_literal = vim_string_literal(&path.to_string_lossy());
+    session
+        .execute_ex_command(&format!("execute 'source ' . fnameescape({path_literal})"))
+        .expect("source should succeed through fnameescape");
+}
+
+fn change_dir_with_fnameescape(session: &mut VimCoreSession, path: &Path) {
+    let path_literal = vim_string_literal(&path.to_string_lossy());
+    session
+        .execute_ex_command(&format!("execute 'cd ' . fnameescape({path_literal})"))
+        .expect("cd should succeed through fnameescape");
+}
+
 fn eval_required(session: &mut VimCoreSession, expr: &str) -> String {
     session
         .eval_string(expr)
@@ -62,6 +76,35 @@ fn set_env_var(name: &'static str, value: &Path) -> EnvVarGuard {
         std::env::set_var(name, value);
     }
     EnvVarGuard { name, previous }
+}
+
+fn capture_env_var(name: &'static str) -> EnvVarGuard {
+    EnvVarGuard {
+        name,
+        previous: std::env::var_os(name),
+    }
+}
+
+struct CwdGuard {
+    previous: std::path::PathBuf,
+}
+
+impl CwdGuard {
+    fn capture() -> Self {
+        let fallback = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        Self {
+            previous: std::env::current_dir().unwrap_or(fallback),
+        }
+    }
+}
+
+impl Drop for CwdGuard {
+    fn drop(&mut self) {
+        if std::env::set_current_dir(&self.previous).is_err() {
+            std::env::set_current_dir(env!("CARGO_MANIFEST_DIR"))
+                .expect("current dir should be restored to the repo root");
+        }
+    }
 }
 
 #[test]
@@ -526,4 +569,314 @@ fn runtimepath_contract_supports_filetype_detection_from_runtime() {
     edit_with_fnameescape(&mut session, &sample_path);
 
     assert_eq!(eval_required(&mut session, "&filetype"), "contracttest");
+}
+
+#[test]
+fn runtimepath_contract_supports_tilde_and_env_path_expansion() {
+    let _guard = acquire_session_test_lock();
+    let _cwd_guard = CwdGuard::capture();
+    let temp = tempdir().expect("failed to create temp dir");
+    let home_dir = temp.path().join("home");
+    let tilde_dir = temp.path().join("Xdir ~ dir");
+    fs::create_dir_all(&home_dir).expect("failed to create HOME dir");
+    fs::create_dir_all(&tilde_dir).expect("failed to create literal tilde dir");
+
+    let _home_guard = set_env_var("HOME", &home_dir);
+    let mut session = VimCoreSession::new("").expect("failed to create session");
+
+    change_dir_with_fnameescape(&mut session, temp.path());
+    change_dir_with_fnameescape(&mut session, &tilde_dir);
+    assert!(
+        eval_required(&mut session, "getcwd()").contains("Xdir ~ dir"),
+        "getcwd() should keep the literal tilde path segment"
+    );
+
+    session
+        .execute_ex_command("let $FOO = './foo'")
+        .expect("FOO should be set");
+    assert_eq!(
+        eval_required(&mut session, "expand('$FOO/bar')"),
+        "./foo/bar"
+    );
+    session
+        .execute_ex_command("let $FOO = './foo/'")
+        .expect("FOO should be updated");
+    assert_eq!(
+        eval_required(&mut session, "expand('$FOO/bar')"),
+        "./foo/bar"
+    );
+    session
+        .execute_ex_command("let $FOO = 'C:'")
+        .expect("FOO should be updated");
+    assert_eq!(eval_required(&mut session, "expand('$FOO/bar')"), "C:/bar");
+    session
+        .execute_ex_command("let $FOO = 'C:/'")
+        .expect("FOO should be updated");
+    assert_eq!(eval_required(&mut session, "expand('$FOO/bar')"), "C:/bar");
+    session
+        .execute_ex_command("unlet $FOO")
+        .expect("FOO should be unset");
+
+    session
+        .execute_ex_command("split ~")
+        .expect("split ~ should keep the literal filename");
+    assert_eq!(eval_required(&mut session, "expand('%')"), "~");
+    assert_ne!(
+        eval_required(&mut session, "expand('%:p')"),
+        eval_required(&mut session, "expand('~/')")
+    );
+    assert!(
+        eval_required(&mut session, "expand('%:p')").contains('~'),
+        "expand('%:p') should keep the literal tilde path"
+    );
+    session
+        .execute_ex_command("bwipe!")
+        .expect("temporary tilde buffer should close");
+}
+
+#[test]
+fn runtimepath_contract_supports_expandcmd_general_cases() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("").expect("failed to create session");
+
+    session
+        .execute_ex_command("let $FOO = 'Test'")
+        .expect("FOO should be set");
+    assert_eq!(
+        eval_required(&mut session, "expandcmd('e x/$FOO/y')"),
+        "e x/Test/y"
+    );
+    session
+        .execute_ex_command("unlet $FOO")
+        .expect("FOO should be unset");
+
+    session
+        .execute_ex_command("new")
+        .expect("scratch window should open");
+    session
+        .execute_ex_command("call setline(1, 'Vim!@#')")
+        .expect("scratch buffer should be populated");
+    assert_eq!(
+        eval_required(&mut session, "expandcmd('e <cword>')"),
+        "e Vim"
+    );
+    assert_eq!(
+        eval_required(&mut session, "expandcmd('e <cWORD>')"),
+        "e Vim!@#"
+    );
+}
+
+#[test]
+fn runtimepath_contract_supports_environment_mutation_and_escaped_globbing() {
+    let _guard = acquire_session_test_lock();
+    let _cwd_guard = CwdGuard::capture();
+    let _home_restore = capture_env_var("HOME");
+    let _testenv_restore = capture_env_var("TESTENV");
+    let temp = tempdir().expect("failed to create temp dir");
+    let mut session = VimCoreSession::new("").expect("failed to create session");
+
+    session
+        .execute_ex_command("unlet! $TESTENV")
+        .expect("TESTENV should be unset");
+    assert_eq!(
+        eval_required(&mut session, "string(has_key(environ(), 'TESTENV'))"),
+        "0"
+    );
+    session
+        .execute_ex_command("let $TESTENV = 'foo'")
+        .expect("TESTENV should be set");
+    assert_eq!(eval_required(&mut session, "getenv('TESTENV')"), "foo");
+    session
+        .execute_ex_command("call setenv('TEST ENV', 'foo')")
+        .expect("custom env should be set");
+    assert_eq!(eval_required(&mut session, "getenv('TEST ENV')"), "foo");
+    session
+        .execute_ex_command("call setenv('TEST ENV', v:null)")
+        .expect("custom env should be unset");
+    assert_eq!(
+        eval_required(&mut session, "string(getenv('TEST ENV'))"),
+        "v:null"
+    );
+
+    session
+        .execute_ex_command("let $HOME = 'foo'")
+        .expect("HOME should be set");
+    assert_eq!(eval_required(&mut session, "expand('~')"), "foo");
+    session
+        .execute_ex_command("unlet $HOME")
+        .expect("HOME should be unset");
+    assert_eq!(eval_required(&mut session, "expand('~')"), "foo");
+    session
+        .execute_ex_command("call setenv('HOME', 'bar')")
+        .expect("HOME should be updated");
+    assert_eq!(eval_required(&mut session, "expand('~')"), "bar");
+    session
+        .execute_ex_command("call setenv('HOME', v:null)")
+        .expect("HOME should be unset");
+    assert_eq!(eval_required(&mut session, "expand('~')"), "bar");
+
+    let autoload_dir = temp.path().join("sautest").join("autoload");
+    fs::create_dir_all(&autoload_dir).expect("failed to create autoload dir");
+    fs::write(temp.path().join("Xxx{"), "").expect("failed to write Xxx{");
+    fs::write(temp.path().join("Xxx$"), "").expect("failed to write Xxx$");
+    fs::write(autoload_dir.join("globone.vim"), "").expect("failed to write globone");
+    fs::write(autoload_dir.join("globtwo.vim"), "").expect("failed to write globtwo");
+
+    change_dir_with_fnameescape(&mut session, temp.path());
+    assert_eq!(eval_required(&mut session, "glob('Xxx\\{')"), "Xxx{");
+    assert_eq!(eval_required(&mut session, "glob('Xxx\\$')"), "Xxx$");
+    assert_eq!(
+        eval_required(&mut session, "globpath('sautest/autoload', 'glob*.vim')"),
+        "sautest/autoload/globone.vim\nsautest/autoload/globtwo.vim"
+    );
+}
+
+#[test]
+fn runtimepath_contract_supports_expand_function_semantics_and_glob2regpat() {
+    let _guard = acquire_session_test_lock();
+    let _cwd_guard = CwdGuard::capture();
+    let temp = tempdir().expect("failed to create temp dir");
+    let mut session = VimCoreSession::new("").expect("failed to create session");
+
+    change_dir_with_fnameescape(&mut session, temp.path());
+    let sourced_script = temp.path().join("contract_expand_func.vim");
+    fs::write(
+        &sourced_script,
+        concat!(
+            "let g:contract_expand_sfile = expand('<sfile>')\n",
+            "let g:contract_expand_stack = expand('<stack>')\n",
+        ),
+    )
+    .expect("failed to write sourced expand script");
+    source_with_fnameescape(&mut session, &sourced_script);
+    assert!(
+        eval_required(&mut session, "g:contract_expand_sfile")
+            .ends_with("contract_expand_func.vim"),
+        "expand('<sfile>') should resolve to the sourced script path"
+    );
+    assert!(
+        eval_required(&mut session, "g:contract_expand_stack")
+            .ends_with("contract_expand_func.vim[2]"),
+        "expand('<stack>') should record the sourced script frame"
+    );
+
+    fs::write(temp.path().join("contract_expand_func.vim"), "")
+        .expect("failed to write wildcard sample");
+    session
+        .execute_ex_command("set wildignore=*.vim")
+        .expect("wildignore should be set");
+    assert_eq!(
+        eval_required(&mut session, "expand('contract_expand_func.vim')"),
+        ""
+    );
+    assert_eq!(
+        eval_required(&mut session, "expand('contract_expand_func.vim', 1)"),
+        "contract_expand_func.vim"
+    );
+    session
+        .execute_ex_command("set wildignore&")
+        .expect("wildignore should reset");
+
+    assert_eq!(
+        eval_required(&mut session, "glob2regpat('*.vim')"),
+        "\\.vim$"
+    );
+    session
+        .execute_ex_command("call assert_fails('call glob2regpat(\"{\")', 'E220:')")
+        .expect("invalid glob2regpat input should remain rejected");
+}
+
+#[test]
+fn runtimepath_contract_supports_script_context_source_placeholders() {
+    let _guard = acquire_session_test_lock();
+    let _cwd_guard = CwdGuard::capture();
+    let temp = tempdir().expect("failed to create temp dir");
+    let mut session = VimCoreSession::new("").expect("failed to create session");
+
+    change_dir_with_fnameescape(&mut session, temp.path());
+    let script0 = temp.path().join("Xscript0");
+    let script1 = temp.path().join("Xscript1");
+    let script2 = temp.path().join("Xscript2");
+    fs::write(
+        &script0,
+        concat!(
+            "call extend(g:script_level, [expand('<script>:t')])\n",
+            "source Xscript1\n",
+            "func F0()\n",
+            "  call extend(g:func_level, [expand('<script>:t')])\n",
+            "endfunc\n",
+            "au User * call extend(g:au_level, [expand('<script>:t')])\n",
+        ),
+    )
+    .expect("failed to write Xscript0");
+    fs::write(
+        &script1,
+        concat!(
+            "call extend(g:script_level, [expand('<script>:t')])\n",
+            "source Xscript2\n",
+            "func F1()\n",
+            "  call extend(g:func_level, [expand('<script>:t')])\n",
+            "endfunc\n",
+            "au User * call extend(g:au_level, [expand('<script>:t')])\n",
+        ),
+    )
+    .expect("failed to write Xscript1");
+    fs::write(
+        &script2,
+        concat!(
+            "call extend(g:script_level, [expand('<script>:t')])\n",
+            "func F2()\n",
+            "  call extend(g:func_level, [expand('<script>:t')])\n",
+            "endfunc\n",
+            "au User * call extend(g:au_level, [expand('<script>:t')])\n",
+        ),
+    )
+    .expect("failed to write Xscript2");
+
+    session
+        .execute_ex_command("let g:script_level = [] | let g:func_level = [] | let g:au_level = []")
+        .expect("script context globals should initialize");
+    source_with_fnameescape(&mut session, &script0);
+    session
+        .execute_ex_command("call F0()")
+        .expect("F0 should run");
+    session
+        .execute_ex_command("call F1()")
+        .expect("F1 should run");
+    session
+        .execute_ex_command("call F2()")
+        .expect("F2 should run");
+    session
+        .execute_ex_command("doautocmd User")
+        .expect("User autocmd should run");
+
+    assert_eq!(
+        eval_required(&mut session, "string(g:script_level)"),
+        "['Xscript0', 'Xscript1', 'Xscript2']"
+    );
+    assert_eq!(
+        eval_required(&mut session, "string(g:func_level)"),
+        "['Xscript0', 'Xscript1', 'Xscript2']"
+    );
+    assert_eq!(
+        eval_required(&mut session, "string(g:au_level)"),
+        "['Xscript2', 'Xscript1', 'Xscript0']"
+    );
+
+    assert_eq!(
+        eval_required(&mut session, "expandcmd('<sfile>')"),
+        "<sfile>"
+    );
+    assert_eq!(
+        eval_required(&mut session, "expandcmd('<slnum>')"),
+        "<slnum>"
+    );
+    assert_eq!(
+        eval_required(&mut session, "expandcmd('<sflnum>')"),
+        "<sflnum>"
+    );
+    assert_eq!(eval_required(&mut session, "expand('<script>')"), "");
+    session
+        .execute_ex_command("call assert_fails('autocmd User MyCmd echo \"<sfile>\"', 'E498:')")
+        .expect("outside-source <sfile> placeholder should stay rejected");
 }

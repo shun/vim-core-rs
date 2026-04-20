@@ -4000,12 +4000,16 @@
         "Test_with_tilde"
       ],
       "bucket": "environment",
-      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "rationale": "Working-directory and tilde-preserving path expansion near the host filesystem boundary is preserved through repository runtime-path contracts.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_tilde_and_env_path_expansion"
+      }
     },
     {
       "id": "environment.expand_env_pathsep",
@@ -4015,12 +4019,16 @@
         "Test_expand_env_pathsep"
       ],
       "bucket": "environment",
-      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "rationale": "Environment-driven path separator expansion at the host filesystem boundary is preserved through repository runtime-path contracts.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_tilde_and_env_path_expansion"
+      }
     },
     {
       "id": "environment.expand_tilde_filename",
@@ -4030,12 +4038,16 @@
         "Test_expand_tilde_filename"
       ],
       "bucket": "environment",
-      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "rationale": "Literal tilde filename expansion at the host filesystem boundary is preserved through repository runtime-path contracts.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_tilde_and_env_path_expansion"
+      }
     },
     {
       "id": "expansion.expandcmd_general",
@@ -4045,12 +4057,16 @@
         "Test_expandcmd"
       ],
       "bucket": "expansion",
-      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "rationale": "General command-line expansion that depends on environment and current buffer text is preserved through repository runtime-path contracts.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_expandcmd_general_cases"
+      }
     },
     {
       "id": "expansion.expandcmd_shell_nonomatch",
@@ -4060,7 +4076,7 @@
         "Test_expandcmd_shell_nonomatch"
       ],
       "bucket": "expansion",
-      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "rationale": "Shell non-match expansion remains uncovered because repository contracts do not make shell or platform-dependent command expansion a runtime/environment guarantee.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
@@ -4075,7 +4091,7 @@
         "Test_expand_filename_multicmd"
       ],
       "bucket": "expansion",
-      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "rationale": "Compound filename re-expansion remains uncovered because it is compound editor-core command-line parsing semantics rather than a dedicated runtime/environment contract.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
@@ -4130,12 +4146,16 @@
         "Test_setenv"
       ],
       "bucket": "runtime_path",
-      "rationale": "Environment-dependent behavior is adapted at the host boundary.",
+      "rationale": "Environment mutation and HOME expansion are observable at the embedded host boundary and are fixed by repository runtime-path contracts.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_environment_mutation_and_escaped_globbing"
+      }
     },
     {
       "id": "runtimepath.escaped_glob_and_globpath",
@@ -4146,12 +4166,16 @@
         "Test_globpath"
       ],
       "bucket": "runtime_path",
-      "rationale": "Path globbing near the host filesystem boundary is treated as adapted behavior.",
+      "rationale": "Escaped globbing near the host filesystem boundary is preserved through repository runtime-path contracts.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_environment_mutation_and_escaped_globbing"
+      }
     },
     {
       "id": "runtimepath.expand.directory_wildcard_buffer_selection",
@@ -4185,7 +4209,7 @@
         "Test_expand_tcldll"
       ],
       "bucket": "runtime_path",
-      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "rationale": "optional-feature interpreter dll options remain uncovered because current source builds do not guarantee interpreter-specific option surfaces.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
@@ -4200,12 +4224,16 @@
         "Test_expand"
       ],
       "bucket": "runtime_path",
-      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "rationale": "Path-oriented expand() behavior is preserved through repository runtime-path contracts without reimplementing Vim semantics.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_expand_function_semantics_and_glob2regpat"
+      }
     },
     {
       "id": "runtimepath.filetype_detection_from_runtime",
@@ -4311,12 +4339,16 @@
         "Test_glob2regpat_invalid"
       ],
       "bucket": "runtime_path",
-      "rationale": "Path globbing near the host filesystem boundary is treated as adapted behavior.",
+      "rationale": "Glob-to-regex translation used at the path boundary is preserved through repository runtime-path contracts.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_expand_function_semantics_and_glob2regpat"
+      }
     },
     {
       "id": "runtimepath.global_command_path_sensitive_flows",
@@ -4327,7 +4359,7 @@
         "Test_global_print"
       ],
       "bucket": "runtime_path",
-      "rationale": "Path globbing near the host filesystem boundary is treated as adapted behavior.",
+      "rationale": "The mapped :global cases remain uncovered because they are editor-core command semantics, not a dedicated runtime/environment contract.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
@@ -4382,12 +4414,16 @@
         "Test_expand_script_source"
       ],
       "bucket": "script_context",
-      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "rationale": "Script-context placeholder expansion is preserved through repository runtime-path contracts.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_script_context_source_placeholders"
+      }
     },
     {
       "id": "script_context.source_placeholders_outside_source",
@@ -4397,12 +4433,16 @@
         "Test_source_sfile"
       ],
       "bucket": "script_context",
-      "rationale": "Path expansion near the host filesystem boundary is treated as adapted behavior.",
+      "rationale": "Outside-source placeholder behavior is preserved through repository runtime-path contracts.",
       "related_contract_suites": [
         "runtime_path_contract.rs",
         "integration_contract.rs"
       ],
-      "coverage_status": "uncovered"
+      "coverage_status": "covered",
+      "coverage_evidence": {
+        "contract_suite": "runtime_path_contract.rs",
+        "test_name": "runtimepath_contract_supports_script_context_source_placeholders"
+      }
     },
     {
       "id": "test_autocmd",

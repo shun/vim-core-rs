@@ -1125,11 +1125,7 @@ mod build_test_runner_contract_tests {
             serde_json::from_str(&manifest).expect("manifest should deserialize");
 
         let expected_remaining_units = [
-            "runtimepath.environ_home_and_environment_expansion",
-            "runtimepath.escaped_glob_and_globpath",
             "runtimepath.expand_dllpath_options",
-            "runtimepath.expand_function_semantics",
-            "runtimepath.glob2regpat_conversion",
             "runtimepath.global_command_path_sensitive_flows",
         ];
         let remaining_runtime_path_units: Vec<_> = adapted_behaviors(&manifest)
@@ -1153,6 +1149,108 @@ mod build_test_runner_contract_tests {
             remaining_runtime_path_units, expected_remaining_units,
             "remaining runtime-path adapted behaviors should stay explicitly uncovered"
         );
+    }
+
+    #[test]
+    fn generate_upstream_tests_reflects_issue15_promoted_behaviors_as_covered() {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set");
+        let repo_root = Path::new(&manifest_dir);
+        let out_dir = create_temp_dir("promoted_issue15_behaviors");
+        fs::create_dir_all(&out_dir).expect("should create out dir");
+
+        generate_upstream_tests_from(repo_root, &out_dir)
+            .expect("upstream test runner should generate");
+
+        let manifest = fs::read_to_string(out_dir.join("upstream_test_manifest.json"))
+            .expect("manifest should be written");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should deserialize");
+
+        for (behavior_id, expected_case_name, expected_test_name) in [
+            (
+                "environment.chdir_literal_tilde_path",
+                "test_expand.vim",
+                "runtimepath_contract_supports_tilde_and_env_path_expansion",
+            ),
+            (
+                "environment.expand_env_pathsep",
+                "test_expand.vim",
+                "runtimepath_contract_supports_tilde_and_env_path_expansion",
+            ),
+            (
+                "environment.expand_tilde_filename",
+                "test_expand.vim",
+                "runtimepath_contract_supports_tilde_and_env_path_expansion",
+            ),
+            (
+                "expansion.expandcmd_general",
+                "test_expand.vim",
+                "runtimepath_contract_supports_expandcmd_general_cases",
+            ),
+            (
+                "runtimepath.environ_home_and_environment_expansion",
+                "test_environ.vim",
+                "runtimepath_contract_supports_environment_mutation_and_escaped_globbing",
+            ),
+            (
+                "runtimepath.escaped_glob_and_globpath",
+                "test_escaped_glob.vim",
+                "runtimepath_contract_supports_environment_mutation_and_escaped_globbing",
+            ),
+            (
+                "runtimepath.expand_function_semantics",
+                "test_expand_func.vim",
+                "runtimepath_contract_supports_expand_function_semantics_and_glob2regpat",
+            ),
+            (
+                "runtimepath.glob2regpat_conversion",
+                "test_glob2regpat.vim",
+                "runtimepath_contract_supports_expand_function_semantics_and_glob2regpat",
+            ),
+            (
+                "script_context.expand_script_source_levels",
+                "test_expand.vim",
+                "runtimepath_contract_supports_script_context_source_placeholders",
+            ),
+            (
+                "script_context.source_placeholders_outside_source",
+                "test_expand.vim",
+                "runtimepath_contract_supports_script_context_source_placeholders",
+            ),
+        ] {
+            let behavior = find_adapted_behavior(&manifest, behavior_id);
+
+            assert_eq!(
+                behavior
+                    .get("upstream_case_name")
+                    .and_then(|value| value.as_str()),
+                Some(expected_case_name),
+                "issue #15 promoted behavior should point back to the upstream case"
+            );
+            assert_eq!(
+                behavior
+                    .get("coverage_status")
+                    .and_then(|value| value.as_str()),
+                Some("covered"),
+                "issue #15 promoted behavior should be marked covered"
+            );
+            let evidence = behavior
+                .get("coverage_evidence")
+                .expect("issue #15 promoted behavior should expose coverage evidence");
+            assert_eq!(
+                evidence
+                    .get("contract_suite")
+                    .and_then(|value| value.as_str()),
+                Some("runtime_path_contract.rs"),
+                "coverage evidence should identify the runtime-path contract suite"
+            );
+            assert_eq!(
+                evidence.get("test_name").and_then(|value| value.as_str()),
+                Some(expected_test_name),
+                "coverage evidence should point to the exact runtime-path contract test"
+            );
+        }
     }
 
     #[test]
@@ -1181,6 +1279,22 @@ mod build_test_runner_contract_tests {
             (
                 "test_windows_home",
                 ["platform-dependent", "environment-dependent"],
+            ),
+            (
+                "expansion.expandcmd_shell_nonomatch",
+                ["shell", "platform-dependent"],
+            ),
+            (
+                "runtimepath.expand_dllpath_options",
+                ["optional-feature", "interpreter"],
+            ),
+            (
+                "runtimepath.global_command_path_sensitive_flows",
+                ["editor-core", "runtime/environment contract"],
+            ),
+            (
+                "expansion.filename_multicmd_reexpansion",
+                ["compound", "editor-core"],
             ),
         ] {
             let behavior = find_adapted_behavior(&manifest, behavior_id);

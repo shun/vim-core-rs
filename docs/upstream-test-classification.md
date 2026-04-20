@@ -113,11 +113,49 @@ crate can observe the behavior directly.
   observable boundary remains host-owned, out of scope, or
   environment/platform dependent.
 
+## Path, expansion, and script-context promotion
+
+Issue #15 continues that work for the path, expansion, and script-context
+behaviors that were previously left `uncovered`.
+
+- The environment bucket now promotes
+  `environment.chdir_literal_tilde_path`,
+  `environment.expand_env_pathsep`, and
+  `environment.expand_tilde_filename` through
+  `runtimepath_contract_supports_tilde_and_env_path_expansion`.
+- The expansion bucket now promotes `expansion.expandcmd_general`
+  through `runtimepath_contract_supports_expandcmd_general_cases`.
+- The runtime-path bucket now promotes
+  `runtimepath.environ_home_and_environment_expansion`,
+  `runtimepath.escaped_glob_and_globpath`,
+  `runtimepath.expand_function_semantics`, and
+  `runtimepath.glob2regpat_conversion` through dedicated
+  `runtime_path_contract.rs` tests.
+- The script-context bucket now promotes
+  `script_context.expand_script_source_levels` and
+  `script_context.source_placeholders_outside_source` through
+  `runtimepath_contract_supports_script_context_source_placeholders`.
+
+The remaining deferred behaviors stay `uncovered` on purpose:
+
+- `expansion.expandcmd_shell_nonomatch` remains uncovered because the
+  repository does not treat shell or platform-dependent command
+  expansion as a runtime/environment guarantee.
+- `expansion.filename_multicmd_reexpansion` remains uncovered because it
+  is compound editor-core command-line parsing semantics rather than a
+  dedicated runtime/environment contract.
+- `runtimepath.expand_dllpath_options` remains uncovered because current
+  source builds do not guarantee optional interpreter-specific `*dll`
+  option surfaces.
+- `runtimepath.global_command_path_sensitive_flows` remains uncovered
+  because the mapped `:global` cases are editor-core command semantics,
+  not a dedicated runtime/environment contract.
+
 ## Runtime-path bucket
 
 The runtime-path bucket now has behavior-level traceability in
 repository contract tests and the generated manifest. The bucket
-contains `17` adapted behaviors: `11` covered and `6` uncovered.
+contains `17` adapted behaviors: `15` covered and `2` uncovered.
 
 Covered runtime-path behaviors currently map to these contract tests:
 
@@ -137,6 +175,14 @@ Covered runtime-path behaviors currently map to these contract tests:
   and `runtimepath.getcwd_working_directory_queries` from
   `test_getcwd.vim`:
   `runtimepath_contract_supports_path_discovery_and_fnameescape`
+- `runtimepath.environ_home_and_environment_expansion` from
+  `test_environ.vim` and `runtimepath.escaped_glob_and_globpath` from
+  `test_escaped_glob.vim`:
+  `runtimepath_contract_supports_environment_mutation_and_escaped_globbing`
+- `runtimepath.expand_function_semantics` from `test_expand_func.vim`
+  and `runtimepath.glob2regpat_conversion` from
+  `test_glob2regpat.vim`:
+  `runtimepath_contract_supports_expand_function_semantics_and_glob2regpat`
 - `runtimepath.help_local_additions_from_runtime_docs` from
   `test_help.vim`:
   `runtimepath_contract_supports_help_local_additions_from_runtime_docs`
@@ -148,22 +194,11 @@ Covered runtime-path behaviors currently map to these contract tests:
 
 The remaining runtime-path behaviors stay `uncovered` for now:
 
-- `runtimepath.environ_home_and_environment_expansion` from
-  `test_environ.vim`: no repository contract currently fixes the
-  embedded environment mutation and `expand('~')` expectations
-- `runtimepath.escaped_glob_and_globpath` from `test_escaped_glob.vim`:
-  no repository contract currently fixes the escaped `glob()` or
-  `globpath()` cases
 - `runtimepath.expand_dllpath_options` from `test_expand_dllpath.vim`:
-  no repository contract currently fixes the `*dll` option expansion
-  behavior
-- `runtimepath.expand_function_semantics` from `test_expand_func.vim`:
-  no repository contract currently fixes the `expand()` function cases
-  such as `<sfile>`, `<stack>`, or `'wildignore'`
-- `runtimepath.glob2regpat_conversion` from `test_glob2regpat.vim`: no
-  repository contract currently fixes the glob-to-regex conversion rules
+  current source builds do not guarantee the optional interpreter
+  `*dll` option surface as a runtime-path contract
 - `runtimepath.global_command_path_sensitive_flows` from `test_global.vim`:
-  no repository contract currently ties `:global` behavior to a
+  the mapped `:global` cases are editor-core command semantics, not a
   runtime-path adaptation contract
 
 `test_expand.vim` is no longer tracked as one indivisible runtime-path
