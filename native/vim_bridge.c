@@ -263,6 +263,16 @@ char* vim_bridge_eval_string(vim_bridge_state_t* state, const char* expr) {
     return upstream_runtime_eval_string(state->runtime, expr);
 }
 
+void vim_bridge_submit_input_response(
+    vim_bridge_state_t* state,
+    const char* value,
+    uintptr_t value_len,
+    bool cancelled
+) {
+    if (state == NULL || state->runtime == NULL) return;
+    upstream_runtime_submit_input_response(state->runtime, value, value_len, cancelled);
+}
+
 int vim_core_bridge_embedded_mode_active(void) {
     return upstream_runtime_embedded_mode_active();
 }
@@ -282,6 +292,19 @@ void vim_core_bridge_enqueue_input_request(
     vim_core_input_request_kind_t kind
 ) {
     upstream_runtime_enqueue_input_request(prompt, prompt_len, kind);
+}
+
+int vim_core_bridge_take_input_response(
+    vim_core_input_request_kind_t kind,
+    char** value_ptr,
+    uintptr_t* value_len,
+    bool* cancelled
+) {
+    return upstream_runtime_take_input_response(kind, value_ptr, value_len, cancelled);
+}
+
+void vim_core_bridge_free_input_response(char* value) {
+    free(value);
 }
 
 void vim_core_bridge_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind) {

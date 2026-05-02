@@ -8,9 +8,9 @@ use std::{
     os::fd::{FromRawFd, RawFd},
 };
 use vim_core_rs::{
-    CoreCommandOutcome, CoreEvent, CoreHostAction, CoreInputRequestKind, CoreMessageCategory,
-    CoreMessageEvent, CoreMessageSeverity, CoreMode, CoreOptionError, CoreOptionScope,
-    CoreOptionType, CoreRuntimeMode, CoreSessionError, CoreSessionOptions, VimCoreSession,
+    CoreCommandOutcome, CoreEvent, CoreHostAction, CoreInputRequestKind, CoreInputResponse,
+    CoreInputResponseError, CoreMode, CoreOptionError, CoreOptionScope, CoreOptionType,
+    CoreRuntimeMode, CoreSessionError, CoreSessionOptions, VimCoreSession,
 };
 
 fn session_test_lock() -> &'static Mutex<()> {
@@ -1327,6 +1327,92 @@ fn execute_ex_command_keeps_input_flow_as_host_action_not_pager_prompt() {
     );
 }
 
+#[test]
+fn input_response_api_accepts_submit_and_cancel_for_active_request() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    let request_tx = session
+        .execute_ex_command(":input Enter filename")
+        .expect("input command should succeed");
+    assert_eq!(
+        request_tx.host_actions,
+        vec![CoreHostAction::RequestInput {
+            prompt: "Enter filename".to_string(),
+            input_kind: CoreInputRequestKind::CommandLine,
+            correlation_id: 1,
+        }]
+    );
+
+    let submit_tx = session
+        .submit_input_response(CoreInputResponse::Submitted {
+            correlation_id: 1,
+            value: "notes.txt".to_string(),
+        })
+        .expect("submit response should be accepted");
+
+    assert!(matches!(submit_tx.outcome, CoreCommandOutcome::NoChange));
+    assert!(submit_tx.host_actions.is_empty());
+    assert!(submit_tx.events.is_empty());
+
+    let request_tx = session
+        .execute_ex_command(":input Confirm")
+        .expect("second input command should succeed");
+    assert_eq!(
+        request_tx.host_actions,
+        vec![CoreHostAction::RequestInput {
+            prompt: "Confirm".to_string(),
+            input_kind: CoreInputRequestKind::CommandLine,
+            correlation_id: 2,
+        }]
+    );
+
+    let cancel_tx = session
+        .submit_input_response(CoreInputResponse::Cancelled { correlation_id: 2 })
+        .expect("cancel response should be accepted");
+
+    assert!(matches!(cancel_tx.outcome, CoreCommandOutcome::NoChange));
+    assert!(cancel_tx.host_actions.is_empty());
+    assert!(cancel_tx.events.is_empty());
+}
+
+#[test]
+fn input_response_api_rejects_no_pending_and_correlation_mismatch() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    let no_pending =
+        session.submit_input_response(CoreInputResponse::Cancelled { correlation_id: 99 });
+    assert!(matches!(
+        no_pending,
+        Err(CoreInputResponseError::NoPendingInput)
+    ));
+
+    session
+        .execute_ex_command(":input Enter filename")
+        .expect("input command should succeed");
+
+    let mismatch = session.submit_input_response(CoreInputResponse::Submitted {
+        correlation_id: 2,
+        value: "wrong".to_string(),
+    });
+    assert!(matches!(
+        mismatch,
+        Err(CoreInputResponseError::CorrelationMismatch {
+            expected: 1,
+            actual: 2,
+        })
+    ));
+
+    let accepted =
+        session.submit_input_response(CoreInputResponse::Cancelled { correlation_id: 1 });
+    assert!(
+        accepted.is_ok(),
+        "mismatch should not clear the active request: {:?}",
+        accepted
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn vimscript_input_function_emits_message_without_host_action_or_terminal_leak() {
@@ -1340,30 +1426,35 @@ fn vimscript_input_function_emits_message_without_host_action_or_terminal_leak()
         (result, event, action)
     });
 
-    assert_eq!(result, Some(String::new()));
+    assert_eq!(result, None);
     assert!(
-        matches!(
-            event,
-            Some(CoreEvent::Message(CoreMessageEvent {
-                severity: CoreMessageSeverity::Info,
-                category: CoreMessageCategory::UserVisible,
-                ref content,
-            })) if content.contains("input()")
-                && content.contains("embedded mode")
-        ),
-        "input() should emit a user-visible info message in embedded mode: {:?}",
-        event
+        event.is_none(),
+        "input() should not emit fail-fast messages: {event:?}"
     );
-    assert!(
-        action.is_none(),
-        "input() should not enqueue host actions in embedded mode: {:?}",
-        action
+    assert_eq!(
+        action,
+        Some(CoreHostAction::RequestInput {
+            prompt: "Enter filename: ".to_string(),
+            input_kind: CoreInputRequestKind::CommandLine,
+            correlation_id: 1,
+        })
     );
     assert!(
         sanitize_harness_output(&stdout).is_empty() && sanitize_harness_output(&stderr).is_empty(),
         "embedded input() should not leak prompts to the terminal: stdout={:?}, stderr={:?}",
         stdout,
         stderr
+    );
+
+    session
+        .submit_input_response(CoreInputResponse::Submitted {
+            correlation_id: 1,
+            value: "notes.txt".to_string(),
+        })
+        .expect("input() response should resume evaluation");
+    assert_eq!(
+        session.take_completed_input_eval_result(),
+        Some("notes.txt".to_string())
     );
 }
 
@@ -1380,30 +1471,32 @@ fn vimscript_inputsecret_function_emits_message_without_host_action_or_terminal_
         (result, event, action)
     });
 
-    assert_eq!(result, Some(String::new()));
+    assert_eq!(result, None);
     assert!(
-        matches!(
-            event,
-            Some(CoreEvent::Message(CoreMessageEvent {
-                severity: CoreMessageSeverity::Info,
-                category: CoreMessageCategory::UserVisible,
-                ref content,
-            })) if content.contains("input()")
-                && content.contains("embedded mode")
-        ),
-        "inputsecret() should emit a user-visible info message in embedded mode: {:?}",
-        event
+        event.is_none(),
+        "inputsecret() should not emit fail-fast messages: {event:?}"
     );
-    assert!(
-        action.is_none(),
-        "inputsecret() should not enqueue host actions in embedded mode: {:?}",
-        action
+    assert_eq!(
+        action,
+        Some(CoreHostAction::RequestInput {
+            prompt: "Password: ".to_string(),
+            input_kind: CoreInputRequestKind::Secret,
+            correlation_id: 1,
+        })
     );
     assert!(
         sanitize_harness_output(&stdout).is_empty() && sanitize_harness_output(&stderr).is_empty(),
         "embedded inputsecret() should not leak prompts to the terminal: stdout={:?}, stderr={:?}",
         stdout,
         stderr
+    );
+
+    session
+        .submit_input_response(CoreInputResponse::Cancelled { correlation_id: 1 })
+        .expect("inputsecret() cancel should resume evaluation");
+    assert_eq!(
+        session.take_completed_input_eval_result(),
+        Some(String::new())
     );
 }
 

@@ -120,6 +120,12 @@ int upstream_runtime_get_line_syntax(int win_id, long lnum, int* out_ids, int ma
 const char* upstream_runtime_get_syntax_name(int syn_id);
 
 char* upstream_runtime_eval_string(upstream_runtime_session_t* session, const char* expr);
+void upstream_runtime_submit_input_response(
+    upstream_runtime_session_t* session,
+    const char* value,
+    uintptr_t value_len,
+    bool cancelled
+);
 int upstream_runtime_embedded_mode_active(void);
 void upstream_runtime_enqueue_message_event(
     const char* text,
@@ -131,6 +137,12 @@ void upstream_runtime_enqueue_input_request(
     const char* prompt,
     uintptr_t prompt_len,
     vim_core_input_request_kind_t kind
+);
+int upstream_runtime_take_input_response(
+    vim_core_input_request_kind_t kind,
+    char** value_ptr,
+    uintptr_t* value_len,
+    bool* cancelled
 );
 void upstream_runtime_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind);
 void upstream_runtime_enqueue_bell_for_active_session(void);

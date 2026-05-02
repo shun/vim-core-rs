@@ -60,8 +60,16 @@ pub fn emit_artifact_rerun_if_env_changed() {
 pub fn source_build_requested() -> bool {
     match env::var(VIM_CORE_FROM_SOURCE_ENV) {
         Ok(value) => matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"),
-        Err(_) => false,
+        Err(_) => repository_checkout_detected(),
     }
+}
+
+fn repository_checkout_detected() -> bool {
+    let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") else {
+        return false;
+    };
+
+    Path::new(&manifest_dir).join(".git").exists()
 }
 
 pub fn verbose_build_requested() -> bool {
@@ -126,10 +134,9 @@ pub fn default_artifact_cache_dir() -> Result<PathBuf, String> {
 }
 
 pub fn resolve_artifact_config_from_env() -> Result<ArtifactConfig, String> {
-    let crate_version =
-        env::var("CARGO_PKG_VERSION").map_err(|error| format!("missing CARGO_PKG_VERSION: {error}"))?;
-    let target_triple =
-        env::var("TARGET").map_err(|error| format!("missing TARGET: {error}"))?;
+    let crate_version = env::var("CARGO_PKG_VERSION")
+        .map_err(|error| format!("missing CARGO_PKG_VERSION: {error}"))?;
+    let target_triple = env::var("TARGET").map_err(|error| format!("missing TARGET: {error}"))?;
     let artifact_base_url = env::var(VIM_CORE_ARTIFACT_BASE_URL_ENV)
         .unwrap_or_else(|_| default_artifact_base_url(&crate_version));
     let artifact_cache_dir = default_artifact_cache_dir()?;
@@ -173,10 +180,11 @@ pub fn install_prebuilt_artifact(
         fetch_artifact_archive(&artifact_url, &archive_path)?;
     }
 
-    let staging_dir = config
-        .artifact_cache_dir
-        .join("staging")
-        .join(format!("{}-{}", std::process::id(), current_nanos()?));
+    let staging_dir = config.artifact_cache_dir.join("staging").join(format!(
+        "{}-{}",
+        std::process::id(),
+        current_nanos()?
+    ));
     fs::create_dir_all(&staging_dir).map_err(|error| {
         format!(
             "failed to create artifact staging directory {}: {error}",
@@ -364,8 +372,12 @@ fn read_manifest(path: &Path) -> Result<ArtifactManifest, String> {
             path.display()
         )
     })?;
-    serde_json::from_str(&content)
-        .map_err(|error| format!("failed to parse artifact manifest {}: {error}", path.display()))
+    serde_json::from_str(&content).map_err(|error| {
+        format!(
+            "failed to parse artifact manifest {}: {error}",
+            path.display()
+        )
+    })
 }
 
 fn verify_manifest_identity(
@@ -444,14 +456,20 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<(), String> {
         }
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target).map_err(|error| {
-                format!("failed to create artifact output dir {}: {error}", target.display())
+                format!(
+                    "failed to create artifact output dir {}: {error}",
+                    target.display()
+                )
             })?;
             continue;
         }
 
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).map_err(|error| {
-                format!("failed to create artifact output dir {}: {error}", parent.display())
+                format!(
+                    "failed to create artifact output dir {}: {error}",
+                    parent.display()
+                )
             })?;
         }
 
@@ -489,8 +507,8 @@ pub fn sha256_file(path: &Path) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flate2::write::GzEncoder;
     use flate2::Compression;
+    use flate2::write::GzEncoder;
     use std::io::Write;
     use tar::Builder;
     use tempfile::TempDir;

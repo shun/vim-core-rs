@@ -185,7 +185,10 @@ desktop Vim or like Neovim.
 
 By default, consumers do not build the embedded Vim runtime from source.
 `build.rs` resolves a target-specific prebuilt artifact, expands it into
-`OUT_DIR`, and links the bundled `libvimcore.a`.
+`OUT_DIR`, and links the bundled `libvimcore.a`. A Git checkout of this
+repository is the exception: when `VIM_CORE_FROM_SOURCE` is unset, local
+repository builds use the source build path so tests exercise the checked-out
+native and vendored Vim sources.
 
 The published crate still contains the allowlisted `vendor/vim_src` inputs
 required for an explicit source build. That means a crates.io consumer can
@@ -222,13 +225,13 @@ Use these environment variables to control the build path:
   prebuilt artifacts.
 
 If a prebuilt artifact is unavailable, the build fails with an explicit error.
-The build does not fall back to a source build unless you set
+Consumer builds do not fall back to a source build unless you set
 `VIM_CORE_FROM_SOURCE=1`.
 
 ## Development and release verification
 
-Repository development uses an explicit source build. This section explains
-which GitHub Actions workflow to use as you move from a local code change to a
+Repository development uses the source build. This section explains which
+GitHub Actions workflow to use as you move from a local code change to a
 published crate release.
 
 Run the baseline checks from the repository root with these commands:
@@ -239,15 +242,13 @@ VIM_CORE_FROM_SOURCE=1 cargo test
 VIM_CORE_FROM_SOURCE=1 cargo publish --dry-run --allow-dirty
 ```
 
+In a Git checkout, bare `cargo test` also uses the source build path unless you
+explicitly set `VIM_CORE_FROM_SOURCE=0`.
+
 After you run `./scripts/setup-git-hooks.sh` once, the repository installs a
 `pre-commit` hook through `core.hooksPath`. That hook runs `rustfmt` on staged
 `.rs` files before each commit, then re-stages those formatted Rust files so
 the commit includes the formatted result.
-
-Do not treat a bare `cargo test` in this repository as the development
-baseline. The default build path looks for a GitHub Releases asset whose tag
-matches `Cargo.toml`'s crate version. Before that release exists, the build
-fails with a 404 by design instead of silently compiling from source.
 
 When you validate the default consumer path before publication, point
 `VIM_CORE_ARTIFACT_BASE_URL` at a local directory that contains the packaged

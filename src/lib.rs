@@ -144,6 +144,22 @@ pub enum CoreInputRequestKind {
     Secret,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreInputResponse {
+    Submitted { correlation_id: u64, value: String },
+    Cancelled { correlation_id: u64 },
+}
+
+impl CoreInputResponse {
+    pub fn correlation_id(&self) -> u64 {
+        match self {
+            Self::Submitted { correlation_id, .. } | Self::Cancelled { correlation_id } => {
+                *correlation_id
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreBackendIdentity {
     BridgeStub,
@@ -527,6 +543,14 @@ pub enum CoreSessionError {
     CommandFailed(CoreCommandError),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreInputResponseError {
+    NoPendingInput,
+    CorrelationMismatch { expected: u64, actual: u64 },
+    Command(CoreCommandError),
+    EvalFailed,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CoreSessionOptions {
     /// Runtime mode contract for this session. `Embedded` is the primary mode.
@@ -540,9 +564,19 @@ pub struct VimCoreSession {
     runtime_mode: CoreRuntimeMode,
     document_coordinator: RefCell<DocumentCoordinator>,
     pending_input_state: RefCell<CorePendingInput>,
+    active_input_request: RefCell<Option<CoreActiveInputRequest>>,
+    completed_input_eval_result: RefCell<Option<String>>,
     pending_host_actions: RefCell<VecDeque<CoreHostAction>>,
     pending_events: RefCell<VecDeque<CoreEvent>>,
     not_send_sync: PhantomData<Rc<()>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CoreActiveInputRequest {
+    prompt: String,
+    input_kind: CoreInputRequestKind,
+    correlation_id: u64,
+    pending_eval_expr: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -612,6 +646,8 @@ impl VimCoreSession {
             runtime_mode: options.runtime_mode,
             document_coordinator: RefCell::new(DocumentCoordinator::new()),
             pending_input_state: RefCell::new(CorePendingInput::none()),
+            active_input_request: RefCell::new(None),
+            completed_input_eval_result: RefCell::new(None),
             pending_host_actions: RefCell::new(VecDeque::new()),
             pending_events: RefCell::new(VecDeque::new()),
             not_send_sync: PhantomData,
@@ -957,6 +993,84 @@ impl VimCoreSession {
                 Ok(CoreCommandOutcome::NoChange)
             }
         }
+    }
+
+    pub fn submit_input_response(
+        &mut self,
+        response: CoreInputResponse,
+    ) -> Result<CoreCommandTransaction, CoreInputResponseError> {
+        let actual = response.correlation_id();
+        let Some(active) = self.active_input_request.borrow().clone() else {
+            debug_log!(
+                "[DEBUG] submit_input_response: no active request response={:?}",
+                response
+            );
+            return Err(CoreInputResponseError::NoPendingInput);
+        };
+
+        if active.correlation_id != actual {
+            debug_log!(
+                "[DEBUG] submit_input_response: correlation mismatch expected={} actual={} prompt={:?} input_kind={:?}",
+                active.correlation_id,
+                actual,
+                active.prompt,
+                active.input_kind
+            );
+            return Err(CoreInputResponseError::CorrelationMismatch {
+                expected: active.correlation_id,
+                actual,
+            });
+        }
+
+        match &response {
+            CoreInputResponse::Submitted { value, .. } => {
+                debug_log!(
+                    "[DEBUG] submit_input_response: accepted submit correlation_id={} value_len={} prompt={:?} input_kind={:?} pending_eval={}",
+                    actual,
+                    value.len(),
+                    active.prompt,
+                    active.input_kind,
+                    active.pending_eval_expr.is_some()
+                );
+            }
+            CoreInputResponse::Cancelled { .. } => {
+                debug_log!(
+                    "[DEBUG] submit_input_response: accepted cancel correlation_id={} prompt={:?} input_kind={:?} pending_eval={}",
+                    actual,
+                    active.prompt,
+                    active.input_kind,
+                    active.pending_eval_expr.is_some()
+                );
+            }
+        }
+
+        self.active_input_request.borrow_mut().take();
+        if let Some(expr) = active.pending_eval_expr {
+            self.submit_native_input_response(&response);
+            let value = self.eval_string_after_input_response(&expr)?;
+            debug_log!(
+                "[DEBUG] submit_input_response: completed eval continuation correlation_id={} input_kind={:?} result_len={}",
+                actual,
+                active.input_kind,
+                value.len()
+            );
+            *self.completed_input_eval_result.borrow_mut() = Some(value);
+        }
+        Ok(CoreCommandTransaction {
+            outcome: CoreCommandOutcome::NoChange,
+            snapshot: self.snapshot(),
+            events: Vec::new(),
+            host_actions: Vec::new(),
+        })
+    }
+
+    /// Returns the completed `eval_string()` result produced after an input response.
+    ///
+    /// `eval_string()` returns `None` when an embedded Vimscript prompt needs
+    /// host input. After the matching `submit_input_response()` call resumes
+    /// that evaluation, the completed string result can be taken here.
+    pub fn take_completed_input_eval_result(&mut self) -> Option<String> {
+        self.completed_input_eval_result.borrow_mut().take()
     }
 
     fn execute_native_ex_command_for_outcome(
@@ -1560,9 +1674,11 @@ impl VimCoreSession {
 
     /// Vimscript式を評価し、結果を文字列として返す
     pub fn eval_string(&mut self, expr: &str) -> Option<String> {
-        /* println debug removed */
+        self.completed_input_eval_result.borrow_mut().take();
         let expr_c = CString::new(expr).ok()?;
         let ptr = unsafe { bindings::vim_bridge_eval_string(self.state.as_ptr(), expr_c.as_ptr()) };
+        self.drain_native_host_actions_with_input_source(Some(expr));
+        self.drain_native_events();
         if ptr.is_null() {
             /* println debug removed */
             return None;
@@ -1572,6 +1688,44 @@ impl VimCoreSession {
         unsafe { bindings::vim_bridge_free_string(ptr) };
         /* println debug removed */
         Some(s)
+    }
+
+    fn eval_string_after_input_response(
+        &mut self,
+        expr: &str,
+    ) -> Result<String, CoreInputResponseError> {
+        let expr_c = CString::new(expr).map_err(|_| CoreInputResponseError::EvalFailed)?;
+        let ptr = unsafe { bindings::vim_bridge_eval_string(self.state.as_ptr(), expr_c.as_ptr()) };
+        self.drain_native_host_actions_with_input_source(Some(expr));
+        self.drain_native_events();
+        if ptr.is_null() {
+            return Err(CoreInputResponseError::EvalFailed);
+        }
+        let len = unsafe { std::ffi::CStr::from_ptr(ptr).to_bytes().len() };
+        let s = string_from_parts(ptr, len);
+        unsafe { bindings::vim_bridge_free_string(ptr) };
+        Ok(s)
+    }
+
+    fn submit_native_input_response(&mut self, response: &CoreInputResponse) {
+        match response {
+            CoreInputResponse::Submitted { value, .. } => unsafe {
+                bindings::vim_bridge_submit_input_response(
+                    self.state.as_ptr(),
+                    value.as_ptr().cast(),
+                    value.len(),
+                    false,
+                );
+            },
+            CoreInputResponse::Cancelled { .. } => unsafe {
+                bindings::vim_bridge_submit_input_response(
+                    self.state.as_ptr(),
+                    std::ptr::null(),
+                    0,
+                    true,
+                );
+            },
+        }
     }
 
     fn invoke_native_normal_command(
@@ -1614,6 +1768,7 @@ impl VimCoreSession {
             self.pending_host_actions.borrow_mut().drain(..).collect();
         let events: Vec<CoreEvent> = self.pending_events.borrow_mut().drain(..).collect();
         let host_actions = drained_host_actions;
+        self.record_active_input_request_from_host_actions(&host_actions, None);
         let outcome = normalize_transaction_outcome(outcome, &host_actions);
         snapshot.pending_host_actions = host_actions.len();
         snapshot.pending_input = self.pending_input();
@@ -1623,6 +1778,35 @@ impl VimCoreSession {
             snapshot,
             events,
             host_actions,
+        }
+    }
+
+    fn record_active_input_request_from_host_actions(
+        &self,
+        host_actions: &[CoreHostAction],
+        pending_eval_expr: Option<&str>,
+    ) {
+        for action in host_actions {
+            if let CoreHostAction::RequestInput {
+                prompt,
+                input_kind,
+                correlation_id,
+            } = action
+            {
+                debug_log!(
+                    "[DEBUG] active_input_request: recorded correlation_id={} prompt={:?} input_kind={:?} pending_eval={}",
+                    correlation_id,
+                    prompt,
+                    input_kind,
+                    pending_eval_expr.is_some()
+                );
+                *self.active_input_request.borrow_mut() = Some(CoreActiveInputRequest {
+                    prompt: prompt.clone(),
+                    input_kind: *input_kind,
+                    correlation_id: *correlation_id,
+                    pending_eval_expr: pending_eval_expr.map(ToOwned::to_owned),
+                });
+            }
         }
     }
 
@@ -1733,6 +1917,11 @@ impl VimCoreSession {
     }
 
     fn drain_native_host_actions(&mut self) {
+        self.drain_native_host_actions_with_input_source(None);
+    }
+
+    fn drain_native_host_actions_with_input_source(&mut self, pending_eval_expr: Option<&str>) {
+        let mut drained_actions = Vec::new();
         loop {
             let action =
                 unsafe { bindings::vim_bridge_take_pending_host_action(self.state.as_ptr()) };
@@ -1740,9 +1929,11 @@ impl VimCoreSession {
                 break;
             };
             if should_expose_host_action_in_queue_api(&action) {
+                drained_actions.push(action.clone());
                 self.pending_host_actions.borrow_mut().push_back(action);
             }
         }
+        self.record_active_input_request_from_host_actions(&drained_actions, pending_eval_expr);
 
         let pending_job_writes = {
             let mut mgr = crate::vfd::get_manager();

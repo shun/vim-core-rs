@@ -65,6 +65,10 @@ struct upstream_runtime_session {
     vim_core_pending_input_t pending_input;
     uint64_t next_correlation_id;
     char* leased_snapshot_text;
+    char* pending_input_response_value;
+    uintptr_t pending_input_response_len;
+    int pending_input_response_available;
+    int pending_input_response_cancelled;
 
     upstream_runtime_pending_action_t queue[UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS];
     size_t queue_head;
@@ -864,6 +868,7 @@ void upstream_runtime_session_free(upstream_runtime_session_t* session) {
             free((char*)session->event_queue[pos].event.text_ptr);
         }
     }
+    if (session->pending_input_response_value) free(session->pending_input_response_value);
     if (session->leased_snapshot_text) free(session->leased_snapshot_text);
     free(session);
 }
@@ -2626,6 +2631,8 @@ char* upstream_runtime_eval_string(upstream_runtime_session_t* session, const ch
         return NULL;
     }
 
+    size_t queue_len_before = session->queue_len;
+
     /* Vim の内部状態を eval 用にセットアップ */
     upstream_runtime_session_t* prev_active = upstream_runtime_active_session;
     upstream_runtime_active_session = session;
@@ -2635,6 +2642,28 @@ char* upstream_runtime_eval_string(upstream_runtime_session_t* session, const ch
 
     /* 元の状態に復帰 */
     upstream_runtime_active_session = prev_active;
+
+    if (session->queue_len > queue_len_before) {
+        int queued_input = FALSE;
+        size_t idx;
+        for (idx = queue_len_before; idx < session->queue_len; ++idx) {
+            size_t pos = (session->queue_head + idx) % UPSTREAM_RUNTIME_MAX_PENDING_ACTIONS;
+            if (session->queue[pos].action.kind == VIM_HOST_ACTION_REQUEST_INPUT) {
+                queued_input = TRUE;
+                upstream_runtime_debug_printf(
+                    "[DEBUG] eval_string: input request queued during eval prompt_len=%lu input_kind=%u correlation_id=%llu\n",
+                    (unsigned long)session->queue[pos].action.primary_text_len,
+                    (unsigned int)session->queue[pos].action.input_kind,
+                    (unsigned long long)session->queue[pos].action.correlation_id
+                );
+                break;
+            }
+        }
+        if (queued_input) {
+            if (result != NULL) vim_free(result);
+            return NULL;
+        }
+    }
 
     if (result == NULL) {
         
@@ -2655,6 +2684,38 @@ char* upstream_runtime_eval_string(upstream_runtime_session_t* session, const ch
 
     
     return out;
+}
+
+void upstream_runtime_submit_input_response(
+    upstream_runtime_session_t* session,
+    const char* value,
+    uintptr_t value_len,
+    bool cancelled
+) {
+    char* copy = NULL;
+
+    if (session == NULL) return;
+    if (session->pending_input_response_value) {
+        free(session->pending_input_response_value);
+        session->pending_input_response_value = NULL;
+    }
+
+    if (!cancelled && value != NULL && value_len > 0) {
+        copy = (char*)malloc((size_t)value_len + 1U);
+        if (copy == NULL) {
+            session->pending_input_response_available = FALSE;
+            session->pending_input_response_len = 0;
+            session->pending_input_response_cancelled = TRUE;
+            return;
+        }
+        memcpy(copy, value, (size_t)value_len);
+        copy[value_len] = '\0';
+    }
+
+    session->pending_input_response_value = copy;
+    session->pending_input_response_len = cancelled ? 0 : value_len;
+    session->pending_input_response_cancelled = cancelled ? TRUE : FALSE;
+    session->pending_input_response_available = TRUE;
 }
 
 /*
@@ -2860,6 +2921,57 @@ void upstream_runtime_enqueue_input_request(
         kind
     );
     free(prompt_copy);
+}
+
+int upstream_runtime_take_input_response(
+    vim_core_input_request_kind_t kind,
+    char** value_ptr,
+    uintptr_t* value_len,
+    bool* cancelled
+) {
+    upstream_runtime_session_t* session = upstream_runtime_active_session;
+    char* out = NULL;
+
+    if (value_ptr != NULL) *value_ptr = NULL;
+    if (value_len != NULL) *value_len = 0;
+    if (cancelled != NULL) *cancelled = false;
+
+    if (session == NULL || !session->pending_input_response_available) {
+        return FALSE;
+    }
+
+    if (!session->pending_input_response_cancelled
+        && session->pending_input_response_value != NULL
+        && session->pending_input_response_len > 0) {
+        out = (char*)malloc((size_t)session->pending_input_response_len + 1U);
+        if (out == NULL) {
+            return FALSE;
+        }
+        memcpy(out, session->pending_input_response_value, (size_t)session->pending_input_response_len);
+        out[session->pending_input_response_len] = '\0';
+    }
+
+    upstream_runtime_debug_printf(
+        "[DEBUG] take_input_response: consumed input_kind=%u cancelled=%d value_len=%lu\n",
+        (unsigned int)kind,
+        session->pending_input_response_cancelled,
+        (unsigned long)session->pending_input_response_len
+    );
+
+    if (value_ptr != NULL) *value_ptr = out;
+    else if (out != NULL) free(out);
+    if (value_len != NULL) *value_len = session->pending_input_response_len;
+    if (cancelled != NULL) *cancelled = session->pending_input_response_cancelled ? true : false;
+
+    if (session->pending_input_response_value) {
+        free(session->pending_input_response_value);
+        session->pending_input_response_value = NULL;
+    }
+    session->pending_input_response_len = 0;
+    session->pending_input_response_cancelled = FALSE;
+    session->pending_input_response_available = FALSE;
+
+    return TRUE;
 }
 
 void upstream_runtime_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind) {

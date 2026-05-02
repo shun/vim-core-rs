@@ -184,6 +184,7 @@ cmd_refresh() {
 
   # パッチ対象ファイル一覧（必要に応じて追加）
   local patch_targets=(
+    src/ex_getln.c
     src/message.c
     src/undo.c
     src/eval.c

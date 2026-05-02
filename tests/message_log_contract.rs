@@ -10,8 +10,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(unix)]
 use std::{sync::mpsc, thread, time::Duration};
 use vim_core_rs::{
-    CoreEvent, CoreHostAction, CoreMessageCategory, CoreMessageEvent, CoreMessageSeverity,
-    CorePagerPromptKind, CoreVfsRequest, CoreVfsResponse, VimCoreSession,
+    CoreEvent, CoreHostAction, CoreInputRequestKind, CoreInputResponse, CoreMessageCategory,
+    CoreMessageEvent, CoreMessageSeverity, CorePagerPromptKind, CoreVfsRequest, CoreVfsResponse,
+    VimCoreSession,
 };
 
 fn session_test_lock() -> &'static Mutex<()> {
@@ -406,7 +407,7 @@ fn output_contains(output: &str, needle: &str) -> bool {
 
 #[cfg(unix)]
 #[test]
-fn embedded_input_function_fails_fast_with_info_event_instead_of_blocking() {
+fn embedded_input_function_requests_host_prompt_and_resumes_with_response() {
     let (sender, receiver) = mpsc::channel();
 
     let handle = thread::spawn(move || {
@@ -421,52 +422,49 @@ fn embedded_input_function_fails_fast_with_info_event_instead_of_blocking() {
             let action = session.take_pending_host_action();
             (result, event, action)
         });
+        session
+            .submit_input_response(CoreInputResponse::Submitted {
+                correlation_id: 1,
+                value: "alice".to_string(),
+            })
+            .expect("input() response should be accepted");
+        let completed = session.take_completed_input_eval_result();
 
         sender
-            .send((result, event, action, stdout, stderr))
+            .send((result, event, action, completed, stdout, stderr))
             .expect("test result should be sent");
     });
 
-    let (result, event, action, stdout, stderr) = receiver
+    let (result, event, action, completed, stdout, stderr) = receiver
         .recv_timeout(Duration::from_secs(5))
         .expect("embedded input() should not block");
     handle.join().expect("worker thread should complete");
 
+    assert_eq!(result, None);
+    assert!(
+        event.is_none(),
+        "input() should not emit a fail-fast info event: {event:?}"
+    );
     assert_eq!(
-        result,
-        Some(String::new()),
-        "unsupported input() should return the empty-string cancel sentinel: {:?}",
-        result
-    );
-    assert!(
-        matches!(
-            event,
-            Some(CoreEvent::Message(CoreMessageEvent {
-                severity: CoreMessageSeverity::Info,
-                category: CoreMessageCategory::UserVisible,
-                ref content,
-            })) if content.contains("input()")
-                && content.contains("embedded mode")
-        ),
-        "input() should surface an explicit embedded-mode info event: {:?}",
-        event
-    );
-    assert!(
-        action.is_none(),
-        "unsupported input() should not enqueue host actions without a response contract: {:?}",
-        action
+        action,
+        Some(CoreHostAction::RequestInput {
+            prompt: "name: ".to_string(),
+            input_kind: CoreInputRequestKind::CommandLine,
+            correlation_id: 1,
+        })
     );
     assert!(
         sanitize_harness_output(&stdout).is_empty() && sanitize_harness_output(&stderr).is_empty(),
-        "unsupported input() should not leak terminal prompts: stdout={:?}, stderr={:?}",
+        "input() should not leak terminal prompts: stdout={:?}, stderr={:?}",
         stdout,
         stderr
     );
+    assert_eq!(completed, Some("alice".to_string()));
 }
 
 #[cfg(unix)]
 #[test]
-fn embedded_inputsecret_function_fails_fast_with_info_event_instead_of_blocking() {
+fn embedded_inputsecret_function_requests_secret_prompt_and_resumes_with_cancel() {
     let (sender, receiver) = mpsc::channel();
 
     let handle = thread::spawn(move || {
@@ -481,52 +479,46 @@ fn embedded_inputsecret_function_fails_fast_with_info_event_instead_of_blocking(
             let action = session.take_pending_host_action();
             (result, event, action)
         });
+        session
+            .submit_input_response(CoreInputResponse::Cancelled { correlation_id: 1 })
+            .expect("inputsecret() cancel should be accepted");
+        let completed = session.take_completed_input_eval_result();
 
         sender
-            .send((result, event, action, stdout, stderr))
+            .send((result, event, action, completed, stdout, stderr))
             .expect("test result should be sent");
     });
 
-    let (result, event, action, stdout, stderr) = receiver
+    let (result, event, action, completed, stdout, stderr) = receiver
         .recv_timeout(Duration::from_secs(5))
         .expect("embedded inputsecret() should not block");
     handle.join().expect("worker thread should complete");
 
+    assert_eq!(result, None);
+    assert!(
+        event.is_none(),
+        "inputsecret() should not emit a fail-fast info event: {event:?}"
+    );
     assert_eq!(
-        result,
-        Some(String::new()),
-        "unsupported inputsecret() should return the empty-string cancel sentinel: {:?}",
-        result
-    );
-    assert!(
-        matches!(
-            event,
-            Some(CoreEvent::Message(CoreMessageEvent {
-                severity: CoreMessageSeverity::Info,
-                category: CoreMessageCategory::UserVisible,
-                ref content,
-            })) if content.contains("input()")
-                && content.contains("embedded mode")
-        ),
-        "inputsecret() should surface an explicit embedded-mode info event: {:?}",
-        event
-    );
-    assert!(
-        action.is_none(),
-        "unsupported inputsecret() should not enqueue host actions without a response contract: {:?}",
-        action
+        action,
+        Some(CoreHostAction::RequestInput {
+            prompt: "password: ".to_string(),
+            input_kind: CoreInputRequestKind::Secret,
+            correlation_id: 1,
+        })
     );
     assert!(
         sanitize_harness_output(&stdout).is_empty() && sanitize_harness_output(&stderr).is_empty(),
-        "unsupported inputsecret() should not leak terminal prompts: stdout={:?}, stderr={:?}",
+        "inputsecret() should not leak terminal prompts: stdout={:?}, stderr={:?}",
         stdout,
         stderr
     );
+    assert_eq!(completed, Some(String::new()));
 }
 
 #[cfg(unix)]
 #[test]
-fn embedded_confirm_function_fails_fast_with_info_event_instead_of_blocking() {
+fn embedded_confirm_function_requests_confirmation_prompt_and_resumes_with_cancel() {
     let (sender, receiver) = mpsc::channel();
 
     let handle = thread::spawn(move || {
@@ -541,47 +533,41 @@ fn embedded_confirm_function_fails_fast_with_info_event_instead_of_blocking() {
             let action = session.take_pending_host_action();
             (result, event, action)
         });
+        session
+            .submit_input_response(CoreInputResponse::Cancelled { correlation_id: 1 })
+            .expect("confirm() cancel should be accepted");
+        let completed = session.take_completed_input_eval_result();
 
         sender
-            .send((result, event, action, stdout, stderr))
+            .send((result, event, action, completed, stdout, stderr))
             .expect("test result should be sent");
     });
 
-    let (result, event, action, stdout, stderr) = receiver
+    let (result, event, action, completed, stdout, stderr) = receiver
         .recv_timeout(Duration::from_secs(5))
         .expect("embedded confirm() should not block");
     handle.join().expect("worker thread should complete");
 
+    assert_eq!(result, None);
+    assert!(
+        event.is_none(),
+        "confirm() should not emit a fail-fast info event: {event:?}"
+    );
     assert_eq!(
-        result,
-        Some("0".to_string()),
-        "unsupported confirm() should return the cancel sentinel: {:?}",
-        result
-    );
-    assert!(
-        matches!(
-            event,
-            Some(CoreEvent::Message(CoreMessageEvent {
-                severity: CoreMessageSeverity::Info,
-                category: CoreMessageCategory::UserVisible,
-                ref content,
-            })) if content.contains("confirm()")
-                && content.contains("embedded mode")
-        ),
-        "confirm() should surface an explicit embedded-mode info event: {:?}",
-        event
-    );
-    assert!(
-        action.is_none(),
-        "unsupported confirm() should not enqueue host actions without a response contract: {:?}",
-        action
+        action,
+        Some(CoreHostAction::RequestInput {
+            prompt: "Are you sure?".to_string(),
+            input_kind: CoreInputRequestKind::Confirmation,
+            correlation_id: 1,
+        })
     );
     assert!(
         sanitize_harness_output(&stdout).is_empty() && sanitize_harness_output(&stderr).is_empty(),
-        "unsupported confirm() should not leak terminal prompts: stdout={:?}, stderr={:?}",
+        "confirm() should not leak terminal prompts: stdout={:?}, stderr={:?}",
         stdout,
         stderr
     );
+    assert_eq!(completed, Some("0".to_string()));
 }
 
 #[cfg(unix)]

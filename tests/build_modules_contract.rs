@@ -856,13 +856,13 @@ mod build_test_runner_contract_tests {
             adaptation
                 .get("covered_units")
                 .and_then(|value| value.as_u64()),
-            Some(17)
+            Some(27)
         );
         assert_eq!(
             adaptation
                 .get("uncovered_units")
                 .and_then(|value| value.as_u64()),
-            Some(33)
+            Some(23)
         );
         assert_eq!(
             adaptation
@@ -874,13 +874,13 @@ mod build_test_runner_contract_tests {
             adaptation
                 .get("runtime_path_covered_units")
                 .and_then(|value| value.as_u64()),
-            Some(11)
+            Some(15)
         );
         assert_eq!(
             adaptation
                 .get("runtime_path_uncovered_units")
                 .and_then(|value| value.as_u64()),
-            Some(6)
+            Some(2)
         );
         let adapted_behavior = adapted_behaviors(&manifest)
             .iter()
@@ -918,7 +918,7 @@ mod build_test_runner_contract_tests {
             adaptation
                 .get("covered_units")
                 .and_then(|value| value.as_u64()),
-            Some(17)
+            Some(27)
         );
 
         for (behavior_id, expected_case_name, expected_test_name) in [
@@ -1017,13 +1017,13 @@ mod build_test_runner_contract_tests {
             adaptation
                 .get("covered_units")
                 .and_then(|value| value.as_u64()),
-            Some(17)
+            Some(27)
         );
         assert_eq!(
             adaptation
                 .get("runtime_path_covered_units")
                 .and_then(|value| value.as_u64()),
-            Some(11)
+            Some(15)
         );
 
         for (behavior_id, expected_case_name, expected_test_name) in [

@@ -429,6 +429,12 @@ const char* vim_bridge_get_syntax_name(const vim_bridge_state_t* state, int syn_
 // Vimscript式を評価し、結果の文字列を返す。結果はvim_bridge_free_stringで解放する。
 // 評価に失敗した場合はNULLを返す。
 char* vim_bridge_eval_string(vim_bridge_state_t* state, const char* expr);
+void vim_bridge_submit_input_response(
+    vim_bridge_state_t* state,
+    const char* value,
+    uintptr_t value_len,
+    bool cancelled
+);
 int vim_core_bridge_embedded_mode_active(void);
 void vim_core_bridge_enqueue_message_event(
     const char* text,
@@ -441,6 +447,13 @@ void vim_core_bridge_enqueue_input_request(
     uintptr_t prompt_len,
     vim_core_input_request_kind_t kind
 );
+int vim_core_bridge_take_input_response(
+    vim_core_input_request_kind_t kind,
+    char** value_ptr,
+    uintptr_t* value_len,
+    bool* cancelled
+);
+void vim_core_bridge_free_input_response(char* value);
 void vim_core_bridge_enqueue_pager_prompt_event(vim_core_pager_prompt_kind_t kind);
 void vim_core_bridge_enqueue_bell(void);
 

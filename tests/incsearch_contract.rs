@@ -1,5 +1,5 @@
-use std::fs;
 use std::sync::{Mutex, MutexGuard, OnceLock};
+use std::{fs, path::Path};
 use vim_core_rs::{CoreMatchType, CoreSearchHighlightMode, CoreSearchQueryError, VimCoreSession};
 
 fn session_test_lock() -> &'static Mutex<()> {
@@ -290,9 +290,11 @@ fn search_capability_contract_is_available_and_documents_search_family_boundary(
 
 #[test]
 fn search_family_docs_keep_live_viewport_and_inactive_window_language_explicit() {
-    let public_api_reference = fs::read_to_string("docs/public-api-reference.md")
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let public_api_reference = fs::read_to_string(repo_root.join("docs/public-api-reference.md"))
         .expect("public API reference should be readable");
-    let api_index = fs::read_to_string("docs/api-index.md").expect("API index should be readable");
+    let api_index = fs::read_to_string(repo_root.join("docs/api-index.md"))
+        .expect("API index should be readable");
 
     assert!(
         public_api_reference.contains("live viewport query"),
