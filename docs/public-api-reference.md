@@ -472,7 +472,9 @@ These types are feature-gated and separate from `CoreSyntaxChunk`. They model
 Tree-sitter provenance, explicit preparation status, byte ranges, capture
 names, normalized categories and modifiers, and embedded regions. Prepared
 Markdown and Rust package results use crate-owned capture mapping and return
-non-overlapping public chunks.
+non-overlapping public chunks. Markdown fenced blocks are detected as
+data-only embedded regions and carry raw and normalized info strings. Child
+syntax injection is not part of this phase.
 
 - `CoreTextPosition { row, col }`
 - `CoreTextRange { start, end }`
@@ -483,7 +485,8 @@ non-overlapping public chunks.
 - `CoreTreeSitterStatus`: `Prepared`, `Stale`, `Unavailable`, `Unsupported`,
   `Partial`, `TimedOut`, `BudgetExceeded`, `TooLarge`
 - `CoreTreeSitterRangeSyntax
-  { buffer_id, source_revision, provenance, status, has_error, chunks }`
+  { buffer_id, source_revision, provenance, status, has_error, chunks,
+  embedded_regions }`
 - `CoreTreeSitterChunk { range, capture_name, category, modifiers }`
 - `CoreTreeSitterRequestId { value }`
 - `CoreTreeSitterSnapshotPolicy

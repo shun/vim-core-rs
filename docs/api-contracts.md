@@ -304,6 +304,11 @@ ownership stays host-owned presentation.
 - Tree-sitter preparation uses a request, poll, and query model. Request
   methods may prepare synchronously in the current implementation, poll methods
   drain completed results, and range queries read committed cache state only.
+- Markdown fenced blocks are detected as data-only embedded regions. The
+  returned region records preserve raw and normalized info strings, and they
+  are classified through the registry-backed embedded-region resolver rather
+  than host-side ad hoc parsing. Child syntax injection is out of scope for
+  this phase.
 - Enabled Markdown and Rust Tree-sitter packages own parser/query metadata,
   capture-to-category/modifier mapping, explicit capture priorities, and
   overlap normalization. The standard public chunks are non-overlapping, and

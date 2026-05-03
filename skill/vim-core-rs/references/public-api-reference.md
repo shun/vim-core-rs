@@ -225,7 +225,8 @@ These structs are available only with the default-off
 `experimental-tree-sitter` feature. The `tree-sitter-markdown` and
 `tree-sitter-rust` package features enable parser and query packages for those
 languages. Prepared package results use crate-owned capture mapping and return
-normalized, non-overlapping chunks.
+normalized, non-overlapping chunks. Markdown fenced blocks are detected as
+data-only embedded regions and carry raw and normalized info strings.
 
 - `CoreTextPosition { row, col }`
 - `CoreTextRange { start, end }`
@@ -234,7 +235,8 @@ normalized, non-overlapping chunks.
 - `CoreTreeSitterStatus`: `Prepared`, `Stale`, `Unavailable`, `Unsupported`,
   `Partial`, `TimedOut`, `BudgetExceeded`, `TooLarge`
 - `CoreTreeSitterRangeSyntax
-  { buffer_id, source_revision, provenance, status, has_error, chunks }`
+  { buffer_id, source_revision, provenance, status, has_error, chunks,
+  embedded_regions }`
 - `CoreTreeSitterChunk { range, capture_name, category, modifiers }`
 - `CoreTreeSitterRequestId { value }`
 - `CoreTreeSitterSnapshotPolicy
@@ -264,7 +266,8 @@ does not carry Vim `syn_id` values, Vim highlight attributes, or conceal
 display substitutions.
 `request_tree_sitter_syntax_preparation()` creates or reuses an immutable
 snapshot, parses enabled Markdown or Rust packages synchronously, commits
-normalized chunks, and queues a result for `poll_tree_sitter_preparation()`.
+normalized chunks and embedded region records, and queues a result for
+`poll_tree_sitter_preparation()`.
 `query_tree_sitter_syntax_range()` reads committed cache state only and clips
 cached results to visible subranges.
 

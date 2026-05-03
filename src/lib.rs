@@ -11,7 +11,7 @@ use std::slice;
 use std::str;
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(feature = "experimental-tree-sitter")]
-use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator};
+use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIterator};
 
 macro_rules! debug_log {
     ($($arg:tt)*) => {
@@ -434,6 +434,7 @@ pub struct CoreTreeSitterRangeSyntax {
     pub status: CoreTreeSitterStatus,
     pub has_error: bool,
     pub chunks: Vec<CoreTreeSitterChunk>,
+    pub embedded_regions: Vec<CoreEmbeddedRegion>,
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
@@ -696,6 +697,29 @@ struct KnownTreeSitterLanguage {
     language_id: &'static str,
     package_id: &'static str,
     kind: CoreEmbeddedBlockKind,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum BuiltInEmbeddedRegionKind {
+    Syntax {
+        language_id: &'static str,
+        package_id: &'static str,
+    },
+    Diagram {
+        diagram_kind: CoreDiagramKind,
+    },
+    Media {
+        media_kind: CoreMediaKind,
+        flavor: Option<CoreMediaFlavor>,
+    },
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BuiltInEmbeddedRegionRule {
+    aliases: &'static [&'static str],
+    kind: BuiltInEmbeddedRegionKind,
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
@@ -967,37 +991,19 @@ fn resolve_embedded_language(
         return unsupported_language(request.range, CoreLanguageRole::EmbeddedRegion);
     };
 
-    if let Some(language) = language_from_hint(&normalized) {
-        return resolved_language_from_known(
-            request.range,
-            CoreLanguageRole::EmbeddedRegion,
-            language,
-            CoreLanguageResolutionSource::MarkdownInfoString,
-            CoreResolutionConfidence::Exact,
-        );
-    }
-
-    if normalized == "mermaid" {
-        return CoreResolvedLanguage {
-            range: request.range,
-            role: CoreLanguageRole::EmbeddedRegion,
-            status: CoreLanguageResolutionStatus::Unsupported,
-            language_id: None,
-            package_id: None,
-            package_version: None,
-            kind: CoreEmbeddedBlockKind::Diagram {
-                diagram_kind: CoreDiagramKind::Mermaid,
-            },
-            confidence: CoreResolutionConfidence::Exact,
-            source: CoreLanguageResolutionSource::MarkdownInfoString,
-        };
-    }
-
-    unsupported_language_with_source(
+    resolve_markdown_embedded_region_kind(
         request.range,
+        &normalized,
         CoreLanguageRole::EmbeddedRegion,
         CoreLanguageResolutionSource::MarkdownInfoString,
     )
+    .unwrap_or_else(|| {
+        unsupported_language_with_source(
+            request.range,
+            CoreLanguageRole::EmbeddedRegion,
+            CoreLanguageResolutionSource::MarkdownInfoString,
+        )
+    })
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
@@ -1136,6 +1142,106 @@ fn known_syntax_language(
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
+fn built_in_embedded_region_rules() -> &'static [BuiltInEmbeddedRegionRule] {
+    &[
+        BuiltInEmbeddedRegionRule {
+            aliases: &["rust", "rs"],
+            kind: BuiltInEmbeddedRegionKind::Syntax {
+                language_id: "rust",
+                package_id: "tree-sitter-rust",
+            },
+        },
+        BuiltInEmbeddedRegionRule {
+            aliases: &["markdown", "md", "mkd", "mdown"],
+            kind: BuiltInEmbeddedRegionKind::Syntax {
+                language_id: "markdown",
+                package_id: "tree-sitter-markdown",
+            },
+        },
+        BuiltInEmbeddedRegionRule {
+            aliases: &["mermaid"],
+            kind: BuiltInEmbeddedRegionKind::Diagram {
+                diagram_kind: CoreDiagramKind::Mermaid,
+            },
+        },
+        BuiltInEmbeddedRegionRule {
+            aliases: &["svg"],
+            kind: BuiltInEmbeddedRegionKind::Media {
+                media_kind: CoreMediaKind::Svg,
+                flavor: None,
+            },
+        },
+        BuiltInEmbeddedRegionRule {
+            aliases: &["png"],
+            kind: BuiltInEmbeddedRegionKind::Media {
+                media_kind: CoreMediaKind::Png,
+                flavor: None,
+            },
+        },
+    ]
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn resolve_markdown_embedded_region_kind(
+    range: CoreTextRange,
+    normalized_info_string: &str,
+    role: CoreLanguageRole,
+    source: CoreLanguageResolutionSource,
+) -> Option<CoreResolvedLanguage> {
+    let rule = built_in_embedded_region_rules().iter().find(|rule| {
+        rule.aliases
+            .iter()
+            .any(|alias| *alias == normalized_info_string)
+    })?;
+
+    let resolved = match &rule.kind {
+        BuiltInEmbeddedRegionKind::Syntax {
+            language_id,
+            package_id,
+        } => resolved_language_from_known(
+            range,
+            role,
+            KnownTreeSitterLanguage {
+                language_id: *language_id,
+                package_id: *package_id,
+                kind: CoreEmbeddedBlockKind::Syntax,
+            },
+            source,
+            CoreResolutionConfidence::Exact,
+        ),
+        BuiltInEmbeddedRegionKind::Diagram { diagram_kind } => CoreResolvedLanguage {
+            range,
+            role,
+            status: CoreLanguageResolutionStatus::Unsupported,
+            language_id: None,
+            package_id: None,
+            package_version: None,
+            kind: CoreEmbeddedBlockKind::Diagram {
+                diagram_kind: diagram_kind.clone(),
+            },
+            confidence: CoreResolutionConfidence::Exact,
+            source,
+        },
+        BuiltInEmbeddedRegionKind::Media { media_kind, flavor } => CoreResolvedLanguage {
+            range,
+            role,
+            status: CoreLanguageResolutionStatus::Unsupported,
+            language_id: None,
+            package_id: None,
+            package_version: None,
+            kind: CoreEmbeddedBlockKind::Media {
+                media_kind: media_kind.clone(),
+                flavor: flavor.clone(),
+            },
+            confidence: CoreResolutionConfidence::Exact,
+            source,
+        },
+    };
+
+    Some(resolved)
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
 fn normalize_markdown_info_string(info_string: Option<&str>) -> Option<String> {
     let info_string = info_string?.trim();
     let first_token = info_string
@@ -1162,6 +1268,14 @@ fn tree_sitter_package_language_and_query(language_id: &str) -> Option<(Language
         #[cfg(feature = "tree-sitter-rust")]
         "rust" => Some((rust_tree_sitter_language(), rust_highlight_query())),
         _ => None,
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn text_range_from_bytes(line_starts: &[usize], start: usize, end: usize) -> CoreTextRange {
+    CoreTextRange {
+        start: position_for_byte(line_starts, start),
+        end: position_for_byte(line_starts, end),
     }
 }
 
@@ -1347,31 +1461,62 @@ fn parse_tree_sitter_syntax(
     text: &str,
     range: CoreTextRange,
     resolved: &CoreResolvedLanguage,
-) -> (CoreTreeSitterStatus, bool, Vec<CoreTreeSitterChunk>) {
+) -> (
+    CoreTreeSitterStatus,
+    bool,
+    Vec<CoreTreeSitterChunk>,
+    Vec<CoreEmbeddedRegion>,
+) {
     if !matches!(resolved.status, CoreLanguageResolutionStatus::Resolved) {
         return (
             tree_sitter_status_from_resolution(resolved),
             false,
             Vec::new(),
+            Vec::new(),
         );
     }
     let Some(language_id) = resolved.language_id.as_deref() else {
-        return (CoreTreeSitterStatus::Unsupported, false, Vec::new());
+        return (
+            CoreTreeSitterStatus::Unsupported,
+            false,
+            Vec::new(),
+            Vec::new(),
+        );
     };
     let Some((language, query_source)) = tree_sitter_package_language_and_query(language_id) else {
-        return (CoreTreeSitterStatus::Unavailable, false, Vec::new());
+        return (
+            CoreTreeSitterStatus::Unavailable,
+            false,
+            Vec::new(),
+            Vec::new(),
+        );
     };
 
     let mut parser = Parser::new();
     if parser.set_language(&language).is_err() {
-        return (CoreTreeSitterStatus::Unavailable, false, Vec::new());
+        return (
+            CoreTreeSitterStatus::Unavailable,
+            false,
+            Vec::new(),
+            Vec::new(),
+        );
     }
     let Some(tree) = parser.parse(text, None) else {
-        return (CoreTreeSitterStatus::Partial, true, Vec::new());
+        return (CoreTreeSitterStatus::Partial, true, Vec::new(), Vec::new());
     };
     let has_error = tree.root_node().has_error();
+    let embedded_regions = if language_id == "markdown" {
+        collect_markdown_embedded_regions(text, range, tree.root_node())
+    } else {
+        Vec::new()
+    };
     let Ok(query) = Query::new(&language, query_source) else {
-        return (CoreTreeSitterStatus::Unavailable, has_error, Vec::new());
+        return (
+            CoreTreeSitterStatus::Unavailable,
+            has_error,
+            Vec::new(),
+            embedded_regions,
+        );
     };
 
     let requested_bytes = bytes_for_text_range(text, range);
@@ -1410,7 +1555,7 @@ fn parse_tree_sitter_syntax(
         status = CoreTreeSitterStatus::Partial;
     }
     let chunks = normalize_tree_sitter_captures(text, range, raw_captures);
-    (status, has_error, chunks)
+    (status, has_error, chunks, embedded_regions)
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
@@ -1423,6 +1568,14 @@ fn clip_tree_sitter_syntax_to_range(
         .chunks
         .iter()
         .filter_map(|chunk| intersect_tree_sitter_chunk(chunk, requested_range))
+        .collect();
+    clipped.embedded_regions = syntax
+        .embedded_regions
+        .iter()
+        .filter(|region| {
+            region.range.start < requested_range.end && region.range.end > requested_range.start
+        })
+        .cloned()
         .collect();
     clipped
 }
@@ -1442,6 +1595,111 @@ fn intersect_tree_sitter_chunk(
         capture_name: chunk.capture_name.clone(),
         category: chunk.category,
         modifiers: chunk.modifiers.clone(),
+    })
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn collect_markdown_embedded_regions(
+    text: &str,
+    requested_range: CoreTextRange,
+    root_node: Node<'_>,
+) -> Vec<CoreEmbeddedRegion> {
+    let requested_bytes = bytes_for_text_range(text, requested_range);
+    let line_starts = line_start_offsets(text);
+    let mut embedded_regions = Vec::new();
+    collect_markdown_embedded_regions_from_node(
+        text,
+        &line_starts,
+        requested_bytes,
+        root_node,
+        &mut embedded_regions,
+    );
+    embedded_regions
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn collect_markdown_embedded_regions_from_node(
+    text: &str,
+    line_starts: &[usize],
+    requested_bytes: TextRangeBytes,
+    node: Node<'_>,
+    embedded_regions: &mut Vec<CoreEmbeddedRegion>,
+) {
+    if node.kind() == "fenced_code_block" {
+        if let Some(region) =
+            markdown_embedded_region_for_fenced_code_block(text, line_starts, requested_bytes, node)
+        {
+            embedded_regions.push(region);
+        }
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_markdown_embedded_regions_from_node(
+            text,
+            line_starts,
+            requested_bytes,
+            child,
+            embedded_regions,
+        );
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn markdown_embedded_region_for_fenced_code_block(
+    text: &str,
+    line_starts: &[usize],
+    requested_bytes: TextRangeBytes,
+    node: Node<'_>,
+) -> Option<CoreEmbeddedRegion> {
+    if node.start_byte() < requested_bytes.start || node.end_byte() > requested_bytes.end {
+        return None;
+    }
+
+    let range = text_range_from_bytes(line_starts, node.start_byte(), node.end_byte());
+    let mut info_string = None;
+    let mut content_range = None;
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        match child.kind() {
+            "info_string" => {
+                info_string = Some(text[child.start_byte()..child.end_byte()].to_string());
+            }
+            "code_fence_content" => {
+                content_range = Some(text_range_from_bytes(
+                    line_starts,
+                    child.start_byte(),
+                    child.end_byte(),
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    let normalized_info_string = normalize_markdown_info_string(info_string.as_deref());
+    let resolved_language = Some(resolve_embedded_language(
+        CoreEmbeddedLanguageResolutionRequest {
+            range,
+            raw_info_string: info_string.clone(),
+        },
+    ));
+    let normalized_kind = resolved_language
+        .as_ref()
+        .map(|resolved| resolved.kind.clone())
+        .unwrap_or(CoreEmbeddedBlockKind::Unknown);
+
+    Some(CoreEmbeddedRegion {
+        range,
+        content_range: content_range.unwrap_or(CoreTextRange {
+            start: range.end,
+            end: range.end,
+        }),
+        source: CoreEmbeddedRegionSource::MarkdownFence,
+        raw_info_string: info_string,
+        normalized_info_string,
+        normalized_kind,
+        resolved_language,
     })
 }
 
@@ -1978,17 +2236,19 @@ impl VimCoreSession {
         let mut status = status;
         let mut has_error = false;
         let mut chunks = Vec::new();
+        let mut embedded_regions = Vec::new();
         if matches!(status, CoreTreeSitterStatus::Prepared) {
             if let Some(text) = self
                 .tree_sitter_snapshots
                 .borrow()
                 .text(buffer_id, source_revision)
             {
-                let (parse_status, parse_has_error, parse_chunks) =
+                let (parse_status, parse_has_error, parse_chunks, parse_embedded_regions) =
                     parse_tree_sitter_syntax(text, range, &resolved);
                 status = parse_status;
                 has_error = parse_has_error;
                 chunks = parse_chunks;
+                embedded_regions = parse_embedded_regions;
             } else {
                 status = CoreTreeSitterStatus::Stale;
             }
@@ -2000,6 +2260,7 @@ impl VimCoreSession {
             status,
             has_error,
             chunks,
+            embedded_regions,
         }
     }
 

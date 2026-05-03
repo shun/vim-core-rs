@@ -90,7 +90,8 @@ for Markdown and Rust parser/query packages.
 Tree-sitter output stays separate from `get_line_syntax()` and
 `CoreSyntaxChunk`; it uses source revisions, package/query provenance,
 explicit statuses, byte ranges, capture names, normalized categories and
-modifiers, and embedded region records.
+modifiers, and embedded region records. Markdown fenced blocks are detected as
+embedded regions with raw and normalized info strings.
 Phase 4 adds request, poll, and cache-query preparation methods plus an
 immutable text snapshot store with in-flight pinning, latest-N-per-buffer
 retention, a global byte budget, and explicit `TooLarge` or `BudgetExceeded`
@@ -98,6 +99,8 @@ statuses.
 Phase 5 adds synchronous Markdown and Rust parsing, crate-owned capture
 mapping with explicit priorities, normalized non-overlapping chunks, and
 visible range reads from committed cache only.
+Phase 6 adds data-only Markdown fenced-block embedded region records and does
+not perform child syntax injection.
 
 ### Internal-only areas
 

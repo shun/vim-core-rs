@@ -128,8 +128,9 @@ The Tree-sitter surface is separate from `CoreSyntaxChunk` and
 `get_line_syntax()`. It carries crate-owned `source_revision` provenance,
 package and query versions, explicit preparation status, byte ranges, capture
 names, normalized categories and modifiers, and data-only embedded region
-records. It does not expose Vim syntax IDs, Vim highlight attributes, or
-conceal substitutions.
+records. Markdown fenced blocks are detected as embedded regions with raw and
+normalized info strings. It does not expose Vim syntax IDs, Vim highlight
+attributes, or conceal substitutions.
 
 `tree_sitter_language_packages()` exposes the feature-enabled built-in package
 registry. `resolve_tree_sitter_root_language()` uses Vim `filetype`, buffer
@@ -137,7 +138,8 @@ name, and an optional host hint as inputs.
 `resolve_tree_sitter_embedded_language()` uses Markdown info strings as
 embedded-region inputs. The resolver returns explicit `Resolved`,
 `Unavailable`, or `Unsupported` states and keeps final language selection
-inside `vim-core-rs`.
+inside `vim-core-rs`. `request_tree_sitter_syntax_preparation()` also returns
+Markdown fenced-block embedded region records as data-only extraction.
 
 `request_tree_sitter_syntax_preparation()` adds the request/response
 preparation shape. The implementation creates or reuses immutable text

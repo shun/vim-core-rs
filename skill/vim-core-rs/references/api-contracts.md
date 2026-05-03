@@ -179,6 +179,9 @@ You can understand the crate as a composition of four contracts.
 - Enabled Markdown and Rust Tree-sitter packages own parser/query metadata,
   capture mapping, explicit priorities, overlap normalization, and visible
   range reads from committed cache.
+- Markdown fenced blocks are extracted as data-only embedded regions. The
+  region records preserve raw and normalized info strings, and classification
+  stays registry-backed. Child syntax injection remains out of scope.
 - `get_syntax_name` may return `None` when Vim does not provide a non-empty
   group name.
 

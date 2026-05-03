@@ -199,6 +199,7 @@ pub struct CoreTreeSitterRangeSyntax {
     pub status: CoreTreeSitterStatus,
     pub has_error: bool,
     pub chunks: Vec<CoreTreeSitterChunk>,
+    pub embedded_regions: Vec<CoreEmbeddedRegion>,
 }
 
 #[cfg(feature = "experimental-tree-sitter")]

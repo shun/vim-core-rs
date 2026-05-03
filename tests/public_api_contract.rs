@@ -11,11 +11,11 @@ use std::{
 use vim_core_rs::{
     CoreBufferRevision, CoreEmbeddedBlockKind, CoreEmbeddedLanguageResolutionRequest,
     CoreEmbeddedRegion, CoreEmbeddedRegionSource, CoreLanguageResolutionSource,
-    CoreLanguageResolutionStatus, CoreLanguageRole, CoreResolutionConfidence, CoreResolvedLanguage,
-    CoreRootLanguageResolutionRequest, CoreSyntaxCategory, CoreSyntaxModifier, CoreTextPosition,
-    CoreTextRange, CoreTreeSitterChunk, CoreTreeSitterLanguagePackage,
-    CoreTreeSitterPreparationRequest, CoreTreeSitterProvenance, CoreTreeSitterRangeSyntax,
-    CoreTreeSitterSnapshotPolicy, CoreTreeSitterStatus,
+    CoreLanguageResolutionStatus, CoreLanguageRole, CoreMediaKind, CoreResolutionConfidence,
+    CoreResolvedLanguage, CoreRootLanguageResolutionRequest, CoreSyntaxCategory,
+    CoreSyntaxModifier, CoreTextPosition, CoreTextRange, CoreTreeSitterChunk,
+    CoreTreeSitterLanguagePackage, CoreTreeSitterPreparationRequest, CoreTreeSitterProvenance,
+    CoreTreeSitterRangeSyntax, CoreTreeSitterSnapshotPolicy, CoreTreeSitterStatus,
 };
 use vim_core_rs::{
     CoreCommandOutcome, CoreEvent, CoreHostAction, CoreInputRequestKind, CoreInputResponse,
@@ -1771,6 +1771,7 @@ fn tree_sitter_features_are_default_off_and_separate_from_vim_syntax() {
         public_api_reference.contains("CoreTreeSitterRangeSyntax")
             && public_api_reference.contains("feature-gated")
             && public_api_reference.contains("separate from `CoreSyntaxChunk`")
+            && public_api_reference.contains("embedded_regions")
             && api_index.contains("Experimental Tree-sitter"),
         "docs should describe the feature-gated Tree-sitter surface separately from Vim syntax"
     );
@@ -1796,21 +1797,13 @@ fn experimental_tree_sitter_public_types_are_constructible() {
         category: CoreSyntaxCategory::Keyword,
         modifiers: vec![CoreSyntaxModifier::Definition],
     };
-    let syntax = CoreTreeSitterRangeSyntax {
-        buffer_id: 1,
-        source_revision: CoreBufferRevision { value: 7 },
-        provenance: provenance.clone(),
-        status: CoreTreeSitterStatus::Prepared,
-        has_error: false,
-        chunks: vec![chunk],
-    };
     let resolved_language = CoreResolvedLanguage {
         range,
         role: CoreLanguageRole::EmbeddedRegion,
         status: CoreLanguageResolutionStatus::Resolved,
         language_id: Some("rust".to_string()),
-        package_id: Some(provenance.package_id),
-        package_version: Some(provenance.package_version),
+        package_id: Some(provenance.package_id.clone()),
+        package_version: Some(provenance.package_version.clone()),
         kind: CoreEmbeddedBlockKind::Syntax,
         confidence: CoreResolutionConfidence::Exact,
         source: CoreLanguageResolutionSource::Registry,
@@ -1824,9 +1817,19 @@ fn experimental_tree_sitter_public_types_are_constructible() {
         normalized_kind: CoreEmbeddedBlockKind::Syntax,
         resolved_language: Some(resolved_language),
     };
+    let syntax = CoreTreeSitterRangeSyntax {
+        buffer_id: 1,
+        source_revision: CoreBufferRevision { value: 7 },
+        provenance: provenance.clone(),
+        status: CoreTreeSitterStatus::Prepared,
+        has_error: false,
+        chunks: vec![chunk],
+        embedded_regions: vec![embedded_region.clone()],
+    };
 
     assert_eq!(syntax.source_revision, CoreBufferRevision { value: 7 });
     assert_eq!(syntax.chunks[0].capture_name, "keyword");
+    assert_eq!(syntax.embedded_regions.len(), 1);
     assert!(matches!(
         syntax.chunks[0].category,
         CoreSyntaxCategory::Keyword
@@ -1976,6 +1979,36 @@ fn tree_sitter_embedded_resolver_normalizes_markdown_info_strings() {
         }
     ));
 
+    let svg = VimCoreSession::resolve_tree_sitter_embedded_language(
+        CoreEmbeddedLanguageResolutionRequest {
+            range,
+            raw_info_string: Some("svg".to_string()),
+        },
+    );
+    assert_eq!(svg.status, CoreLanguageResolutionStatus::Unsupported);
+    assert!(matches!(
+        svg.kind,
+        CoreEmbeddedBlockKind::Media {
+            media_kind: CoreMediaKind::Svg,
+            flavor: None
+        }
+    ));
+
+    let png = VimCoreSession::resolve_tree_sitter_embedded_language(
+        CoreEmbeddedLanguageResolutionRequest {
+            range,
+            raw_info_string: Some("png".to_string()),
+        },
+    );
+    assert_eq!(png.status, CoreLanguageResolutionStatus::Unsupported);
+    assert!(matches!(
+        png.kind,
+        CoreEmbeddedBlockKind::Media {
+            media_kind: CoreMediaKind::Png,
+            flavor: None
+        }
+    ));
+
     let unknown = VimCoreSession::resolve_tree_sitter_embedded_language(
         CoreEmbeddedLanguageResolutionRequest {
             range,
@@ -1985,6 +2018,126 @@ fn tree_sitter_embedded_resolver_normalizes_markdown_info_strings() {
 
     assert_eq!(unknown.status, CoreLanguageResolutionStatus::Unsupported);
     assert_eq!(unknown.kind, CoreEmbeddedBlockKind::Unknown);
+}
+
+#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+#[test]
+fn tree_sitter_markdown_fenced_blocks_are_data_only_embedded_regions() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new(
+        "# Title\n\n```rust linenums=true\nfn main() {}\n```\n\n```mermaid\nflowchart TD\n```\n\n```svg\n<svg></svg>\n```\n\n```made-up-language\nraw\n```\n",
+    )
+    .expect("session should initialize");
+    let snapshot = session.snapshot();
+    let buffer = snapshot
+        .buffers
+        .iter()
+        .find(|buffer| buffer.is_active)
+        .expect("active buffer should exist");
+    let range = CoreTextRange {
+        start: CoreTextPosition { row: 0, col: 0 },
+        end: CoreTextPosition { row: 64, col: 0 },
+    };
+
+    session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: buffer.id,
+            source_revision: Some(buffer.source_revision),
+            range,
+            vim_filetype: Some("markdown".to_string()),
+            buffer_name: Some("README.md".to_string()),
+            host_language_hint: None,
+            snapshot_policy: CoreTreeSitterSnapshotPolicy::default(),
+        })
+        .expect("preparation should be accepted");
+
+    let syntax = session
+        .poll_tree_sitter_preparation()
+        .expect("preparation should complete")
+        .syntax;
+
+    assert_eq!(syntax.status, CoreTreeSitterStatus::Prepared);
+    assert_eq!(syntax.embedded_regions.len(), 4);
+
+    let rust = syntax
+        .embedded_regions
+        .iter()
+        .find(|region| region.normalized_info_string.as_deref() == Some("rust"))
+        .expect("rust fence should be detected");
+    assert_eq!(rust.raw_info_string.as_deref(), Some("rust linenums=true"));
+    assert_eq!(rust.source, CoreEmbeddedRegionSource::MarkdownFence);
+    assert_eq!(rust.normalized_kind, CoreEmbeddedBlockKind::Syntax);
+    assert!(matches!(
+        rust.resolved_language
+            .as_ref()
+            .map(|resolved| &resolved.kind),
+        Some(CoreEmbeddedBlockKind::Syntax)
+    ));
+    assert!(rust.content_range.start.row > rust.range.start.row);
+
+    let mermaid = syntax
+        .embedded_regions
+        .iter()
+        .find(|region| region.normalized_info_string.as_deref() == Some("mermaid"))
+        .expect("mermaid fence should be detected");
+    assert!(matches!(
+        mermaid.normalized_kind,
+        CoreEmbeddedBlockKind::Diagram {
+            diagram_kind: vim_core_rs::CoreDiagramKind::Mermaid
+        }
+    ));
+    assert_eq!(
+        mermaid
+            .resolved_language
+            .as_ref()
+            .map(|resolved| resolved.status.clone()),
+        Some(CoreLanguageResolutionStatus::Unsupported)
+    );
+
+    let svg = syntax
+        .embedded_regions
+        .iter()
+        .find(|region| region.normalized_info_string.as_deref() == Some("svg"))
+        .expect("svg fence should be detected");
+    assert!(matches!(
+        svg.normalized_kind,
+        CoreEmbeddedBlockKind::Media {
+            media_kind: CoreMediaKind::Svg,
+            flavor: None
+        }
+    ));
+
+    let unknown = syntax
+        .embedded_regions
+        .iter()
+        .find(|region| region.normalized_info_string.as_deref() == Some("made-up-language"))
+        .expect("unknown fence should be detected");
+    assert_eq!(unknown.normalized_kind, CoreEmbeddedBlockKind::Unknown);
+    assert_eq!(
+        unknown
+            .resolved_language
+            .as_ref()
+            .map(|resolved| resolved.status.clone()),
+        Some(CoreLanguageResolutionStatus::Unsupported)
+    );
+
+    let visible = session
+        .query_tree_sitter_syntax_range(
+            buffer.id,
+            buffer.source_revision,
+            CoreTextRange {
+                start: CoreTextPosition { row: 7, col: 0 },
+                end: CoreTextPosition { row: 8, col: 0 },
+            },
+        )
+        .expect("visible range should read committed cache");
+    assert!(
+        visible
+            .embedded_regions
+            .iter()
+            .any(|region| region.normalized_info_string.as_deref() == Some("mermaid")),
+        "visible range queries should retain overlapping embedded regions"
+    );
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
