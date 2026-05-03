@@ -354,6 +354,16 @@ pub struct CoreTreeSitterProvenance {
 
 #[cfg(feature = "experimental-tree-sitter")]
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreTreeSitterLanguagePackage {
+    pub language_id: String,
+    pub package_id: String,
+    pub package_version: String,
+    pub parser_version: String,
+    pub query_version: String,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreTreeSitterStatus {
     Prepared,
     Stale,
@@ -450,6 +460,14 @@ pub enum CoreResolutionConfidence {
 
 #[cfg(feature = "experimental-tree-sitter")]
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreLanguageResolutionStatus {
+    Resolved,
+    Unavailable,
+    Unsupported,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreEmbeddedRegionSource {
     MarkdownFence,
     MarkdownLink,
@@ -497,12 +515,29 @@ pub enum CoreEmbeddedBlockKind {
 pub struct CoreResolvedLanguage {
     pub range: CoreTextRange,
     pub role: CoreLanguageRole,
+    pub status: CoreLanguageResolutionStatus,
     pub language_id: Option<String>,
     pub package_id: Option<String>,
     pub package_version: Option<String>,
     pub kind: CoreEmbeddedBlockKind,
     pub confidence: CoreResolutionConfidence,
     pub source: CoreLanguageResolutionSource,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreRootLanguageResolutionRequest {
+    pub range: CoreTextRange,
+    pub vim_filetype: Option<String>,
+    pub buffer_name: Option<String>,
+    pub host_language_hint: Option<String>,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreEmbeddedLanguageResolutionRequest {
+    pub range: CoreTextRange,
+    pub raw_info_string: Option<String>,
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
@@ -540,6 +575,247 @@ pub enum CoreMessageCategory {
 impl CoreMessageCategory {
     pub fn is_user_visible(&self) -> bool {
         matches!(self, Self::UserVisible)
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BuiltInTreeSitterPackage {
+    language_id: &'static str,
+    package_id: &'static str,
+    package_version: &'static str,
+    parser_version: &'static str,
+    query_version: &'static str,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct KnownTreeSitterLanguage {
+    language_id: &'static str,
+    package_id: &'static str,
+    kind: CoreEmbeddedBlockKind,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn tree_sitter_language_packages() -> &'static [BuiltInTreeSitterPackage] {
+    &[
+        #[cfg(feature = "tree-sitter-markdown")]
+        BuiltInTreeSitterPackage {
+            language_id: "markdown",
+            package_id: "tree-sitter-markdown",
+            package_version: "0.0.0-skeleton",
+            parser_version: "0.0.0-skeleton",
+            query_version: "0.0.0-skeleton",
+        },
+        #[cfg(feature = "tree-sitter-rust")]
+        BuiltInTreeSitterPackage {
+            language_id: "rust",
+            package_id: "tree-sitter-rust",
+            package_version: "0.0.0-skeleton",
+            parser_version: "0.0.0-skeleton",
+            query_version: "0.0.0-skeleton",
+        },
+    ]
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn resolve_root_language(request: CoreRootLanguageResolutionRequest) -> CoreResolvedLanguage {
+    let candidates = [
+        request
+            .vim_filetype
+            .as_deref()
+            .and_then(language_from_filetype)
+            .map(|language| (language, CoreLanguageResolutionSource::VimFiletype)),
+        request
+            .buffer_name
+            .as_deref()
+            .and_then(language_from_buffer_name)
+            .map(|language| (language, CoreLanguageResolutionSource::BufferName)),
+        request
+            .host_language_hint
+            .as_deref()
+            .and_then(language_from_hint)
+            .map(|language| (language, CoreLanguageResolutionSource::HostHint)),
+    ];
+
+    candidates
+        .into_iter()
+        .flatten()
+        .next()
+        .map(|(language, source)| {
+            resolved_language_from_known(
+                request.range,
+                CoreLanguageRole::RootDocument,
+                language,
+                source,
+                CoreResolutionConfidence::Exact,
+            )
+        })
+        .unwrap_or_else(|| unsupported_language(request.range, CoreLanguageRole::RootDocument))
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn resolve_embedded_language(
+    request: CoreEmbeddedLanguageResolutionRequest,
+) -> CoreResolvedLanguage {
+    let Some(normalized) = normalize_markdown_info_string(request.raw_info_string.as_deref())
+    else {
+        return unsupported_language(request.range, CoreLanguageRole::EmbeddedRegion);
+    };
+
+    if let Some(language) = language_from_hint(&normalized) {
+        return resolved_language_from_known(
+            request.range,
+            CoreLanguageRole::EmbeddedRegion,
+            language,
+            CoreLanguageResolutionSource::MarkdownInfoString,
+            CoreResolutionConfidence::Exact,
+        );
+    }
+
+    if normalized == "mermaid" {
+        return CoreResolvedLanguage {
+            range: request.range,
+            role: CoreLanguageRole::EmbeddedRegion,
+            status: CoreLanguageResolutionStatus::Unsupported,
+            language_id: None,
+            package_id: None,
+            package_version: None,
+            kind: CoreEmbeddedBlockKind::Diagram {
+                diagram_kind: CoreDiagramKind::Mermaid,
+            },
+            confidence: CoreResolutionConfidence::Exact,
+            source: CoreLanguageResolutionSource::MarkdownInfoString,
+        };
+    }
+
+    unsupported_language_with_source(
+        request.range,
+        CoreLanguageRole::EmbeddedRegion,
+        CoreLanguageResolutionSource::MarkdownInfoString,
+    )
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn resolved_language_from_known(
+    range: CoreTextRange,
+    role: CoreLanguageRole,
+    language: KnownTreeSitterLanguage,
+    source: CoreLanguageResolutionSource,
+    confidence: CoreResolutionConfidence,
+) -> CoreResolvedLanguage {
+    let registered_package = registered_package_for_language(language.language_id);
+    CoreResolvedLanguage {
+        range,
+        role,
+        status: if registered_package.is_some() {
+            CoreLanguageResolutionStatus::Resolved
+        } else {
+            CoreLanguageResolutionStatus::Unavailable
+        },
+        language_id: Some(language.language_id.to_string()),
+        package_id: Some(language.package_id.to_string()),
+        package_version: registered_package.map(|package| package.package_version.to_string()),
+        kind: language.kind,
+        confidence,
+        source,
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn unsupported_language(range: CoreTextRange, role: CoreLanguageRole) -> CoreResolvedLanguage {
+    unsupported_language_with_source(range, role, CoreLanguageResolutionSource::Registry)
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn unsupported_language_with_source(
+    range: CoreTextRange,
+    role: CoreLanguageRole,
+    source: CoreLanguageResolutionSource,
+) -> CoreResolvedLanguage {
+    CoreResolvedLanguage {
+        range,
+        role,
+        status: CoreLanguageResolutionStatus::Unsupported,
+        language_id: None,
+        package_id: None,
+        package_version: None,
+        kind: CoreEmbeddedBlockKind::Unknown,
+        confidence: CoreResolutionConfidence::Unknown,
+        source,
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn registered_package_for_language(language_id: &str) -> Option<BuiltInTreeSitterPackage> {
+    tree_sitter_language_packages()
+        .iter()
+        .copied()
+        .find(|package| package.language_id == language_id)
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn language_from_filetype(filetype: &str) -> Option<KnownTreeSitterLanguage> {
+    let normalized = normalize_language_token(filetype)?;
+    language_from_hint(&normalized)
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn language_from_buffer_name(buffer_name: &str) -> Option<KnownTreeSitterLanguage> {
+    let lower = buffer_name.to_ascii_lowercase();
+    if lower.ends_with(".rs") {
+        return known_syntax_language("rust", "tree-sitter-rust");
+    }
+    if lower.ends_with(".md")
+        || lower.ends_with(".markdown")
+        || lower.ends_with(".mkd")
+        || lower.ends_with(".mdown")
+    {
+        return known_syntax_language("markdown", "tree-sitter-markdown");
+    }
+    None
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn language_from_hint(hint: &str) -> Option<KnownTreeSitterLanguage> {
+    let normalized = normalize_language_token(hint)?;
+    match normalized.as_str() {
+        "rust" | "rs" => known_syntax_language("rust", "tree-sitter-rust"),
+        "markdown" | "md" | "mkd" | "mdown" => {
+            known_syntax_language("markdown", "tree-sitter-markdown")
+        }
+        _ => None,
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn known_syntax_language(
+    language_id: &'static str,
+    package_id: &'static str,
+) -> Option<KnownTreeSitterLanguage> {
+    Some(KnownTreeSitterLanguage {
+        language_id,
+        package_id,
+        kind: CoreEmbeddedBlockKind::Syntax,
+    })
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn normalize_markdown_info_string(info_string: Option<&str>) -> Option<String> {
+    let info_string = info_string?.trim();
+    let first_token = info_string
+        .split(|ch: char| ch.is_whitespace() || ch == ',' || ch == '{' || ch == '}')
+        .find(|token| !token.is_empty())?;
+    normalize_language_token(first_token)
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn normalize_language_token(value: &str) -> Option<String> {
+    let normalized = value.trim().trim_start_matches('.').to_ascii_lowercase();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
     }
 }
 
@@ -785,6 +1061,34 @@ enum ParsedExIntent {
 }
 
 impl VimCoreSession {
+    #[cfg(feature = "experimental-tree-sitter")]
+    pub fn tree_sitter_language_packages() -> Vec<CoreTreeSitterLanguagePackage> {
+        tree_sitter_language_packages()
+            .iter()
+            .map(|package| CoreTreeSitterLanguagePackage {
+                language_id: package.language_id.to_string(),
+                package_id: package.package_id.to_string(),
+                package_version: package.package_version.to_string(),
+                parser_version: package.parser_version.to_string(),
+                query_version: package.query_version.to_string(),
+            })
+            .collect()
+    }
+
+    #[cfg(feature = "experimental-tree-sitter")]
+    pub fn resolve_tree_sitter_root_language(
+        request: CoreRootLanguageResolutionRequest,
+    ) -> CoreResolvedLanguage {
+        resolve_root_language(request)
+    }
+
+    #[cfg(feature = "experimental-tree-sitter")]
+    pub fn resolve_tree_sitter_embedded_language(
+        request: CoreEmbeddedLanguageResolutionRequest,
+    ) -> CoreResolvedLanguage {
+        resolve_embedded_language(request)
+    }
+
     pub fn new(initial_text: &str) -> Result<Self, CoreSessionError> {
         Self::new_with_options(initial_text, CoreSessionOptions::default())
     }

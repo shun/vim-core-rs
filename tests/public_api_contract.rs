@@ -9,10 +9,12 @@ use std::{
 };
 #[cfg(feature = "experimental-tree-sitter")]
 use vim_core_rs::{
-    CoreBufferRevision, CoreEmbeddedBlockKind, CoreEmbeddedRegion, CoreEmbeddedRegionSource,
-    CoreLanguageResolutionSource, CoreLanguageRole, CoreResolutionConfidence, CoreResolvedLanguage,
-    CoreSyntaxCategory, CoreSyntaxModifier, CoreTextPosition, CoreTextRange, CoreTreeSitterChunk,
-    CoreTreeSitterProvenance, CoreTreeSitterRangeSyntax, CoreTreeSitterStatus,
+    CoreBufferRevision, CoreEmbeddedBlockKind, CoreEmbeddedLanguageResolutionRequest,
+    CoreEmbeddedRegion, CoreEmbeddedRegionSource, CoreLanguageResolutionSource,
+    CoreLanguageResolutionStatus, CoreLanguageRole, CoreResolutionConfidence, CoreResolvedLanguage,
+    CoreRootLanguageResolutionRequest, CoreSyntaxCategory, CoreSyntaxModifier, CoreTextPosition,
+    CoreTextRange, CoreTreeSitterChunk, CoreTreeSitterLanguagePackage, CoreTreeSitterProvenance,
+    CoreTreeSitterRangeSyntax, CoreTreeSitterStatus,
 };
 use vim_core_rs::{
     CoreCommandOutcome, CoreEvent, CoreHostAction, CoreInputRequestKind, CoreInputResponse,
@@ -1802,6 +1804,7 @@ fn experimental_tree_sitter_public_types_are_constructible() {
     let resolved_language = CoreResolvedLanguage {
         range,
         role: CoreLanguageRole::EmbeddedRegion,
+        status: CoreLanguageResolutionStatus::Resolved,
         language_id: Some("rust".to_string()),
         package_id: Some(provenance.package_id),
         package_version: Some(provenance.package_version),
@@ -1829,4 +1832,159 @@ fn experimental_tree_sitter_public_types_are_constructible() {
         embedded_region.normalized_kind,
         CoreEmbeddedBlockKind::Syntax
     ));
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[test]
+fn tree_sitter_registry_registers_only_feature_enabled_packages() {
+    let packages = VimCoreSession::tree_sitter_language_packages();
+
+    assert_eq!(
+        packages
+            .iter()
+            .filter(|package| package.package_id == "tree-sitter-markdown")
+            .count(),
+        if cfg!(feature = "tree-sitter-markdown") {
+            1
+        } else {
+            0
+        },
+        "Markdown package registration should follow the Cargo feature"
+    );
+    assert_eq!(
+        packages
+            .iter()
+            .filter(|package| package.package_id == "tree-sitter-rust")
+            .count(),
+        if cfg!(feature = "tree-sitter-rust") {
+            1
+        } else {
+            0
+        },
+        "Rust package registration should follow the Cargo feature"
+    );
+    for package in packages {
+        assert!(
+            !package.package_version.is_empty()
+                && !package.parser_version.is_empty()
+                && !package.query_version.is_empty(),
+            "registered packages should expose versioned provenance: {package:?}"
+        );
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[test]
+fn tree_sitter_root_resolver_uses_registry_backed_inputs() {
+    let range = CoreTextRange {
+        start: CoreTextPosition { row: 0, col: 0 },
+        end: CoreTextPosition { row: 10, col: 0 },
+    };
+
+    let rust =
+        VimCoreSession::resolve_tree_sitter_root_language(CoreRootLanguageResolutionRequest {
+            range,
+            vim_filetype: Some("rust".to_string()),
+            buffer_name: Some("src/lib.rs".to_string()),
+            host_language_hint: None,
+        });
+
+    assert_eq!(rust.role, CoreLanguageRole::RootDocument);
+    assert_eq!(rust.language_id.as_deref(), Some("rust"));
+    assert_eq!(rust.package_id.as_deref(), Some("tree-sitter-rust"));
+    assert_eq!(
+        rust.status,
+        if cfg!(feature = "tree-sitter-rust") {
+            CoreLanguageResolutionStatus::Resolved
+        } else {
+            CoreLanguageResolutionStatus::Unavailable
+        }
+    );
+    assert_eq!(rust.source, CoreLanguageResolutionSource::VimFiletype);
+
+    let markdown =
+        VimCoreSession::resolve_tree_sitter_root_language(CoreRootLanguageResolutionRequest {
+            range,
+            vim_filetype: None,
+            buffer_name: Some("README.md".to_string()),
+            host_language_hint: None,
+        });
+
+    assert_eq!(markdown.language_id.as_deref(), Some("markdown"));
+    assert_eq!(markdown.package_id.as_deref(), Some("tree-sitter-markdown"));
+    assert_eq!(markdown.source, CoreLanguageResolutionSource::BufferName);
+
+    let unknown =
+        VimCoreSession::resolve_tree_sitter_root_language(CoreRootLanguageResolutionRequest {
+            range,
+            vim_filetype: Some("totally-unknown".to_string()),
+            buffer_name: Some("scratch.unknown".to_string()),
+            host_language_hint: None,
+        });
+
+    assert_eq!(unknown.status, CoreLanguageResolutionStatus::Unsupported);
+    assert_eq!(unknown.language_id, None);
+    assert_eq!(unknown.package_id, None);
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[test]
+fn tree_sitter_embedded_resolver_normalizes_markdown_info_strings() {
+    let range = CoreTextRange {
+        start: CoreTextPosition { row: 1, col: 0 },
+        end: CoreTextPosition { row: 5, col: 0 },
+    };
+    let rust = VimCoreSession::resolve_tree_sitter_embedded_language(
+        CoreEmbeddedLanguageResolutionRequest {
+            range,
+            raw_info_string: Some("rust ignore".to_string()),
+        },
+    );
+
+    assert_eq!(rust.role, CoreLanguageRole::EmbeddedRegion);
+    assert_eq!(rust.language_id.as_deref(), Some("rust"));
+    assert_eq!(rust.package_id.as_deref(), Some("tree-sitter-rust"));
+    assert_eq!(rust.kind, CoreEmbeddedBlockKind::Syntax);
+    assert_eq!(
+        rust.source,
+        CoreLanguageResolutionSource::MarkdownInfoString
+    );
+    assert_eq!(
+        rust.status,
+        if cfg!(feature = "tree-sitter-rust") {
+            CoreLanguageResolutionStatus::Resolved
+        } else {
+            CoreLanguageResolutionStatus::Unavailable
+        }
+    );
+
+    let mermaid = VimCoreSession::resolve_tree_sitter_embedded_language(
+        CoreEmbeddedLanguageResolutionRequest {
+            range,
+            raw_info_string: Some("mermaid".to_string()),
+        },
+    );
+
+    assert_eq!(mermaid.status, CoreLanguageResolutionStatus::Unsupported);
+    assert!(matches!(
+        mermaid.kind,
+        CoreEmbeddedBlockKind::Diagram {
+            diagram_kind: vim_core_rs::CoreDiagramKind::Mermaid
+        }
+    ));
+
+    let unknown = VimCoreSession::resolve_tree_sitter_embedded_language(
+        CoreEmbeddedLanguageResolutionRequest {
+            range,
+            raw_info_string: Some("made-up-language".to_string()),
+        },
+    );
+
+    assert_eq!(unknown.status, CoreLanguageResolutionStatus::Unsupported);
+    assert_eq!(unknown.kind, CoreEmbeddedBlockKind::Unknown);
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn _tree_sitter_package_type_is_public(package: CoreTreeSitterLanguagePackage) {
+    assert!(!package.package_id.is_empty());
 }

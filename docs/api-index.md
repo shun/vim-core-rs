@@ -118,7 +118,7 @@ The public session methods are grouped by role.
 The `experimental-tree-sitter` feature adds type definitions for a separate
 Tree-sitter extraction surface. The feature is default-off, and the
 `tree-sitter-markdown` and `tree-sitter-rust` package features opt into that
-surface without adding parser behavior in the Phase 2 skeleton.
+surface without adding parser behavior.
 
 The Tree-sitter surface is separate from `CoreSyntaxChunk` and
 `get_line_syntax()`. It carries crate-owned `source_revision` provenance,
@@ -126,6 +126,14 @@ package and query versions, explicit preparation status, byte ranges, capture
 names, normalized categories and modifiers, and data-only embedded region
 records. It does not expose Vim syntax IDs, Vim highlight attributes, or
 conceal substitutions.
+
+`tree_sitter_language_packages()` exposes the feature-enabled built-in package
+registry. `resolve_tree_sitter_root_language()` uses Vim `filetype`, buffer
+name, and an optional host hint as inputs.
+`resolve_tree_sitter_embedded_language()` uses Markdown info strings as
+embedded-region inputs. The resolver returns explicit `Resolved`,
+`Unavailable`, or `Unsupported` states and keeps final language selection
+inside `vim-core-rs`.
 
 ### Internal-only symbols
 

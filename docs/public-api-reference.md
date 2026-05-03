@@ -463,7 +463,8 @@ These structs feed editor UI and history views.
 The `experimental-tree-sitter` Cargo feature exposes a preview type skeleton
 for Tree-sitter extraction. The feature is default-off, and the
 `tree-sitter-markdown` and `tree-sitter-rust` package features enable the same
-experimental surface for language-package work in later phases.
+experimental surface for language-package work. Enabled package features are
+the only packages registered by the built-in registry.
 
 > **Note:** This is a preview feature currently under active development.
 
@@ -474,6 +475,8 @@ implementing parser execution yet.
 
 - `CoreTextPosition { row, col }`
 - `CoreTextRange { start, end }`
+- `CoreTreeSitterLanguagePackage
+  { language_id, package_id, package_version, parser_version, query_version }`
 - `CoreTreeSitterProvenance
   { language_id, package_id, package_version, parser_version, query_version }`
 - `CoreTreeSitterStatus`: `Prepared`, `Stale`, `Unavailable`, `Unsupported`,
@@ -491,15 +494,27 @@ implementing parser execution yet.
   normalized_kind, resolved_language }`
 - `CoreEmbeddedBlockKind`: `Syntax`, `Diagram`, `Media`, `Unknown`
 - `CoreDiagramKind`, `CoreMediaKind`, and `CoreMediaFlavor`
+- `CoreLanguageResolutionStatus`: `Resolved`, `Unavailable`, `Unsupported`
 - `CoreResolvedLanguage
-  { range, role, language_id, package_id, package_version, kind, confidence,
-  source }`
+  { range, role, status, language_id, package_id, package_version, kind,
+  confidence, source }`
+- `CoreRootLanguageResolutionRequest
+  { range, vim_filetype, buffer_name, host_language_hint }`
+- `CoreEmbeddedLanguageResolutionRequest { range, raw_info_string }`
 
 Tree-sitter output must not be routed through `CoreSyntaxChunk`. It does not
 carry Vim `syn_id` values, Vim highlight attributes, or conceal display
 substitutions. Hosts compare `CoreBufferInfo.source_revision` with
 `CoreTreeSitterRangeSyntax.source_revision` before using delayed or cached
 syntax data.
+
+`VimCoreSession::tree_sitter_language_packages()` returns the feature-enabled
+built-in package registry with package, parser, and query versions.
+`resolve_tree_sitter_root_language()` resolves a root document language from
+Vim `filetype`, buffer name, and an optional host hint.
+`resolve_tree_sitter_embedded_language()` resolves Markdown info strings for
+embedded regions. Known languages without an enabled package return
+`Unavailable`; unknown or non-syntax embedded kinds return `Unsupported`.
 
 ### Search and message structs
 

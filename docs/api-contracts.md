@@ -295,6 +295,12 @@ ownership stays host-owned presentation.
   resolved highlight attribute tables yet.
 - Tree-sitter extraction, when enabled, must use a separate public surface and
   must not route output through `CoreSyntaxChunk`.
+- The experimental Tree-sitter package registry registers only packages
+  enabled by Cargo features. Root language resolution uses Vim `filetype`,
+  buffer name, and an optional host hint as inputs. Embedded language
+  resolution uses Markdown info strings as inputs. Missing enabled-package
+  support is reported as `Unavailable`, and unknown language or non-syntax
+  inputs are reported as `Unsupported`.
 - `textprop` is deferred as future annotation-state extraction. The crate does
   not expose it as a public contract yet.
 - popup placement, popup composition, popup borders, and overlay layout stay
