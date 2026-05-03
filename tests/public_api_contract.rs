@@ -11,9 +11,9 @@ use std::{
 use vim_core_rs::{
     CoreBufferRevision, CoreEmbeddedBlockKind, CoreEmbeddedLanguageResolutionRequest,
     CoreEmbeddedRegion, CoreEmbeddedRegionSource, CoreLanguageResolutionSource,
-    CoreLanguageResolutionStatus, CoreLanguageRole, CoreMediaKind, CoreResolutionConfidence,
-    CoreResolvedLanguage, CoreRootLanguageResolutionRequest, CoreSyntaxCategory,
-    CoreSyntaxModifier, CoreTextPosition, CoreTextRange, CoreTreeSitterChunk,
+    CoreLanguageResolutionStatus, CoreLanguageRole, CoreMediaFlavor, CoreMediaKind,
+    CoreResolutionConfidence, CoreResolvedLanguage, CoreRootLanguageResolutionRequest,
+    CoreSyntaxCategory, CoreSyntaxModifier, CoreTextPosition, CoreTextRange, CoreTreeSitterChunk,
     CoreTreeSitterLanguagePackage, CoreTreeSitterPreparationRequest, CoreTreeSitterProvenance,
     CoreTreeSitterRangeSyntax, CoreTreeSitterSnapshotPolicy, CoreTreeSitterStatus,
 };
@@ -2138,6 +2138,101 @@ fn tree_sitter_markdown_fenced_blocks_are_data_only_embedded_regions() {
             .any(|region| region.normalized_info_string.as_deref() == Some("mermaid")),
         "visible range queries should retain overlapping embedded regions"
     );
+}
+
+#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+#[test]
+fn tree_sitter_markdown_linked_svg_png_media_are_data_only_embedded_regions() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new(
+        "# Media\n\n![diagram](assets/system.drawio.svg)\n![logo](assets/logo.svg)\n![screenshot](https://example.test/screens/shot.PNG?cache=1)\n![text](notes.txt)\n",
+    )
+    .expect("session should initialize");
+    let snapshot = session.snapshot();
+    let buffer = snapshot
+        .buffers
+        .iter()
+        .find(|buffer| buffer.is_active)
+        .expect("active buffer should exist");
+    let range = CoreTextRange {
+        start: CoreTextPosition { row: 0, col: 0 },
+        end: CoreTextPosition { row: 16, col: 0 },
+    };
+
+    session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: buffer.id,
+            source_revision: Some(buffer.source_revision),
+            range,
+            vim_filetype: Some("markdown".to_string()),
+            buffer_name: Some("README.md".to_string()),
+            host_language_hint: None,
+            snapshot_policy: CoreTreeSitterSnapshotPolicy::default(),
+        })
+        .expect("preparation should be accepted");
+
+    let syntax = session
+        .poll_tree_sitter_preparation()
+        .expect("preparation should complete")
+        .syntax;
+
+    assert_eq!(syntax.status, CoreTreeSitterStatus::Prepared);
+
+    let linked_media: Vec<_> = syntax
+        .embedded_regions
+        .iter()
+        .filter(|region| region.source == CoreEmbeddedRegionSource::MarkdownLink)
+        .collect();
+    assert_eq!(linked_media.len(), 3, "{linked_media:#?}");
+
+    let drawio_svg = linked_media
+        .iter()
+        .find(|region| region.raw_info_string.as_deref() == Some("assets/system.drawio.svg"))
+        .expect("linked drawio SVG should be detected");
+    assert_eq!(drawio_svg.normalized_info_string.as_deref(), Some("svg"));
+    assert!(matches!(
+        drawio_svg.normalized_kind,
+        CoreEmbeddedBlockKind::Media {
+            media_kind: CoreMediaKind::Svg,
+            flavor: Some(CoreMediaFlavor::DrawioSvg)
+        }
+    ));
+    assert_eq!(
+        drawio_svg
+            .resolved_language
+            .as_ref()
+            .map(|resolved| resolved.status.clone()),
+        Some(CoreLanguageResolutionStatus::Unsupported)
+    );
+
+    let svg = linked_media
+        .iter()
+        .find(|region| region.raw_info_string.as_deref() == Some("assets/logo.svg"))
+        .expect("linked SVG should be detected");
+    assert_eq!(svg.normalized_info_string.as_deref(), Some("svg"));
+    assert!(matches!(
+        svg.normalized_kind,
+        CoreEmbeddedBlockKind::Media {
+            media_kind: CoreMediaKind::Svg,
+            flavor: None
+        }
+    ));
+
+    let png = linked_media
+        .iter()
+        .find(|region| {
+            region.raw_info_string.as_deref()
+                == Some("https://example.test/screens/shot.PNG?cache=1")
+        })
+        .expect("linked PNG should be detected");
+    assert_eq!(png.normalized_info_string.as_deref(), Some("png"));
+    assert!(matches!(
+        png.normalized_kind,
+        CoreEmbeddedBlockKind::Media {
+            media_kind: CoreMediaKind::Png,
+            flavor: None
+        }
+    ));
 }
 
 #[cfg(feature = "experimental-tree-sitter")]

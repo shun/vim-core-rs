@@ -182,6 +182,10 @@ You can understand the crate as a composition of four contracts.
 - Markdown fenced blocks are extracted as data-only embedded regions. The
   region records preserve raw and normalized info strings, and classification
   stays registry-backed. Child syntax injection remains out of scope.
+- Markdown linked SVG and PNG targets are extracted as data-only media
+  embedded regions. The raw link target is preserved, linked `*.drawio.svg`
+  targets carry SVG media with `DrawioSvg` flavor, and rendering or decoding
+  remains host-owned.
 - `get_syntax_name` may return `None` when Vim does not provide a non-empty
   group name.
 

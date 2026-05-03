@@ -523,6 +523,7 @@ pub enum CoreLanguageResolutionSource {
     BufferName,
     HostHint,
     MarkdownInfoString,
+    MarkdownLinkTarget,
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
@@ -932,6 +933,11 @@ fn markdown_tree_sitter_language() -> Language {
 }
 
 #[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+fn markdown_inline_tree_sitter_language() -> Language {
+    tree_sitter_md::INLINE_LANGUAGE.into()
+}
+
+#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
 fn markdown_highlight_query() -> &'static str {
     tree_sitter_md::HIGHLIGHT_QUERY_BLOCK
 }
@@ -1004,6 +1010,24 @@ fn resolve_embedded_language(
             CoreLanguageResolutionSource::MarkdownInfoString,
         )
     })
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn resolved_markdown_link_media(
+    range: CoreTextRange,
+    kind: CoreEmbeddedBlockKind,
+) -> CoreResolvedLanguage {
+    CoreResolvedLanguage {
+        range,
+        role: CoreLanguageRole::EmbeddedRegion,
+        status: CoreLanguageResolutionStatus::Unsupported,
+        language_id: None,
+        package_id: None,
+        package_version: None,
+        kind,
+        confidence: CoreResolutionConfidence::Exact,
+        source: CoreLanguageResolutionSource::MarkdownLinkTarget,
+    }
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
@@ -1632,6 +1656,15 @@ fn collect_markdown_embedded_regions_from_node(
             embedded_regions.push(region);
         }
     }
+    if node.kind() == "inline" {
+        collect_markdown_linked_media_regions(
+            text,
+            line_starts,
+            requested_bytes,
+            node,
+            embedded_regions,
+        );
+    }
 
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
@@ -1642,6 +1675,175 @@ fn collect_markdown_embedded_regions_from_node(
             child,
             embedded_regions,
         );
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn collect_markdown_linked_media_regions(
+    text: &str,
+    line_starts: &[usize],
+    requested_bytes: TextRangeBytes,
+    inline_node: Node<'_>,
+    embedded_regions: &mut Vec<CoreEmbeddedRegion>,
+) {
+    if inline_node.start_byte() >= requested_bytes.end
+        || inline_node.end_byte() <= requested_bytes.start
+    {
+        return;
+    }
+
+    #[cfg(feature = "tree-sitter-markdown")]
+    {
+        let Some(inline_tree) = parse_markdown_inline_tree(text, inline_node) else {
+            return;
+        };
+        collect_markdown_linked_media_regions_from_inline_node(
+            text,
+            line_starts,
+            requested_bytes,
+            inline_tree.root_node(),
+            embedded_regions,
+        );
+    }
+}
+
+#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+fn parse_markdown_inline_tree(text: &str, inline_node: Node<'_>) -> Option<tree_sitter::Tree> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&markdown_inline_tree_sitter_language())
+        .ok()?;
+    parser.set_included_ranges(&[inline_node.range()]).ok()?;
+    parser.parse(text, None)
+}
+
+#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+fn collect_markdown_linked_media_regions_from_inline_node(
+    text: &str,
+    line_starts: &[usize],
+    requested_bytes: TextRangeBytes,
+    node: Node<'_>,
+    embedded_regions: &mut Vec<CoreEmbeddedRegion>,
+) {
+    if matches!(node.kind(), "image" | "inline_link") {
+        if let Some(region) =
+            markdown_embedded_region_for_linked_media(text, line_starts, requested_bytes, node)
+        {
+            embedded_regions.push(region);
+        }
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_markdown_linked_media_regions_from_inline_node(
+            text,
+            line_starts,
+            requested_bytes,
+            child,
+            embedded_regions,
+        );
+    }
+}
+
+#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+fn markdown_embedded_region_for_linked_media(
+    text: &str,
+    line_starts: &[usize],
+    requested_bytes: TextRangeBytes,
+    node: Node<'_>,
+) -> Option<CoreEmbeddedRegion> {
+    let mut destination = None;
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "link_destination" {
+            destination = Some(child);
+            break;
+        }
+    }
+
+    let destination = destination?;
+    let raw_target = text[destination.start_byte()..destination.end_byte()]
+        .trim()
+        .to_string();
+    let (normalized_info_string, normalized_kind) =
+        markdown_link_media_kind_from_target(&raw_target)?;
+
+    if node.start_byte() >= requested_bytes.end || node.end_byte() <= requested_bytes.start {
+        return None;
+    }
+
+    let range = text_range_from_bytes(line_starts, node.start_byte(), node.end_byte());
+    let content_range = text_range_from_bytes(
+        line_starts,
+        destination.start_byte(),
+        destination.end_byte(),
+    );
+    let resolved_language = Some(resolved_markdown_link_media(range, normalized_kind.clone()));
+
+    Some(CoreEmbeddedRegion {
+        range,
+        content_range,
+        source: CoreEmbeddedRegionSource::MarkdownLink,
+        raw_info_string: Some(raw_target),
+        normalized_info_string: Some(normalized_info_string),
+        normalized_kind,
+        resolved_language,
+    })
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn markdown_link_media_kind_from_target(target: &str) -> Option<(String, CoreEmbeddedBlockKind)> {
+    let media_target = normalized_markdown_link_media_target(target)?;
+    if media_target.ends_with(".drawio.svg") {
+        return Some((
+            "svg".to_string(),
+            CoreEmbeddedBlockKind::Media {
+                media_kind: CoreMediaKind::Svg,
+                flavor: Some(CoreMediaFlavor::DrawioSvg),
+            },
+        ));
+    }
+    if media_target.ends_with(".svg") {
+        return Some((
+            "svg".to_string(),
+            CoreEmbeddedBlockKind::Media {
+                media_kind: CoreMediaKind::Svg,
+                flavor: None,
+            },
+        ));
+    }
+    if media_target.ends_with(".png") {
+        return Some((
+            "png".to_string(),
+            CoreEmbeddedBlockKind::Media {
+                media_kind: CoreMediaKind::Png,
+                flavor: None,
+            },
+        ));
+    }
+    None
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn normalized_markdown_link_media_target(target: &str) -> Option<String> {
+    let target = target.trim();
+    if target.is_empty() {
+        return None;
+    }
+    let target = target
+        .strip_prefix('<')
+        .and_then(|stripped| stripped.strip_suffix('>'))
+        .unwrap_or(target);
+    let media_path = target
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(target)
+        .trim()
+        .to_ascii_lowercase();
+    if media_path.is_empty() {
+        None
+    } else {
+        Some(media_path)
     }
 }
 

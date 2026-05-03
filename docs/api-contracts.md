@@ -309,6 +309,10 @@ ownership stays host-owned presentation.
   are classified through the registry-backed embedded-region resolver rather
   than host-side ad hoc parsing. Child syntax injection is out of scope for
   this phase.
+- Markdown linked SVG and PNG targets are detected as data-only media embedded
+  regions. The raw link target is preserved on the region record, linked
+  `*.drawio.svg` targets are classified as SVG media with `DrawioSvg` flavor,
+  and rendering or decoding remains host-owned.
 - Enabled Markdown and Rust Tree-sitter packages own parser/query metadata,
   capture-to-category/modifier mapping, explicit capture priorities, and
   overlap normalization. The standard public chunks are non-overlapping, and

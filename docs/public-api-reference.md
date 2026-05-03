@@ -473,8 +473,10 @@ Tree-sitter provenance, explicit preparation status, byte ranges, capture
 names, normalized categories and modifiers, and embedded regions. Prepared
 Markdown and Rust package results use crate-owned capture mapping and return
 non-overlapping public chunks. Markdown fenced blocks are detected as
-data-only embedded regions and carry raw and normalized info strings. Child
-syntax injection is not part of this phase.
+data-only embedded regions and carry raw and normalized info strings. Markdown
+linked SVG and PNG targets are also detected as data-only media regions. Linked
+`*.drawio.svg` targets are classified as SVG media with `DrawioSvg` flavor.
+Child syntax injection is not part of this phase.
 
 - `CoreTextPosition { row, col }`
 - `CoreTextRange { start, end }`
@@ -512,6 +514,8 @@ syntax injection is not part of this phase.
   normalized_kind, resolved_language }`
 - `CoreEmbeddedBlockKind`: `Syntax`, `Diagram`, `Media`, `Unknown`
 - `CoreDiagramKind`, `CoreMediaKind`, and `CoreMediaFlavor`
+- `CoreLanguageResolutionSource`: `Registry`, `VimFiletype`, `BufferName`,
+  `HostHint`, `MarkdownInfoString`, `MarkdownLinkTarget`
 - `CoreLanguageResolutionStatus`: `Resolved`, `Unavailable`, `Unsupported`
 - `CoreResolvedLanguage
   { range, role, status, language_id, package_id, package_version, kind,

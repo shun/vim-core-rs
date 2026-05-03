@@ -226,7 +226,9 @@ These structs are available only with the default-off
 `tree-sitter-rust` package features enable parser and query packages for those
 languages. Prepared package results use crate-owned capture mapping and return
 normalized, non-overlapping chunks. Markdown fenced blocks are detected as
-data-only embedded regions and carry raw and normalized info strings.
+data-only embedded regions and carry raw and normalized info strings. Markdown
+linked SVG and PNG targets are detected as data-only media regions, and linked
+`*.drawio.svg` targets are SVG media with `DrawioSvg` flavor.
 
 - `CoreTextPosition { row, col }`
 - `CoreTextRange { start, end }`

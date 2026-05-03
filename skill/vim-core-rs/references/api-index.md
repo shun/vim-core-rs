@@ -91,7 +91,9 @@ Tree-sitter output stays separate from `get_line_syntax()` and
 `CoreSyntaxChunk`; it uses source revisions, package/query provenance,
 explicit statuses, byte ranges, capture names, normalized categories and
 modifiers, and embedded region records. Markdown fenced blocks are detected as
-embedded regions with raw and normalized info strings.
+embedded regions with raw and normalized info strings. Markdown linked SVG and
+PNG targets are detected as data-only media regions, and linked `*.drawio.svg`
+targets are SVG media with `DrawioSvg` flavor.
 Phase 4 adds request, poll, and cache-query preparation methods plus an
 immutable text snapshot store with in-flight pinning, latest-N-per-buffer
 retention, a global byte budget, and explicit `TooLarge` or `BudgetExceeded`
@@ -101,6 +103,8 @@ mapping with explicit priorities, normalized non-overlapping chunks, and
 visible range reads from committed cache only.
 Phase 6 adds data-only Markdown fenced-block embedded region records and does
 not perform child syntax injection.
+Phase 7 adds data-only Markdown linked SVG/PNG media region records and keeps
+all rendering and decoding host-owned.
 
 ### Internal-only areas
 
