@@ -1838,6 +1838,16 @@ fn clip_tree_sitter_syntax_to_range(
         .iter()
         .filter_map(|chunk| intersect_tree_sitter_chunk(chunk, requested_range))
         .collect();
+    clipped.covered_ranges = syntax
+        .covered_ranges
+        .iter()
+        .filter_map(|range| intersect_text_range(*range, requested_range))
+        .collect();
+    clipped.error_ranges = syntax
+        .error_ranges
+        .iter()
+        .filter_map(|range| intersect_text_range(*range, requested_range))
+        .collect();
     clipped.embedded_regions = syntax
         .embedded_regions
         .iter()
@@ -1850,17 +1860,26 @@ fn clip_tree_sitter_syntax_to_range(
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
+fn intersect_text_range(
+    range: CoreTextRange,
+    requested_range: CoreTextRange,
+) -> Option<CoreTextRange> {
+    let start = range.start.max(requested_range.start);
+    let end = range.end.min(requested_range.end);
+    if start >= end {
+        return None;
+    }
+    Some(CoreTextRange { start, end })
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
 fn intersect_tree_sitter_chunk(
     chunk: &CoreTreeSitterChunk,
     range: CoreTextRange,
 ) -> Option<CoreTreeSitterChunk> {
-    let start = chunk.range.start.max(range.start);
-    let end = chunk.range.end.min(range.end);
-    if start >= end {
-        return None;
-    }
+    let range = intersect_text_range(chunk.range, range)?;
     Some(CoreTreeSitterChunk {
-        range: CoreTextRange { start, end },
+        range,
         capture_name: chunk.capture_name.clone(),
         category: chunk.category,
         modifiers: chunk.modifiers.clone(),

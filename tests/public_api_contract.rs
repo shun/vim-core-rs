@@ -2485,6 +2485,24 @@ fn tree_sitter_visible_range_query_reads_committed_cache_without_reparsing() {
         "visible query should return clipped chunks only: {:?}",
         visible.chunks
     );
+    assert_eq!(
+        visible.covered_ranges,
+        vec![visible_range],
+        "visible query should clip coverage ranges to the requested range"
+    );
+    assert!(
+        visible
+            .error_ranges
+            .iter()
+            .all(|range| range.start >= visible_range.start && range.end <= visible_range.end),
+        "visible query should clip error ranges to the requested range: {:?}",
+        visible.error_ranges
+    );
+    assert_eq!(
+        visible.budget_status,
+        CoreTreeSitterBudgetStatus::WithinBudget,
+        "visible query should preserve the committed budget status"
+    );
     assert!(
         visible
             .chunks
@@ -2676,6 +2694,79 @@ fn tree_sitter_typescript_and_tsx_packages_parse_and_report_ranges() {
     assert_eq!(tsx.status, CoreLanguageResolutionStatus::Resolved);
     assert_eq!(tsx.language_id.as_deref(), Some("tsx"));
     assert_eq!(tsx.package_id.as_deref(), Some("tree-sitter-tsx"));
+}
+
+#[cfg(all(
+    feature = "experimental-tree-sitter",
+    feature = "tree-sitter-typescript"
+))]
+#[test]
+fn tree_sitter_typescript_and_tsx_malformed_input_reports_error_ranges() {
+    let _guard = acquire_session_test_lock();
+    for (filetype, buffer_name, text, range) in [
+        (
+            "typescript",
+            "src/main.ts",
+            "const value: = ;\n",
+            CoreTextRange {
+                start: CoreTextPosition { row: 0, col: 0 },
+                end: CoreTextPosition { row: 1, col: 0 },
+            },
+        ),
+        (
+            "tsx",
+            "src/App.tsx",
+            "const view = <div><span></div>;\n",
+            CoreTextRange {
+                start: CoreTextPosition { row: 0, col: 0 },
+                end: CoreTextPosition { row: 1, col: 0 },
+            },
+        ),
+    ] {
+        let mut session = VimCoreSession::new(text).expect("session should initialize");
+        let buffer = session
+            .snapshot()
+            .buffers
+            .into_iter()
+            .find(|buffer| buffer.is_active)
+            .expect("active buffer should exist");
+
+        session
+            .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+                buffer_id: buffer.id,
+                source_revision: Some(buffer.source_revision),
+                range,
+                vim_filetype: Some(filetype.to_string()),
+                buffer_name: Some(buffer_name.to_string()),
+                host_language_hint: None,
+                snapshot_policy: CoreTreeSitterSnapshotPolicy::default(),
+            })
+            .expect("preparation should be accepted");
+
+        let syntax = session
+            .poll_tree_sitter_preparation()
+            .expect("result should be ready")
+            .syntax;
+        assert_eq!(syntax.status, CoreTreeSitterStatus::Prepared);
+        assert!(syntax.has_error, "{filetype} should report parser errors");
+        assert_eq!(syntax.covered_ranges, vec![range]);
+        assert_eq!(
+            syntax.budget_status,
+            CoreTreeSitterBudgetStatus::WithinBudget
+        );
+        assert!(
+            !syntax.error_ranges.is_empty(),
+            "{filetype} should expose concrete error ranges: {syntax:#?}"
+        );
+        assert!(
+            syntax
+                .error_ranges
+                .iter()
+                .all(|error_range| error_range.start >= range.start && error_range.end <= range.end),
+            "{filetype} error ranges should stay within the requested range: {:?}",
+            syntax.error_ranges
+        );
+    }
 }
 
 #[cfg(all(
