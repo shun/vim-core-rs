@@ -205,7 +205,7 @@ the requested 1-based inclusive row range for the target window.
 ### Buffer, window, snapshot, undo, syntax, PUM
 
 - `CoreBufferInfo`
-  `{ id, name, dirty, is_active, source_kind, document_id,
+  `{ id, name, source_revision, dirty, is_active, source_kind, document_id,
   pending_vfs_operation, deferred_close, last_vfs_error }`
 - `CoreWindowInfo`
   `{ id, buf_id, row, col, width, height, topline, botline, leftcol, skipcol,
@@ -214,6 +214,7 @@ the requested 1-based inclusive row range for the target window.
   `{ text, revision, dirty, mode, pending_input, cursor_row, cursor_col,
   pending_host_actions, buffers, windows, pum }`
 - `CoreUndoNode`, `CoreUndoTree`
+- `CoreBufferRevision { value }`
 - `CoreSyntaxChunk { start_col, end_col, syn_id, name }`
 - `CorePumItem { word, abbr, menu, kind, info }`
 - `CorePumInfo { row, col, width, height, selected_index, items }`

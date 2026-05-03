@@ -56,8 +56,9 @@ The crate root exports these user-facing symbols.
   `CoreMatchType`, `MatchCountResult`, `CoreSearchDirection`,
   `CoreCommandError`, `CoreSessionError`
 - Structs: `CoreMarkPosition`, `CoreJumpListEntry`, `CoreJumpList`,
-  `CoreJobStartRequest`, `CoreBufferInfo`, `CoreWindowInfo`, `CoreUndoNode`,
-  `CoreUndoTree`, `CoreSyntaxChunk`, `CoreMessageEvent`,
+  `CoreJobStartRequest`, `CoreBufferRevision`, `CoreBufferInfo`,
+  `CoreWindowInfo`, `CoreUndoNode`, `CoreUndoTree`, `CoreSyntaxChunk`,
+  `CoreMessageEvent`,
   `CoreCommandTransaction`, `CoreSessionOptions`, `CorePumItem`, `CorePumInfo`,
   `CoreMatchRange`, `CoreCursorMatchInfo`, `CoreSnapshot`
 - Re-exported VFS enums and structs: `CoreBufferBinding`,

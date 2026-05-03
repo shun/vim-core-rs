@@ -122,6 +122,75 @@ fn buffer_info_contains_name_and_dirty_flag() {
 }
 
 #[test]
+fn buffer_info_exposes_buffer_local_source_revision() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer one").expect("session should initialize");
+
+    let initial_snapshot = session.snapshot();
+    let first_buffer = initial_snapshot
+        .buffers
+        .iter()
+        .find(|b| b.is_active)
+        .expect("アクティブバッファが存在すること");
+    let first_buffer_id = first_buffer.id;
+    let first_initial_revision = first_buffer.source_revision;
+
+    let repeated_snapshot = session.snapshot();
+    let repeated_first_revision = repeated_snapshot
+        .buffers
+        .iter()
+        .find(|b| b.id == first_buffer_id)
+        .expect("最初のバッファが存在すること")
+        .source_revision;
+    assert_eq!(
+        repeated_first_revision, first_initial_revision,
+        "変更がないスナップショット取得では source_revision は進まないこと"
+    );
+
+    session
+        .execute_ex_command(":enew")
+        .expect("enew should succeed");
+    let second_snapshot = session.snapshot();
+    let first_after_new_buffer_revision = second_snapshot
+        .buffers
+        .iter()
+        .find(|b| b.id == first_buffer_id)
+        .expect("最初のバッファが存在すること")
+        .source_revision;
+    let second_buffer = second_snapshot
+        .buffers
+        .iter()
+        .find(|b| b.is_active)
+        .expect("2つ目のアクティブバッファが存在すること");
+    let second_buffer_id = second_buffer.id;
+    let second_initial_revision = second_buffer.source_revision;
+
+    session
+        .execute_ex_command("call setline(1, 'buffer two changed')")
+        .expect("setline should change the second buffer");
+    let edited_snapshot = session.snapshot();
+    let first_after_second_edit = edited_snapshot
+        .buffers
+        .iter()
+        .find(|b| b.id == first_buffer_id)
+        .expect("最初のバッファが存在すること");
+    let second_after_edit = edited_snapshot
+        .buffers
+        .iter()
+        .find(|b| b.id == second_buffer_id)
+        .expect("2つ目のバッファが存在すること");
+
+    assert_eq!(
+        first_after_second_edit.source_revision, first_after_new_buffer_revision,
+        "別バッファの編集では source_revision は進まないこと"
+    );
+    assert!(
+        second_after_edit.source_revision > second_initial_revision,
+        "編集したバッファの source_revision は前進すること"
+    );
+}
+
+#[test]
 fn window_info_contains_geometry() {
     let _guard = acquire_session_test_lock();
     let session = VimCoreSession::new("hello world").expect("session should initialize");

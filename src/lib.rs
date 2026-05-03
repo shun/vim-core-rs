@@ -260,10 +260,16 @@ pub enum CoreHostAction {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CoreBufferRevision {
+    pub value: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreBufferInfo {
     pub id: i32,
     pub name: String,
+    pub source_revision: CoreBufferRevision,
     pub dirty: bool,
     pub is_active: bool,
     pub source_kind: CoreBufferSourceKind,
@@ -2561,6 +2567,9 @@ fn convert_buffer_list(
         .map(|info| CoreBufferInfo {
             id: info.id,
             name: string_from_parts(info.name_ptr, info.name_len),
+            source_revision: CoreBufferRevision {
+                value: info.source_revision,
+            },
             dirty: info.dirty,
             is_active: info.is_active,
             source_kind: CoreBufferSourceKind::Local,

@@ -180,6 +180,10 @@ pub struct CoreUndoNode {
     pub is_curhead: bool,
 }
 
+pub struct CoreBufferRevision {
+    pub value: u64,
+}
+
 pub struct CoreSyntaxChunk {
     pub start_col: usize,
     pub end_col: usize,

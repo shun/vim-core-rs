@@ -86,8 +86,13 @@ Read only the materials needed for the current task.
   matching GitHub Release exists.
 - Respect the documented project non-goals. In the repository, they live in
   `docs/SCOPE.md`. Do not extend the crate toward full Vimscript embedding,
-  rich terminal emulation, or modern semantic highlighting that should stay in
-  Rust-side systems.
+  rich terminal emulation, or a generic semantic parsing platform.
+- If the task touches Tree-sitter syntax extraction, follow repository
+  `docs/adr/0003-versioned-tree-sitter-extraction.md`. Keep Tree-sitter output
+  separate from `get_line_syntax()` / `CoreSyntaxChunk`, use versioned language
+  packages and source revisions, return normalized chunks for the standard host
+  surface, and keep grammar, query, capture-overlap resolution, and cache
+  invalidation ownership inside `vim-core-rs`.
 - Use contract tests as the source of truth for behavior. If API docs and tests
   disagree, assume the tests reflect the intended repository contract until the
   code proves otherwise.

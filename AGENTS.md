@@ -56,9 +56,18 @@
 - エディタ全体の event loop や rendering pipeline の所有
 - ファイル保存や OS プロセス起動の自己完結実装
 - Vim script / Lua を中心にした汎用スクリプトプラットフォーム化
-- Tree-sitter などを含む意味解析エンジンの内包
+- Tree-sitter などを汎用の意味解析エンジンとして内包すること
 - `:terminal` 相当のターミナルサブシステムの内包
 - Neovim 互換レイヤーや msgpack RPC 前提の設計
+
+Tree-sitter を扱う場合は、汎用 semantic platform ではなく、公開
+syntax extraction contract の一部として扱ってください。具体的には
+[docs/adr/0003-versioned-tree-sitter-extraction.md](docs/adr/0003-versioned-tree-sitter-extraction.md)
+に従い、Vim-derived syntax extraction と別 surface にし、versioned
+language package、source revision、parse status、normalized chunks、
+request / response 型 preparation model を前提にしてください。
+`saya` などのホストへ grammar、query、capture overlap 解決、cache
+invalidation の所有責務を移してはいけません。
 
 ## Important invariants
 
@@ -150,6 +159,9 @@ spec の必要性を判断して進めてください。
 - VFS / VFD / host action のようなホスト境界は、責務を混ぜず明示的な状態
   遷移として扱う
 - 公開 API を増やすときは host-owned / crate-owned の境界を文書化する
+- Tree-sitter syntax extraction を追加または変更するときは
+  [ADR 0003](docs/adr/0003-versioned-tree-sitter-extraction.md) を優先し、
+  `get_line_syntax()` / `CoreSyntaxChunk` の Vim-derived contract と混ぜない
 - 振る舞い変更では、対応する契約テストかドキュメントを必ず更新する
 - コードやドキュメントを修正したら、`skill-creator` を使って関連 skill の
   `SKILL.md` や `agents/openai.yaml` が最新か確認し、必要なら更新する

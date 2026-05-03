@@ -37,8 +37,9 @@ Read the bundled pages in this order when you need complete coverage.
   `MatchCountResult`,
   `CoreSearchDirection`, `CoreCommandError`, `CoreSessionError`
 - Structs: `CoreMarkPosition`, `CoreJumpListEntry`, `CoreJumpList`,
-  `CoreJobStartRequest`, `CoreBufferInfo`, `CoreWindowInfo`, `CoreUndoNode`,
-  `CoreUndoTree`, `CoreSyntaxChunk`, `CoreMessageEvent`,
+  `CoreJobStartRequest`, `CoreBufferRevision`, `CoreBufferInfo`,
+  `CoreWindowInfo`, `CoreUndoNode`, `CoreUndoTree`, `CoreSyntaxChunk`,
+  `CoreMessageEvent`,
   `CoreCommandTransaction`, `CorePumItem`, `CorePumInfo`, `CoreMatchRange`,
   `CoreCursorMatchInfo`, `CoreSessionOptions`, `CoreSnapshot`
 - Re-exported VFS items: `CoreBufferBinding`, `CoreBufferSourceKind`,

@@ -13,11 +13,15 @@ If you need exact signatures or behavior contracts, continue with
 This crate exists as the editing-core component of a larger editor
 architecture.
 
-- Rust owns rendering, the event loop, I/O orchestration, and higher-level
-  state such as Tree-sitter integration.
+- Rust hosts own rendering, the event loop, I/O orchestration, and higher-level
+  presentation state.
 - The extension or scripting layer belongs outside this crate.
 - `vim-core-rs` owns embedded Vim editing semantics and selected runtime state
   extraction.
+- Tree-sitter syntax extraction, when present, is a versioned extraction
+  contract owned by this crate, not a host-owned compatibility layer or a
+  general semantic platform. See
+  `docs/adr/0003-versioned-tree-sitter-extraction.md`.
 
 Because of that split, the crate must behave like a modal text-editing engine
 with a host integration boundary. It must not try to become the whole editor.
@@ -71,6 +75,9 @@ The crate may expose data that a host renderer can consume directly.
   family member.
 - Syntax chunks and syntax group names derived from the embedded Vim runtime
   for the current `Syntax` family member.
+- Versioned Tree-sitter syntax extraction as a separate public surface from
+  Vim-derived `get_line_syntax()` / `CoreSyntaxChunk`, when implemented under
+  ADR 0003.
 - Pop-up menu state and items.
 - Text properties as Vim-owned annotation state for the future
   `Annotations` placeholder, once a narrow read-only surface is defined.
@@ -107,11 +114,22 @@ The crate is not the application's async runtime.
 
 ### Modern semantic parsing and highlighting
 
-The crate is not the main syntax or semantic analysis engine.
+The crate is not a general semantic analysis platform.
 
 - Do not expand Vim regex syntax extraction into a full semantic pipeline.
 - Treat Vim-derived syntax information as renderer input or fallback behavior.
-- Keep modern parsing systems such as Tree-sitter outside this crate.
+- Keep Tree-sitter extraction separate from Vim-derived syntax extraction.
+- Do not route Tree-sitter output through `CoreSyntaxChunk`.
+- Do not move grammar, query, capture-overlap resolution, or syntax cache
+  invalidation ownership to hosts such as `saya`.
+- Do not use Tree-sitter support as a path to general plugin hosting,
+  unrestricted query injection, Neovim compatibility, or semantic analysis
+  ownership.
+- Do not render Mermaid, drawio, SVG, PNG, or other embedded media in this
+  crate. Markdown embedded block detection may be exposed as data-only
+  extraction, but rendering and layout remain host-owned presentation.
+- Follow `docs/adr/0003-versioned-tree-sitter-extraction.md` for any
+  Tree-sitter extraction work.
 
 ### Virtual text and overlay composition
 
@@ -142,9 +160,11 @@ Use this filter when a proposed change is ambiguous.
 
 - If the feature is pure modal editing semantics, it likely belongs here.
 - If the feature is state extraction from embedded Vim, it may belong here.
+- If the feature is versioned Tree-sitter syntax extraction that follows ADR
+  0003, it may belong here.
 - If the feature is persistence, process management, rendering, plugin
-  hosting, semantic parsing, or async orchestration, it likely belongs in the
-  host instead.
+  hosting, general semantic parsing, media rendering, or async orchestration,
+  it likely belongs in the host instead.
 
 ## Next steps
 

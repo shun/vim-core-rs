@@ -169,8 +169,13 @@ You can understand the crate as a composition of four contracts.
   cell must convert explicitly.
 - `get_cursor_match_info` can signal `TimedOut` or `MaxReached` instead of a
   concrete full count.
+- `CoreBufferInfo.source_revision` is the crate-owned, buffer-local source
+  revision for freshness checks. It is distinct from the session-wide
+  `CoreSnapshot.revision`.
 - Syntax extraction groups consecutive columns with the same syntax ID into one
   `CoreSyntaxChunk`.
+- Tree-sitter extraction, when enabled, must use a separate public surface and
+  must not route output through `CoreSyntaxChunk`.
 - `get_syntax_name` may return `None` when Vim does not provide a non-empty
   group name.
 

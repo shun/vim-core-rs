@@ -123,6 +123,7 @@ typedef struct vim_core_buffer_info {
     int id;
     const char* name_ptr;
     uintptr_t name_len;
+    uint64_t source_revision;
     bool dirty;
     bool is_active;
     /* VFS metadata fields */

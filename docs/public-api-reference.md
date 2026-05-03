@@ -397,6 +397,7 @@ These structs expose the current editor layout.
 - `CoreBufferInfo`
   - `id`
   - `name`
+  - `source_revision`
   - `dirty`
   - `is_active`
   - `source_kind`
@@ -452,6 +453,7 @@ These structs feed editor UI and history views.
   alt_prev_seq, is_newhead, is_curhead }`
 - `CoreUndoTree { nodes, synced, seq_last, save_last, seq_cur, time_cur,
   save_cur }`
+- `CoreBufferRevision { value }`
 - `CoreSyntaxChunk { start_col, end_col, syn_id, name }`
 - `CorePumItem { word, abbr, menu, kind, info }`
 - `CorePumInfo { row, col, width, height, selected_index, items }`

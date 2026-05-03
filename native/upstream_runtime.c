@@ -1508,6 +1508,7 @@ static void upstream_runtime_populate_buffers(vim_core_snapshot_t* snapshot) {
             infos[idx].name_ptr = NULL;
             infos[idx].name_len = 0;
         }
+        infos[idx].source_revision = (uint64_t)CHANGEDTICK(buf);
         infos[idx].dirty = buf->b_changed ? true : false;
         infos[idx].is_active = (buf == curbuf) ? true : false;
         /* VFS metadata: C 側はデフォルト値（Local / None）で初期化。

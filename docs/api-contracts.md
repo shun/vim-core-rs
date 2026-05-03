@@ -65,6 +65,9 @@ The snapshot contract explains what `snapshot()` means.
 - `snapshot().pending_host_actions` includes the length of the Rust-side queue
   in addition to whatever the runtime already reported.
 - `buffers()` and `windows()` are convenience wrappers over `snapshot()`.
+- `CoreBufferInfo.source_revision` is the crate-owned, buffer-local source
+  revision for freshness checks. It is distinct from the session-wide
+  `CoreSnapshot.revision`.
 - `CoreSnapshot.cursor_row` and `cursor_col` describe the active window only.
 - `CoreWindowInfo` is the per-window source of truth for geometry, viewport
   state, active-window state, and window-local cursor state.
@@ -290,6 +293,8 @@ ownership stays host-owned presentation.
 - This is the public syntax extraction boundary. It does not expose
   highlight definition tables, including `:highlight` definition tables, or
   resolved highlight attribute tables yet.
+- Tree-sitter extraction, when enabled, must use a separate public surface and
+  must not route output through `CoreSyntaxChunk`.
 - `textprop` is deferred as future annotation-state extraction. The crate does
   not expose it as a public contract yet.
 - popup placement, popup composition, popup borders, and overlay layout stay
