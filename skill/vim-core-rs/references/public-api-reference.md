@@ -236,6 +236,20 @@ grammar dependencies yet.
 - `CoreTreeSitterRangeSyntax
   { buffer_id, source_revision, provenance, status, has_error, chunks }`
 - `CoreTreeSitterChunk { range, capture_name, category, modifiers }`
+- `CoreTreeSitterRequestId { value }`
+- `CoreTreeSitterSnapshotPolicy
+  { retain_latest_per_buffer, global_byte_budget, max_snapshot_bytes }`
+- `CoreTreeSitterPreparationRequest
+  { buffer_id, source_revision, range, vim_filetype, buffer_name,
+  host_language_hint, snapshot_policy }`
+- `CoreTreeSitterPreparation { request_id, buffer_id, source_revision,
+  status }`
+- `CoreTreeSitterPreparationResult { request_id, syntax }`
+- `CoreTreeSitterSnapshotStoreStats
+  { snapshot_count, pinned_snapshot_count, total_unpinned_bytes,
+  snapshots }`
+- `CoreTreeSitterSnapshotStoreEntry
+  { buffer_id, source_revision, byte_len, pin_count }`
 - `CoreSyntaxCategory` and `CoreSyntaxModifier`
 - `CoreEmbeddedRegion
   { range, content_range, source, raw_info_string, normalized_info_string,
@@ -248,6 +262,10 @@ grammar dependencies yet.
 Tree-sitter output is feature-gated and separate from `CoreSyntaxChunk`. It
 does not carry Vim `syn_id` values, Vim highlight attributes, or conceal
 display substitutions.
+`request_tree_sitter_syntax_preparation()` creates or reuses an immutable
+snapshot, completes the Phase 4 preparation synchronously without parser
+execution, and queues a result for `poll_tree_sitter_preparation()`.
+`query_tree_sitter_syntax_range()` reads committed cache state only.
 
 ### Search and message types
 

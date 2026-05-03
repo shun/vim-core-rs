@@ -484,6 +484,20 @@ implementing parser execution yet.
 - `CoreTreeSitterRangeSyntax
   { buffer_id, source_revision, provenance, status, has_error, chunks }`
 - `CoreTreeSitterChunk { range, capture_name, category, modifiers }`
+- `CoreTreeSitterRequestId { value }`
+- `CoreTreeSitterSnapshotPolicy
+  { retain_latest_per_buffer, global_byte_budget, max_snapshot_bytes }`
+- `CoreTreeSitterPreparationRequest
+  { buffer_id, source_revision, range, vim_filetype, buffer_name,
+  host_language_hint, snapshot_policy }`
+- `CoreTreeSitterPreparation { request_id, buffer_id, source_revision,
+  status }`
+- `CoreTreeSitterPreparationResult { request_id, syntax }`
+- `CoreTreeSitterSnapshotStoreStats
+  { snapshot_count, pinned_snapshot_count, total_unpinned_bytes,
+  snapshots }`
+- `CoreTreeSitterSnapshotStoreEntry
+  { buffer_id, source_revision, byte_len, pin_count }`
 - `CoreSyntaxCategory`: normalized public highlight categories such as
   `Keyword`, `String`, `Function`, `Type`, `Variable`, `Comment`, and
   `Unknown`
@@ -515,6 +529,17 @@ Vim `filetype`, buffer name, and an optional host hint.
 `resolve_tree_sitter_embedded_language()` resolves Markdown info strings for
 embedded regions. Known languages without an enabled package return
 `Unavailable`; unknown or non-syntax embedded kinds return `Unsupported`.
+`request_tree_sitter_syntax_preparation()` creates or reuses an immutable text
+snapshot keyed by `(buffer_id, source_revision)`, pins it for the synchronous
+Phase 4 preparation, commits an empty non-parsed result with an explicit
+status, and queues a pollable completion. `poll_tree_sitter_preparation()`
+drains completed results. `query_tree_sitter_syntax_range()` reads the
+committed cache only and doesn't parse in the draw path.
+
+Snapshot retention keeps only unpinned snapshots, preserves pinned in-flight
+snapshots, and applies both latest-N-per-buffer and global byte-budget
+eviction. Oversized snapshots return `TooLarge`, and snapshots that can't fit
+within the configured budget return `BudgetExceeded`.
 
 ### Search and message structs
 

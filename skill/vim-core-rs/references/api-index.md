@@ -45,8 +45,12 @@ Read the bundled pages in this order when you need complete coverage.
 - Experimental Tree-sitter symbols, only with `experimental-tree-sitter`:
   `CoreTextPosition`, `CoreTextRange`, `CoreTreeSitterProvenance`,
   `CoreTreeSitterStatus`, `CoreTreeSitterRangeSyntax`,
-  `CoreTreeSitterChunk`, `CoreSyntaxCategory`, `CoreSyntaxModifier`,
-  `CoreResolvedLanguage`, and `CoreEmbeddedRegion`
+  `CoreTreeSitterChunk`, `CoreTreeSitterRequestId`,
+  `CoreTreeSitterPreparationRequest`, `CoreTreeSitterPreparation`,
+  `CoreTreeSitterPreparationResult`, `CoreTreeSitterSnapshotPolicy`,
+  `CoreTreeSitterSnapshotStoreEntry`, `CoreTreeSitterSnapshotStoreStats`,
+  `CoreSyntaxCategory`, `CoreSyntaxModifier`, `CoreResolvedLanguage`, and
+  `CoreEmbeddedRegion`
 - Re-exported VFS items: `CoreBufferBinding`, `CoreBufferSourceKind`,
   `CoreDeferredClose`, `CorePendingVfsOperation`, `CoreRequestEntry`,
   `CoreRequestStatus`, `CoreVfsError`, `CoreVfsErrorKind`,
@@ -87,6 +91,10 @@ Tree-sitter output stays separate from `get_line_syntax()` and
 `CoreSyntaxChunk`; it uses source revisions, package/query provenance,
 explicit statuses, byte ranges, capture names, normalized categories and
 modifiers, and embedded region records.
+Phase 4 adds request, poll, and cache-query preparation methods plus an
+immutable text snapshot store with in-flight pinning, latest-N-per-buffer
+retention, a global byte budget, and explicit `TooLarge` or `BudgetExceeded`
+statuses.
 
 ### Internal-only areas
 

@@ -301,6 +301,15 @@ ownership stays host-owned presentation.
   resolution uses Markdown info strings as inputs. Missing enabled-package
   support is reported as `Unavailable`, and unknown language or non-syntax
   inputs are reported as `Unsupported`.
+- Tree-sitter preparation uses a request, poll, and query model. Request
+  methods may prepare synchronously in the current implementation, poll methods
+  drain completed results, and range queries read committed cache state only.
+- Tree-sitter preparation snapshots are immutable and keyed by
+  `(buffer_id, source_revision)`. Queued or running requests pin snapshots.
+  Completed snapshots are retained with latest-N-per-buffer and global
+  byte-budget eviction for unpinned snapshots only. Oversized snapshots return
+  `TooLarge`, and requests that can't fit within the configured budget return
+  `BudgetExceeded`.
 - `textprop` is deferred as future annotation-state extraction. The crate does
   not expose it as a public contract yet.
 - popup placement, popup composition, popup borders, and overlay layout stay

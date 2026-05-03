@@ -209,6 +209,24 @@ pub struct CoreTreeSitterChunk {
     pub modifiers: Vec<CoreSyntaxModifier>,
 }
 
+#[cfg(feature = "experimental-tree-sitter")]
+pub struct CoreTreeSitterPreparationRequest {
+    pub buffer_id: i32,
+    pub source_revision: Option<CoreBufferRevision>,
+    pub range: CoreTextRange,
+    pub vim_filetype: Option<String>,
+    pub buffer_name: Option<String>,
+    pub host_language_hint: Option<String>,
+    pub snapshot_policy: CoreTreeSitterSnapshotPolicy,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+pub struct CoreTreeSitterSnapshotPolicy {
+    pub retain_latest_per_buffer: usize,
+    pub global_byte_budget: usize,
+    pub max_snapshot_bytes: Option<usize>,
+}
+
 pub struct CorePumItem {
     pub word: String,
     pub abbr: String,

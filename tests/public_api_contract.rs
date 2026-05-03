@@ -13,8 +13,9 @@ use vim_core_rs::{
     CoreEmbeddedRegion, CoreEmbeddedRegionSource, CoreLanguageResolutionSource,
     CoreLanguageResolutionStatus, CoreLanguageRole, CoreResolutionConfidence, CoreResolvedLanguage,
     CoreRootLanguageResolutionRequest, CoreSyntaxCategory, CoreSyntaxModifier, CoreTextPosition,
-    CoreTextRange, CoreTreeSitterChunk, CoreTreeSitterLanguagePackage, CoreTreeSitterProvenance,
-    CoreTreeSitterRangeSyntax, CoreTreeSitterStatus,
+    CoreTextRange, CoreTreeSitterChunk, CoreTreeSitterLanguagePackage,
+    CoreTreeSitterPreparationRequest, CoreTreeSitterProvenance, CoreTreeSitterRangeSyntax,
+    CoreTreeSitterSnapshotPolicy, CoreTreeSitterStatus,
 };
 use vim_core_rs::{
     CoreCommandOutcome, CoreEvent, CoreHostAction, CoreInputRequestKind, CoreInputResponse,
@@ -1982,6 +1983,197 @@ fn tree_sitter_embedded_resolver_normalizes_markdown_info_strings() {
 
     assert_eq!(unknown.status, CoreLanguageResolutionStatus::Unsupported);
     assert_eq!(unknown.kind, CoreEmbeddedBlockKind::Unknown);
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[test]
+fn tree_sitter_preparation_uses_request_poll_and_query_shape() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("fn main() {}\n").expect("session should initialize");
+    let snapshot = session.snapshot();
+    let buffer = snapshot
+        .buffers
+        .iter()
+        .find(|buffer| buffer.is_active)
+        .expect("active buffer should exist");
+    let range = CoreTextRange {
+        start: CoreTextPosition { row: 0, col: 0 },
+        end: CoreTextPosition { row: 1, col: 0 },
+    };
+
+    let preparation = session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: buffer.id,
+            source_revision: Some(buffer.source_revision),
+            range,
+            vim_filetype: Some("rust".to_string()),
+            buffer_name: Some("src/main.rs".to_string()),
+            host_language_hint: None,
+            snapshot_policy: CoreTreeSitterSnapshotPolicy::default(),
+        })
+        .expect("preparation request should be accepted");
+
+    assert_eq!(preparation.request_id.value, 1);
+    assert_eq!(preparation.buffer_id, buffer.id);
+    assert_eq!(preparation.source_revision, buffer.source_revision);
+
+    let completed = session
+        .poll_tree_sitter_preparation()
+        .expect("synchronous MVP should produce one completed result");
+    assert_eq!(completed.request_id, preparation.request_id);
+    assert_eq!(completed.syntax.buffer_id, buffer.id);
+    assert_eq!(completed.syntax.source_revision, buffer.source_revision);
+    assert_eq!(
+        completed.syntax.status,
+        if cfg!(feature = "tree-sitter-rust") {
+            CoreTreeSitterStatus::Prepared
+        } else {
+            CoreTreeSitterStatus::Unavailable
+        }
+    );
+    assert!(
+        completed.syntax.chunks.is_empty(),
+        "Phase 4 prepares request/cache plumbing but does not parse yet"
+    );
+
+    let queried = session
+        .query_tree_sitter_syntax_range(buffer.id, buffer.source_revision, range)
+        .expect("completed preparation should be queryable from the committed cache");
+    assert_eq!(queried, completed.syntax);
+    assert!(session.poll_tree_sitter_preparation().is_none());
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[test]
+fn tree_sitter_snapshot_store_reports_too_large_and_budget_statuses() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("abcdef\n").expect("session should initialize");
+    let snapshot = session.snapshot();
+    let buffer = snapshot
+        .buffers
+        .iter()
+        .find(|buffer| buffer.is_active)
+        .expect("active buffer should exist");
+    let range = CoreTextRange {
+        start: CoreTextPosition { row: 0, col: 0 },
+        end: CoreTextPosition { row: 1, col: 0 },
+    };
+
+    let too_large = session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: buffer.id,
+            source_revision: Some(buffer.source_revision),
+            range,
+            vim_filetype: Some("rust".to_string()),
+            buffer_name: Some("src/lib.rs".to_string()),
+            host_language_hint: None,
+            snapshot_policy: CoreTreeSitterSnapshotPolicy {
+                max_snapshot_bytes: Some(3),
+                ..CoreTreeSitterSnapshotPolicy::default()
+            },
+        })
+        .expect("too-large request should still complete with explicit status");
+    assert_eq!(too_large.status, CoreTreeSitterStatus::TooLarge);
+    assert_eq!(
+        session
+            .poll_tree_sitter_preparation()
+            .expect("too-large result should be pollable")
+            .syntax
+            .status,
+        CoreTreeSitterStatus::TooLarge
+    );
+
+    let budgeted = session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: buffer.id,
+            source_revision: Some(buffer.source_revision),
+            range,
+            vim_filetype: Some("rust".to_string()),
+            buffer_name: Some("src/lib.rs".to_string()),
+            host_language_hint: None,
+            snapshot_policy: CoreTreeSitterSnapshotPolicy {
+                global_byte_budget: 3,
+                max_snapshot_bytes: None,
+                ..CoreTreeSitterSnapshotPolicy::default()
+            },
+        })
+        .expect("budgeted request should still complete with explicit status");
+    assert_eq!(budgeted.status, CoreTreeSitterStatus::BudgetExceeded);
+    assert_eq!(
+        session
+            .poll_tree_sitter_preparation()
+            .expect("budget result should be pollable")
+            .syntax
+            .status,
+        CoreTreeSitterStatus::BudgetExceeded
+    );
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[test]
+fn tree_sitter_snapshot_store_retains_latest_unpinned_revision_per_buffer() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("one\n").expect("session should initialize");
+    let first = session.snapshot();
+    let first_buffer = first
+        .buffers
+        .iter()
+        .find(|buffer| buffer.is_active)
+        .expect("active buffer should exist");
+    let range = CoreTextRange {
+        start: CoreTextPosition { row: 0, col: 0 },
+        end: CoreTextPosition { row: 1, col: 0 },
+    };
+    let policy = CoreTreeSitterSnapshotPolicy {
+        retain_latest_per_buffer: 1,
+        global_byte_budget: 1024,
+        max_snapshot_bytes: None,
+    };
+
+    session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: first_buffer.id,
+            source_revision: Some(first_buffer.source_revision),
+            range,
+            vim_filetype: Some("markdown".to_string()),
+            buffer_name: Some("README.md".to_string()),
+            host_language_hint: None,
+            snapshot_policy: policy.clone(),
+        })
+        .expect("first preparation should be accepted");
+    let _ = session.poll_tree_sitter_preparation();
+
+    session
+        .execute_normal_command("Gotwo\x1b")
+        .expect("edit should advance buffer revision");
+    let second = session.snapshot();
+    let second_buffer = second
+        .buffers
+        .iter()
+        .find(|buffer| buffer.id == first_buffer.id)
+        .expect("original buffer should still exist");
+
+    session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: second_buffer.id,
+            source_revision: Some(second_buffer.source_revision),
+            range,
+            vim_filetype: Some("markdown".to_string()),
+            buffer_name: Some("README.md".to_string()),
+            host_language_hint: None,
+            snapshot_policy: policy,
+        })
+        .expect("second preparation should be accepted");
+    let _ = session.poll_tree_sitter_preparation();
+
+    let stats = session.tree_sitter_snapshot_store_stats();
+    assert_eq!(stats.pinned_snapshot_count, 0);
+    assert_eq!(stats.snapshot_count, 1);
+    assert_eq!(stats.snapshots[0].buffer_id, first_buffer.id);
+    assert_eq!(
+        stats.snapshots[0].source_revision, second_buffer.source_revision,
+        "only the latest unpinned revision should remain for the buffer"
+    );
 }
 
 #[cfg(feature = "experimental-tree-sitter")]

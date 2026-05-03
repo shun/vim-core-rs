@@ -1,5 +1,7 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
+#[cfg(feature = "experimental-tree-sitter")]
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -336,7 +338,7 @@ pub struct CoreTextPosition {
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CoreTextRange {
     pub start: CoreTextPosition,
     pub end: CoreTextPosition,
@@ -430,6 +432,77 @@ pub struct CoreTreeSitterRangeSyntax {
     pub status: CoreTreeSitterStatus,
     pub has_error: bool,
     pub chunks: Vec<CoreTreeSitterChunk>,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CoreTreeSitterRequestId {
+    pub value: u64,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreTreeSitterSnapshotPolicy {
+    pub retain_latest_per_buffer: usize,
+    pub global_byte_budget: usize,
+    pub max_snapshot_bytes: Option<usize>,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+impl Default for CoreTreeSitterSnapshotPolicy {
+    fn default() -> Self {
+        Self {
+            retain_latest_per_buffer: 4,
+            global_byte_budget: 16 * 1024 * 1024,
+            max_snapshot_bytes: Some(4 * 1024 * 1024),
+        }
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreTreeSitterPreparationRequest {
+    pub buffer_id: i32,
+    pub source_revision: Option<CoreBufferRevision>,
+    pub range: CoreTextRange,
+    pub vim_filetype: Option<String>,
+    pub buffer_name: Option<String>,
+    pub host_language_hint: Option<String>,
+    pub snapshot_policy: CoreTreeSitterSnapshotPolicy,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreTreeSitterPreparation {
+    pub request_id: CoreTreeSitterRequestId,
+    pub buffer_id: i32,
+    pub source_revision: CoreBufferRevision,
+    pub status: CoreTreeSitterStatus,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreTreeSitterPreparationResult {
+    pub request_id: CoreTreeSitterRequestId,
+    pub syntax: CoreTreeSitterRangeSyntax,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreTreeSitterSnapshotStoreEntry {
+    pub buffer_id: i32,
+    pub source_revision: CoreBufferRevision,
+    pub byte_len: usize,
+    pub pin_count: usize,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreTreeSitterSnapshotStoreStats {
+    pub snapshot_count: usize,
+    pub pinned_snapshot_count: usize,
+    pub total_unpinned_bytes: usize,
+    pub snapshots: Vec<CoreTreeSitterSnapshotStoreEntry>,
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
@@ -597,6 +670,182 @@ struct KnownTreeSitterLanguage {
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone)]
+struct TreeSitterTextSnapshot {
+    buffer_id: i32,
+    source_revision: CoreBufferRevision,
+    text: String,
+    pin_count: usize,
+    last_used_tick: u64,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Default)]
+struct TreeSitterSnapshotStore {
+    snapshots: HashMap<(i32, CoreBufferRevision), TreeSitterTextSnapshot>,
+    access_tick: u64,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+impl TreeSitterSnapshotStore {
+    fn pin_existing(&mut self, buffer_id: i32, source_revision: CoreBufferRevision) -> bool {
+        self.access_tick = self.access_tick.saturating_add(1);
+        let Some(snapshot) = self.snapshots.get_mut(&(buffer_id, source_revision)) else {
+            return false;
+        };
+        snapshot.pin_count = snapshot.pin_count.saturating_add(1);
+        snapshot.last_used_tick = self.access_tick;
+        true
+    }
+
+    fn pin_or_insert(
+        &mut self,
+        buffer_id: i32,
+        source_revision: CoreBufferRevision,
+        text: String,
+        policy: &CoreTreeSitterSnapshotPolicy,
+    ) -> Result<(), CoreTreeSitterStatus> {
+        let byte_len = text.len();
+        if policy
+            .max_snapshot_bytes
+            .map(|limit| byte_len > limit)
+            .unwrap_or(false)
+        {
+            return Err(CoreTreeSitterStatus::TooLarge);
+        }
+        if byte_len > policy.global_byte_budget {
+            return Err(CoreTreeSitterStatus::BudgetExceeded);
+        }
+
+        let key = (buffer_id, source_revision);
+        self.access_tick = self.access_tick.saturating_add(1);
+        if let Some(snapshot) = self.snapshots.get_mut(&key) {
+            snapshot.pin_count = snapshot.pin_count.saturating_add(1);
+            snapshot.last_used_tick = self.access_tick;
+            return Ok(());
+        }
+
+        self.snapshots.insert(
+            key,
+            TreeSitterTextSnapshot {
+                buffer_id,
+                source_revision,
+                text,
+                pin_count: 1,
+                last_used_tick: self.access_tick,
+            },
+        );
+        match self.evict_unpinned(policy) {
+            Ok(()) => Ok(()),
+            Err(status) => {
+                self.snapshots.remove(&key);
+                Err(status)
+            }
+        }
+    }
+
+    fn unpin(&mut self, buffer_id: i32, source_revision: CoreBufferRevision) {
+        if let Some(snapshot) = self.snapshots.get_mut(&(buffer_id, source_revision)) {
+            snapshot.pin_count = snapshot.pin_count.saturating_sub(1);
+        }
+    }
+
+    fn evict_unpinned(
+        &mut self,
+        policy: &CoreTreeSitterSnapshotPolicy,
+    ) -> Result<(), CoreTreeSitterStatus> {
+        self.evict_latest_overflow(policy.retain_latest_per_buffer);
+        self.evict_budget_overflow(policy.global_byte_budget);
+        if self.total_unpinned_bytes() > policy.global_byte_budget {
+            return Err(CoreTreeSitterStatus::BudgetExceeded);
+        }
+        Ok(())
+    }
+
+    fn evict_latest_overflow(&mut self, retain_latest_per_buffer: usize) {
+        let mut revisions_by_buffer: HashMap<i32, Vec<CoreBufferRevision>> = HashMap::new();
+        for snapshot in self.snapshots.values() {
+            revisions_by_buffer
+                .entry(snapshot.buffer_id)
+                .or_default()
+                .push(snapshot.source_revision);
+        }
+
+        let mut remove_keys = Vec::new();
+        for (buffer_id, mut revisions) in revisions_by_buffer {
+            revisions.sort();
+            revisions.dedup();
+            let keep_from = revisions.len().saturating_sub(retain_latest_per_buffer);
+            for revision in &revisions[..keep_from] {
+                let key = (buffer_id, *revision);
+                if self
+                    .snapshots
+                    .get(&key)
+                    .map(|snapshot| snapshot.pin_count == 0)
+                    .unwrap_or(false)
+                {
+                    remove_keys.push(key);
+                }
+            }
+        }
+
+        for key in remove_keys {
+            self.snapshots.remove(&key);
+        }
+    }
+
+    fn evict_budget_overflow(&mut self, global_byte_budget: usize) {
+        while self.total_unpinned_bytes() > global_byte_budget {
+            let Some(key) = self
+                .snapshots
+                .iter()
+                .filter(|(_, snapshot)| snapshot.pin_count == 0)
+                .min_by_key(|(_, snapshot)| snapshot.last_used_tick)
+                .map(|(key, _)| *key)
+            else {
+                break;
+            };
+            self.snapshots.remove(&key);
+        }
+    }
+
+    fn total_unpinned_bytes(&self) -> usize {
+        self.snapshots
+            .values()
+            .filter(|snapshot| snapshot.pin_count == 0)
+            .map(|snapshot| snapshot.text.len())
+            .sum()
+    }
+
+    fn stats(&self) -> CoreTreeSitterSnapshotStoreStats {
+        let mut snapshots = self
+            .snapshots
+            .values()
+            .map(|snapshot| CoreTreeSitterSnapshotStoreEntry {
+                buffer_id: snapshot.buffer_id,
+                source_revision: snapshot.source_revision,
+                byte_len: snapshot.text.len(),
+                pin_count: snapshot.pin_count,
+            })
+            .collect::<Vec<_>>();
+        snapshots.sort_by_key(|snapshot| (snapshot.buffer_id, snapshot.source_revision));
+        CoreTreeSitterSnapshotStoreStats {
+            snapshot_count: snapshots.len(),
+            pinned_snapshot_count: snapshots
+                .iter()
+                .filter(|snapshot| snapshot.pin_count > 0)
+                .count(),
+            total_unpinned_bytes: snapshots
+                .iter()
+                .filter(|snapshot| snapshot.pin_count == 0)
+                .map(|snapshot| snapshot.byte_len)
+                .sum(),
+            snapshots,
+        }
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
 fn tree_sitter_language_packages() -> &'static [BuiltInTreeSitterPackage] {
     &[
         #[cfg(feature = "tree-sitter-markdown")]
@@ -752,6 +1001,37 @@ fn registered_package_for_language(language_id: &str) -> Option<BuiltInTreeSitte
         .iter()
         .copied()
         .find(|package| package.language_id == language_id)
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn tree_sitter_status_from_resolution(resolved: &CoreResolvedLanguage) -> CoreTreeSitterStatus {
+    match resolved.status {
+        CoreLanguageResolutionStatus::Resolved => CoreTreeSitterStatus::Prepared,
+        CoreLanguageResolutionStatus::Unavailable => CoreTreeSitterStatus::Unavailable,
+        CoreLanguageResolutionStatus::Unsupported => CoreTreeSitterStatus::Unsupported,
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn provenance_for_resolved_language(resolved: &CoreResolvedLanguage) -> CoreTreeSitterProvenance {
+    let package = resolved
+        .language_id
+        .as_deref()
+        .and_then(registered_package_for_language);
+    CoreTreeSitterProvenance {
+        language_id: resolved.language_id.clone().unwrap_or_default(),
+        package_id: resolved.package_id.clone().unwrap_or_default(),
+        package_version: package
+            .map(|package| package.package_version.to_string())
+            .or_else(|| resolved.package_version.clone())
+            .unwrap_or_default(),
+        parser_version: package
+            .map(|package| package.parser_version.to_string())
+            .unwrap_or_default(),
+        query_version: package
+            .map(|package| package.query_version.to_string())
+            .unwrap_or_default(),
+    }
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
@@ -1039,6 +1319,15 @@ pub struct VimCoreSession {
     completed_input_eval_result: RefCell<Option<String>>,
     pending_host_actions: RefCell<VecDeque<CoreHostAction>>,
     pending_events: RefCell<VecDeque<CoreEvent>>,
+    #[cfg(feature = "experimental-tree-sitter")]
+    next_tree_sitter_request_id: RefCell<u64>,
+    #[cfg(feature = "experimental-tree-sitter")]
+    tree_sitter_snapshots: RefCell<TreeSitterSnapshotStore>,
+    #[cfg(feature = "experimental-tree-sitter")]
+    completed_tree_sitter_preparations: RefCell<VecDeque<CoreTreeSitterPreparationResult>>,
+    #[cfg(feature = "experimental-tree-sitter")]
+    committed_tree_sitter_syntax:
+        RefCell<BTreeMap<(i32, CoreBufferRevision, CoreTextRange), CoreTreeSitterRangeSyntax>>,
     not_send_sync: PhantomData<Rc<()>>,
 }
 
@@ -1087,6 +1376,110 @@ impl VimCoreSession {
         request: CoreEmbeddedLanguageResolutionRequest,
     ) -> CoreResolvedLanguage {
         resolve_embedded_language(request)
+    }
+
+    #[cfg(feature = "experimental-tree-sitter")]
+    pub fn request_tree_sitter_syntax_preparation(
+        &mut self,
+        mut request: CoreTreeSitterPreparationRequest,
+    ) -> Result<CoreTreeSitterPreparation, CoreCommandError> {
+        let request_id = {
+            let mut next = self.next_tree_sitter_request_id.borrow_mut();
+            let request_id = CoreTreeSitterRequestId { value: *next };
+            *next = next.saturating_add(1);
+            request_id
+        };
+
+        let snapshot = self.snapshot();
+        let Some(buffer) = snapshot
+            .buffers
+            .iter()
+            .find(|buffer| buffer.id == request.buffer_id)
+        else {
+            return Err(CoreCommandError::InvalidInput);
+        };
+        let source_revision = request.source_revision.unwrap_or(buffer.source_revision);
+        if request.buffer_name.is_none() && !buffer.name.is_empty() {
+            request.buffer_name = Some(buffer.name.clone());
+        }
+
+        let snapshot_status = self.pin_tree_sitter_text_snapshot(
+            request.buffer_id,
+            source_revision,
+            buffer.source_revision,
+            &request.snapshot_policy,
+        );
+        let status = snapshot_status.unwrap_or_else(|| {
+            let range = request.range;
+            let resolved = resolve_root_language(CoreRootLanguageResolutionRequest {
+                range,
+                vim_filetype: request.vim_filetype.clone(),
+                buffer_name: request.buffer_name.clone(),
+                host_language_hint: request.host_language_hint.clone(),
+            });
+            tree_sitter_status_from_resolution(&resolved)
+        });
+
+        let syntax = self.tree_sitter_syntax_result_for_request(
+            request.buffer_id,
+            source_revision,
+            request.range,
+            status.clone(),
+            &request,
+        );
+
+        if !matches!(status, CoreTreeSitterStatus::Stale) {
+            self.committed_tree_sitter_syntax.borrow_mut().insert(
+                (request.buffer_id, source_revision, request.range),
+                syntax.clone(),
+            );
+        }
+        self.completed_tree_sitter_preparations
+            .borrow_mut()
+            .push_back(CoreTreeSitterPreparationResult { request_id, syntax });
+
+        if !matches!(
+            status,
+            CoreTreeSitterStatus::Stale
+                | CoreTreeSitterStatus::TooLarge
+                | CoreTreeSitterStatus::BudgetExceeded
+        ) {
+            let mut store = self.tree_sitter_snapshots.borrow_mut();
+            store.unpin(request.buffer_id, source_revision);
+            let _ = store.evict_unpinned(&request.snapshot_policy);
+        }
+
+        Ok(CoreTreeSitterPreparation {
+            request_id,
+            buffer_id: request.buffer_id,
+            source_revision,
+            status,
+        })
+    }
+
+    #[cfg(feature = "experimental-tree-sitter")]
+    pub fn poll_tree_sitter_preparation(&mut self) -> Option<CoreTreeSitterPreparationResult> {
+        self.completed_tree_sitter_preparations
+            .borrow_mut()
+            .pop_front()
+    }
+
+    #[cfg(feature = "experimental-tree-sitter")]
+    pub fn query_tree_sitter_syntax_range(
+        &self,
+        buffer_id: i32,
+        source_revision: CoreBufferRevision,
+        range: CoreTextRange,
+    ) -> Option<CoreTreeSitterRangeSyntax> {
+        self.committed_tree_sitter_syntax
+            .borrow()
+            .get(&(buffer_id, source_revision, range))
+            .cloned()
+    }
+
+    #[cfg(feature = "experimental-tree-sitter")]
+    pub fn tree_sitter_snapshot_store_stats(&self) -> CoreTreeSitterSnapshotStoreStats {
+        self.tree_sitter_snapshots.borrow().stats()
     }
 
     pub fn new(initial_text: &str) -> Result<Self, CoreSessionError> {
@@ -1149,6 +1542,14 @@ impl VimCoreSession {
             completed_input_eval_result: RefCell::new(None),
             pending_host_actions: RefCell::new(VecDeque::new()),
             pending_events: RefCell::new(VecDeque::new()),
+            #[cfg(feature = "experimental-tree-sitter")]
+            next_tree_sitter_request_id: RefCell::new(1),
+            #[cfg(feature = "experimental-tree-sitter")]
+            tree_sitter_snapshots: RefCell::new(TreeSitterSnapshotStore::default()),
+            #[cfg(feature = "experimental-tree-sitter")]
+            completed_tree_sitter_preparations: RefCell::new(VecDeque::new()),
+            #[cfg(feature = "experimental-tree-sitter")]
+            committed_tree_sitter_syntax: RefCell::new(BTreeMap::new()),
             not_send_sync: PhantomData,
         };
 
@@ -1173,6 +1574,59 @@ impl VimCoreSession {
         let command =
             format!("let &rtp = {xdg_literal} . ',' . &rtp | let &pp = {xdg_literal} . ',' . &pp");
         let _ = self.execute_ex_command(&command);
+    }
+
+    #[cfg(feature = "experimental-tree-sitter")]
+    fn pin_tree_sitter_text_snapshot(
+        &self,
+        buffer_id: i32,
+        source_revision: CoreBufferRevision,
+        current_source_revision: CoreBufferRevision,
+        policy: &CoreTreeSitterSnapshotPolicy,
+    ) -> Option<CoreTreeSitterStatus> {
+        if source_revision != current_source_revision {
+            if self
+                .tree_sitter_snapshots
+                .borrow_mut()
+                .pin_existing(buffer_id, source_revision)
+            {
+                return None;
+            }
+            return Some(CoreTreeSitterStatus::Stale);
+        }
+
+        let Some(text) = self.buffer_text(buffer_id) else {
+            return Some(CoreTreeSitterStatus::Unsupported);
+        };
+        self.tree_sitter_snapshots
+            .borrow_mut()
+            .pin_or_insert(buffer_id, source_revision, text, policy)
+            .err()
+    }
+
+    #[cfg(feature = "experimental-tree-sitter")]
+    fn tree_sitter_syntax_result_for_request(
+        &self,
+        buffer_id: i32,
+        source_revision: CoreBufferRevision,
+        range: CoreTextRange,
+        status: CoreTreeSitterStatus,
+        request: &CoreTreeSitterPreparationRequest,
+    ) -> CoreTreeSitterRangeSyntax {
+        let resolved = resolve_root_language(CoreRootLanguageResolutionRequest {
+            range,
+            vim_filetype: request.vim_filetype.clone(),
+            buffer_name: request.buffer_name.clone(),
+            host_language_hint: request.host_language_hint.clone(),
+        });
+        CoreTreeSitterRangeSyntax {
+            buffer_id,
+            source_revision,
+            provenance: provenance_for_resolved_language(&resolved),
+            status,
+            has_error: false,
+            chunks: Vec::new(),
+        }
     }
 
     pub fn snapshot(&self) -> CoreSnapshot {

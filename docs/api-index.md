@@ -65,6 +65,10 @@ The crate root exports these user-facing symbols.
   `experimental-tree-sitter`: `CoreTextPosition`, `CoreTextRange`,
   `CoreTreeSitterProvenance`, `CoreTreeSitterStatus`,
   `CoreTreeSitterRangeSyntax`, `CoreTreeSitterChunk`,
+  `CoreTreeSitterRequestId`, `CoreTreeSitterPreparationRequest`,
+  `CoreTreeSitterPreparation`, `CoreTreeSitterPreparationResult`,
+  `CoreTreeSitterSnapshotPolicy`, `CoreTreeSitterSnapshotStoreEntry`,
+  `CoreTreeSitterSnapshotStoreStats`,
   `CoreSyntaxCategory`, `CoreSyntaxModifier`, `CoreLanguageRole`,
   `CoreLanguageResolutionSource`, `CoreResolutionConfidence`,
   `CoreResolvedLanguage`, `CoreEmbeddedRegionSource`, `CoreDiagramKind`,
@@ -134,6 +138,15 @@ name, and an optional host hint as inputs.
 embedded-region inputs. The resolver returns explicit `Resolved`,
 `Unavailable`, or `Unsupported` states and keeps final language selection
 inside `vim-core-rs`.
+
+`request_tree_sitter_syntax_preparation()` adds the request/response
+preparation shape. The Phase 4 implementation creates or reuses immutable text
+snapshots keyed by `(buffer_id, source_revision)`, pins queued or running
+requests, completes synchronously without parser execution, and queues
+completed results for `poll_tree_sitter_preparation()`.
+`query_tree_sitter_syntax_range()` reads committed cache state only.
+`tree_sitter_snapshot_store_stats()` exposes retention diagnostics for tests
+and host debugging, including pinned counts and unpinned byte usage.
 
 ### Internal-only symbols
 
