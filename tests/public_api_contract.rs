@@ -1749,9 +1749,9 @@ fn tree_sitter_features_are_default_off_and_separate_from_vim_syntax() {
 
     assert!(
         cargo_toml.contains("default = []")
-            && cargo_toml.contains("experimental-tree-sitter = []")
-            && cargo_toml.contains("tree-sitter-markdown = [\"experimental-tree-sitter\"]")
-            && cargo_toml.contains("tree-sitter-rust = [\"experimental-tree-sitter\"]"),
+            && cargo_toml.contains("experimental-tree-sitter = [\"dep:tree-sitter\"]")
+            && cargo_toml.contains("tree-sitter-markdown = [\"experimental-tree-sitter\", \"dep:tree-sitter-md\", \"tree-sitter-md/parser\"]")
+            && cargo_toml.contains("tree-sitter-rust = [\"experimental-tree-sitter\", \"dep:tree-sitter-rust\"]"),
         "Tree-sitter feature flags should be opt-in and default-off"
     );
     let dependency_sections = cargo_toml
@@ -1760,10 +1760,12 @@ fn tree_sitter_features_are_default_off_and_separate_from_vim_syntax() {
         .and_then(|after_dependencies| after_dependencies.split("[build-dependencies]").next())
         .expect("Cargo.toml should contain dependency sections");
     assert!(
-        !dependency_sections.contains("tree-sitter =")
-            && !dependency_sections.contains("tree-sitter-markdown =")
-            && !dependency_sections.contains("tree-sitter-rust ="),
-        "Phase 2 should not add parser or grammar dependencies"
+        dependency_sections.contains("tree-sitter = { version = \"0.26.8\", optional = true }")
+            && dependency_sections
+                .contains("tree-sitter-md = { version = \"0.5.3\", optional = true")
+            && dependency_sections
+                .contains("tree-sitter-rust = { version = \"0.24.2\", optional = true }"),
+        "Tree-sitter parser and grammar dependencies should be optional"
     );
     assert!(
         public_api_reference.contains("CoreTreeSitterRangeSyntax")
@@ -2031,16 +2033,197 @@ fn tree_sitter_preparation_uses_request_poll_and_query_shape() {
             CoreTreeSitterStatus::Unavailable
         }
     );
-    assert!(
-        completed.syntax.chunks.is_empty(),
-        "Phase 4 prepares request/cache plumbing but does not parse yet"
-    );
+    if cfg!(feature = "tree-sitter-rust") {
+        assert!(
+            completed
+                .syntax
+                .chunks
+                .iter()
+                .any(|chunk| chunk.capture_name == "keyword"
+                    && chunk.category == CoreSyntaxCategory::Keyword),
+            "Phase 5 should parse Rust highlights into normalized chunks: {:?}",
+            completed.syntax.chunks
+        );
+    } else {
+        assert!(
+            completed.syntax.chunks.is_empty(),
+            "without the Rust package feature the result should remain unavailable"
+        );
+    }
 
     let queried = session
         .query_tree_sitter_syntax_range(buffer.id, buffer.source_revision, range)
         .expect("completed preparation should be queryable from the committed cache");
     assert_eq!(queried, completed.syntax);
     assert!(session.poll_tree_sitter_preparation().is_none());
+}
+
+#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-rust"))]
+#[test]
+fn tree_sitter_rust_package_maps_captures_and_normalizes_overlaps() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("/// docs\nfn main() {\n    let VALUE: i32 = 1;\n}\n")
+        .expect("session should initialize");
+    let buffer = session
+        .snapshot()
+        .buffers
+        .into_iter()
+        .find(|buffer| buffer.is_active)
+        .expect("active buffer should exist");
+    let full_range = CoreTextRange {
+        start: CoreTextPosition { row: 0, col: 0 },
+        end: CoreTextPosition { row: 4, col: 0 },
+    };
+
+    session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: buffer.id,
+            source_revision: Some(buffer.source_revision),
+            range: full_range,
+            vim_filetype: Some("rust".to_string()),
+            buffer_name: Some("src/main.rs".to_string()),
+            host_language_hint: None,
+            snapshot_policy: CoreTreeSitterSnapshotPolicy::default(),
+        })
+        .expect("preparation should be accepted");
+
+    let syntax = session
+        .poll_tree_sitter_preparation()
+        .expect("result should be ready")
+        .syntax;
+    assert_eq!(syntax.status, CoreTreeSitterStatus::Prepared);
+    assert!(
+        syntax
+            .chunks
+            .windows(2)
+            .all(|pair| pair[0].range.end <= pair[1].range.start),
+        "public chunks must be non-overlapping and sorted: {:?}",
+        syntax.chunks
+    );
+    assert!(
+        syntax.chunks.iter().any(|chunk| {
+            chunk.capture_name == "comment.documentation"
+                && chunk.category == CoreSyntaxCategory::Comment
+                && chunk.modifiers.contains(&CoreSyntaxModifier::Documentation)
+        }),
+        "documentation comment should use crate-owned category/modifier mapping: {:?}",
+        syntax.chunks
+    );
+    assert!(
+        syntax.chunks.iter().any(|chunk| {
+            chunk.capture_name == "keyword"
+                && chunk.category == CoreSyntaxCategory::Keyword
+                && chunk.range.start.row == 1
+        }),
+        "Rust keyword captures should be present: {:?}",
+        syntax.chunks
+    );
+}
+
+#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-rust"))]
+#[test]
+fn tree_sitter_visible_range_query_reads_committed_cache_without_reparsing() {
+    let _guard = acquire_session_test_lock();
+    let mut session =
+        VimCoreSession::new("fn first() {}\nfn second() {}\n").expect("session should initialize");
+    let buffer = session
+        .snapshot()
+        .buffers
+        .into_iter()
+        .find(|buffer| buffer.is_active)
+        .expect("active buffer should exist");
+    let full_range = CoreTextRange {
+        start: CoreTextPosition { row: 0, col: 0 },
+        end: CoreTextPosition { row: 2, col: 0 },
+    };
+    let visible_range = CoreTextRange {
+        start: CoreTextPosition { row: 1, col: 0 },
+        end: CoreTextPosition { row: 2, col: 0 },
+    };
+
+    assert!(
+        session
+            .query_tree_sitter_syntax_range(buffer.id, buffer.source_revision, visible_range)
+            .is_none(),
+        "query should not parse or synthesize data before preparation commits cache"
+    );
+
+    session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: buffer.id,
+            source_revision: Some(buffer.source_revision),
+            range: full_range,
+            vim_filetype: Some("rust".to_string()),
+            buffer_name: Some("src/lib.rs".to_string()),
+            host_language_hint: None,
+            snapshot_policy: CoreTreeSitterSnapshotPolicy::default(),
+        })
+        .expect("preparation should be accepted");
+    let _ = session.poll_tree_sitter_preparation();
+
+    let visible = session
+        .query_tree_sitter_syntax_range(buffer.id, buffer.source_revision, visible_range)
+        .expect("visible subrange should be served from committed cache");
+    assert!(
+        visible
+            .chunks
+            .iter()
+            .all(|chunk| chunk.range.start >= visible_range.start
+                && chunk.range.end <= visible_range.end),
+        "visible query should return clipped chunks only: {:?}",
+        visible.chunks
+    );
+    assert!(
+        visible
+            .chunks
+            .iter()
+            .any(|chunk| chunk.capture_name == "keyword" && chunk.range.start.row == 1),
+        "visible query should include syntax from the committed second line: {:?}",
+        visible.chunks
+    );
+}
+
+#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+#[test]
+fn tree_sitter_markdown_package_parses_highlight_query() {
+    let _guard = acquire_session_test_lock();
+    let mut session =
+        VimCoreSession::new("# Title\n\n- item\n").expect("session should initialize");
+    let buffer = session
+        .snapshot()
+        .buffers
+        .into_iter()
+        .find(|buffer| buffer.is_active)
+        .expect("active buffer should exist");
+    let range = CoreTextRange {
+        start: CoreTextPosition { row: 0, col: 0 },
+        end: CoreTextPosition { row: 3, col: 0 },
+    };
+
+    session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: buffer.id,
+            source_revision: Some(buffer.source_revision),
+            range,
+            vim_filetype: Some("markdown".to_string()),
+            buffer_name: Some("README.md".to_string()),
+            host_language_hint: None,
+            snapshot_policy: CoreTreeSitterSnapshotPolicy::default(),
+        })
+        .expect("preparation should be accepted");
+
+    let syntax = session
+        .poll_tree_sitter_preparation()
+        .expect("result should be ready")
+        .syntax;
+    assert_eq!(syntax.status, CoreTreeSitterStatus::Prepared);
+    assert!(
+        syntax.chunks.iter().any(|chunk| {
+            chunk.capture_name == "text.title" && chunk.category == CoreSyntaxCategory::Markup
+        }),
+        "Markdown query package should produce crate-normalized markup chunks: {:?}",
+        syntax.chunks
+    );
 }
 
 #[cfg(feature = "experimental-tree-sitter")]

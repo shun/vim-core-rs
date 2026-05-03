@@ -122,7 +122,7 @@ The public session methods are grouped by role.
 The `experimental-tree-sitter` feature adds type definitions for a separate
 Tree-sitter extraction surface. The feature is default-off, and the
 `tree-sitter-markdown` and `tree-sitter-rust` package features opt into that
-surface without adding parser behavior.
+surface with optional parser and query packages.
 
 The Tree-sitter surface is separate from `CoreSyntaxChunk` and
 `get_line_syntax()`. It carries crate-owned `source_revision` provenance,
@@ -140,11 +140,12 @@ embedded-region inputs. The resolver returns explicit `Resolved`,
 inside `vim-core-rs`.
 
 `request_tree_sitter_syntax_preparation()` adds the request/response
-preparation shape. The Phase 4 implementation creates or reuses immutable text
+preparation shape. The implementation creates or reuses immutable text
 snapshots keyed by `(buffer_id, source_revision)`, pins queued or running
-requests, completes synchronously without parser execution, and queues
-completed results for `poll_tree_sitter_preparation()`.
-`query_tree_sitter_syntax_range()` reads committed cache state only.
+requests, parses enabled Markdown or Rust packages synchronously, normalizes
+captures into non-overlapping chunks, and queues completed results for
+`poll_tree_sitter_preparation()`. `query_tree_sitter_syntax_range()` reads
+committed cache state only and clips cached results to visible subranges.
 `tree_sitter_snapshot_store_stats()` exposes retention diagnostics for tests
 and host debugging, including pinned counts and unpinned byte usage.
 

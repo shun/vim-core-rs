@@ -223,9 +223,9 @@ the requested 1-based inclusive row range for the target window.
 
 These structs are available only with the default-off
 `experimental-tree-sitter` feature. The `tree-sitter-markdown` and
-`tree-sitter-rust` package features enable the same experimental surface for
-later language-package work, but this skeleton does not execute parsers or add
-grammar dependencies yet.
+`tree-sitter-rust` package features enable parser and query packages for those
+languages. Prepared package results use crate-owned capture mapping and return
+normalized, non-overlapping chunks.
 
 - `CoreTextPosition { row, col }`
 - `CoreTextRange { start, end }`
@@ -263,9 +263,10 @@ Tree-sitter output is feature-gated and separate from `CoreSyntaxChunk`. It
 does not carry Vim `syn_id` values, Vim highlight attributes, or conceal
 display substitutions.
 `request_tree_sitter_syntax_preparation()` creates or reuses an immutable
-snapshot, completes the Phase 4 preparation synchronously without parser
-execution, and queues a result for `poll_tree_sitter_preparation()`.
-`query_tree_sitter_syntax_range()` reads committed cache state only.
+snapshot, parses enabled Markdown or Rust packages synchronously, commits
+normalized chunks, and queues a result for `poll_tree_sitter_preparation()`.
+`query_tree_sitter_syntax_range()` reads committed cache state only and clips
+cached results to visible subranges.
 
 ### Search and message types
 

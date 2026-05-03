@@ -304,6 +304,10 @@ ownership stays host-owned presentation.
 - Tree-sitter preparation uses a request, poll, and query model. Request
   methods may prepare synchronously in the current implementation, poll methods
   drain completed results, and range queries read committed cache state only.
+- Enabled Markdown and Rust Tree-sitter packages own parser/query metadata,
+  capture-to-category/modifier mapping, explicit capture priorities, and
+  overlap normalization. The standard public chunks are non-overlapping, and
+  visible range queries clip committed cache results without parsing.
 - Tree-sitter preparation snapshots are immutable and keyed by
   `(buffer_id, source_revision)`. Queued or running requests pin snapshots.
   Completed snapshots are retained with latest-N-per-buffer and global

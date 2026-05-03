@@ -460,18 +460,19 @@ These structs feed editor UI and history views.
 
 ### Experimental Tree-sitter structs
 
-The `experimental-tree-sitter` Cargo feature exposes a preview type skeleton
-for Tree-sitter extraction. The feature is default-off, and the
-`tree-sitter-markdown` and `tree-sitter-rust` package features enable the same
-experimental surface for language-package work. Enabled package features are
-the only packages registered by the built-in registry.
+The `experimental-tree-sitter` Cargo feature exposes a preview Tree-sitter
+extraction surface. The feature is default-off, and the
+`tree-sitter-markdown` and `tree-sitter-rust` package features enable parser
+and query packages for those languages. Enabled package features are the only
+packages registered by the built-in registry.
 
 > **Note:** This is a preview feature currently under active development.
 
 These types are feature-gated and separate from `CoreSyntaxChunk`. They model
 Tree-sitter provenance, explicit preparation status, byte ranges, capture
-names, normalized categories and modifiers, and embedded regions without
-implementing parser execution yet.
+names, normalized categories and modifiers, and embedded regions. Prepared
+Markdown and Rust package results use crate-owned capture mapping and return
+non-overlapping public chunks.
 
 - `CoreTextPosition { row, col }`
 - `CoreTextRange { start, end }`
@@ -531,10 +532,12 @@ embedded regions. Known languages without an enabled package return
 `Unavailable`; unknown or non-syntax embedded kinds return `Unsupported`.
 `request_tree_sitter_syntax_preparation()` creates or reuses an immutable text
 snapshot keyed by `(buffer_id, source_revision)`, pins it for the synchronous
-Phase 4 preparation, commits an empty non-parsed result with an explicit
-status, and queues a pollable completion. `poll_tree_sitter_preparation()`
-drains completed results. `query_tree_sitter_syntax_range()` reads the
-committed cache only and doesn't parse in the draw path.
+preparation, parses enabled Markdown or Rust packages when available, commits
+normalized non-overlapping chunks with an explicit status, and queues a
+pollable completion. `poll_tree_sitter_preparation()` drains completed
+results. `query_tree_sitter_syntax_range()` reads the committed cache only,
+clips cached results to the requested visible range, and doesn't parse in the
+draw path.
 
 Snapshot retention keeps only unpinned snapshots, preserves pinned in-flight
 snapshots, and applies both latest-N-per-buffer and global byte-budget

@@ -27,3 +27,16 @@ produce a modified embedded Vim runtime.
 The embedded runtime is built with a `MODIFIED_BY` string so that Vim's
 `:version` output and intro screen disclose that this is a modified Vim
 distribution and point users to the repository maintainers.
+
+## Optional Tree-sitter packages
+
+The experimental Tree-sitter syntax extraction feature can optionally depend
+on upstream Tree-sitter runtime and grammar packages. These packages are
+enabled only through Cargo features and are not part of the default build.
+
+- `tree-sitter`: MIT license,
+  <https://github.com/tree-sitter/tree-sitter>
+- `tree-sitter-md`: MIT license,
+  <https://github.com/tree-sitter-grammars/tree-sitter-markdown>
+- `tree-sitter-rust`: MIT license,
+  <https://github.com/tree-sitter/tree-sitter-rust>

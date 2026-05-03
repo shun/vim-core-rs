@@ -10,6 +10,8 @@ use std::rc::Rc;
 use std::slice;
 use std::str;
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(feature = "experimental-tree-sitter")]
+use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator};
 
 macro_rules! debug_log {
     ($($arg:tt)*) => {
@@ -378,7 +380,7 @@ pub enum CoreTreeSitterStatus {
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreSyntaxCategory {
     Attribute,
     Comment,
@@ -402,7 +404,7 @@ pub enum CoreSyntaxCategory {
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreSyntaxModifier {
     Async,
     Declaration,
@@ -663,6 +665,33 @@ struct BuiltInTreeSitterPackage {
 
 #[cfg(feature = "experimental-tree-sitter")]
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct CaptureMapping {
+    category: CoreSyntaxCategory,
+    modifiers: Vec<CoreSyntaxModifier>,
+    priority: u16,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RawTreeSitterCapture {
+    start_byte: usize,
+    end_byte: usize,
+    capture_name: String,
+    category: CoreSyntaxCategory,
+    modifiers: Vec<CoreSyntaxModifier>,
+    priority: u16,
+    query_order: usize,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TextRangeBytes {
+    start: usize,
+    end: usize,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct KnownTreeSitterLanguage {
     language_id: &'static str,
     package_id: &'static str,
@@ -748,6 +777,12 @@ impl TreeSitterSnapshotStore {
         if let Some(snapshot) = self.snapshots.get_mut(&(buffer_id, source_revision)) {
             snapshot.pin_count = snapshot.pin_count.saturating_sub(1);
         }
+    }
+
+    fn text(&self, buffer_id: i32, source_revision: CoreBufferRevision) -> Option<&str> {
+        self.snapshots
+            .get(&(buffer_id, source_revision))
+            .map(|snapshot| snapshot.text.as_str())
     }
 
     fn evict_unpinned(
@@ -852,19 +887,39 @@ fn tree_sitter_language_packages() -> &'static [BuiltInTreeSitterPackage] {
         BuiltInTreeSitterPackage {
             language_id: "markdown",
             package_id: "tree-sitter-markdown",
-            package_version: "0.0.0-skeleton",
-            parser_version: "0.0.0-skeleton",
-            query_version: "0.0.0-skeleton",
+            package_version: "tree-sitter-md-0.5.3",
+            parser_version: "tree-sitter-md-block-0.5.3",
+            query_version: "tree-sitter-md-block-highlights-0.5.3",
         },
         #[cfg(feature = "tree-sitter-rust")]
         BuiltInTreeSitterPackage {
             language_id: "rust",
             package_id: "tree-sitter-rust",
-            package_version: "0.0.0-skeleton",
-            parser_version: "0.0.0-skeleton",
-            query_version: "0.0.0-skeleton",
+            package_version: "tree-sitter-rust-0.24.2",
+            parser_version: "tree-sitter-rust-0.24.2",
+            query_version: "tree-sitter-rust-highlights-0.24.2",
         },
     ]
+}
+
+#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+fn markdown_tree_sitter_language() -> Language {
+    tree_sitter_md::LANGUAGE.into()
+}
+
+#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+fn markdown_highlight_query() -> &'static str {
+    tree_sitter_md::HIGHLIGHT_QUERY_BLOCK
+}
+
+#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-rust"))]
+fn rust_tree_sitter_language() -> Language {
+    tree_sitter_rust::LANGUAGE.into()
+}
+
+#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-rust"))]
+fn rust_highlight_query() -> &'static str {
+    tree_sitter_rust::HIGHLIGHTS_QUERY
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
@@ -1097,6 +1152,297 @@ fn normalize_language_token(value: &str) -> Option<String> {
     } else {
         Some(normalized)
     }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn tree_sitter_package_language_and_query(language_id: &str) -> Option<(Language, &'static str)> {
+    match language_id {
+        #[cfg(feature = "tree-sitter-markdown")]
+        "markdown" => Some((markdown_tree_sitter_language(), markdown_highlight_query())),
+        #[cfg(feature = "tree-sitter-rust")]
+        "rust" => Some((rust_tree_sitter_language(), rust_highlight_query())),
+        _ => None,
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn capture_mapping(capture_name: &str) -> CaptureMapping {
+    let mut parts = capture_name.split('.');
+    let base = parts.next().unwrap_or_default();
+    let mut modifiers = Vec::new();
+    let (category, priority) = match base {
+        "attribute" => (CoreSyntaxCategory::Attribute, 70),
+        "comment" => (CoreSyntaxCategory::Comment, 90),
+        "constant" => (CoreSyntaxCategory::Constant, 70),
+        "constructor" => (CoreSyntaxCategory::Constructor, 70),
+        "function" => (CoreSyntaxCategory::Function, 70),
+        "keyword" => (CoreSyntaxCategory::Keyword, 75),
+        "label" => (CoreSyntaxCategory::Label, 65),
+        "markup" | "text" => (CoreSyntaxCategory::Markup, 45),
+        "module" | "namespace" => (CoreSyntaxCategory::Module, 65),
+        "number" => (CoreSyntaxCategory::Number, 70),
+        "operator" => (CoreSyntaxCategory::Operator, 65),
+        "property" | "field" => (CoreSyntaxCategory::Property, 65),
+        "punctuation" => (CoreSyntaxCategory::Punctuation, 55),
+        "string" | "escape" => (CoreSyntaxCategory::String, 80),
+        "tag" => (CoreSyntaxCategory::Tag, 65),
+        "type" => (CoreSyntaxCategory::Type, 70),
+        "variable" => (CoreSyntaxCategory::Variable, 60),
+        "none" => (CoreSyntaxCategory::Text, 1),
+        _ => (CoreSyntaxCategory::Unknown, 10),
+    };
+
+    for part in capture_name.split('.').skip(1) {
+        match part {
+            "async" => modifiers.push(CoreSyntaxModifier::Async),
+            "declaration" => modifiers.push(CoreSyntaxModifier::Declaration),
+            "definition" => modifiers.push(CoreSyntaxModifier::Definition),
+            "deprecated" => modifiers.push(CoreSyntaxModifier::Deprecated),
+            "documentation" => modifiers.push(CoreSyntaxModifier::Documentation),
+            "mutable" => modifiers.push(CoreSyntaxModifier::Mutable),
+            "readonly" => modifiers.push(CoreSyntaxModifier::Readonly),
+            "static" => modifiers.push(CoreSyntaxModifier::Static),
+            _ => {}
+        }
+    }
+    if capture_name == "text.title" || capture_name == "markup.heading" {
+        modifiers.push(CoreSyntaxModifier::Definition);
+    }
+    if capture_name == "comment.documentation" {
+        modifiers.push(CoreSyntaxModifier::Documentation);
+    }
+    modifiers.sort_by_key(|modifier| format!("{modifier:?}"));
+    modifiers.dedup();
+    CaptureMapping {
+        category,
+        modifiers,
+        priority,
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn line_start_offsets(text: &str) -> Vec<usize> {
+    let mut offsets = vec![0];
+    for (index, byte) in text.bytes().enumerate() {
+        if byte == b'\n' {
+            offsets.push(index + 1);
+        }
+    }
+    offsets
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn line_end_offset(text: &str, line_starts: &[usize], row: usize) -> usize {
+    let Some(&line_start) = line_starts.get(row) else {
+        return text.len();
+    };
+    line_starts
+        .get(row + 1)
+        .copied()
+        .map(|next_start| next_start.saturating_sub(1))
+        .unwrap_or(text.len())
+        .max(line_start)
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn byte_for_position(text: &str, line_starts: &[usize], position: CoreTextPosition) -> usize {
+    let Some(&line_start) = line_starts.get(position.row) else {
+        return text.len();
+    };
+    let line_end = line_end_offset(text, line_starts, position.row);
+    line_start.saturating_add(position.col).min(line_end)
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn position_for_byte(line_starts: &[usize], byte: usize) -> CoreTextPosition {
+    let row = match line_starts.binary_search(&byte) {
+        Ok(row) => row,
+        Err(0) => 0,
+        Err(next) => next - 1,
+    };
+    CoreTextPosition {
+        row,
+        col: byte.saturating_sub(line_starts[row]),
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn bytes_for_text_range(text: &str, range: CoreTextRange) -> TextRangeBytes {
+    let line_starts = line_start_offsets(text);
+    let start = byte_for_position(text, &line_starts, range.start);
+    let end = byte_for_position(text, &line_starts, range.end).max(start);
+    TextRangeBytes { start, end }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn normalize_tree_sitter_captures(
+    text: &str,
+    requested_range: CoreTextRange,
+    raw_captures: Vec<RawTreeSitterCapture>,
+) -> Vec<CoreTreeSitterChunk> {
+    let requested_bytes = bytes_for_text_range(text, requested_range);
+    let line_starts = line_start_offsets(text);
+    let mut boundaries = vec![requested_bytes.start, requested_bytes.end];
+
+    for capture in &raw_captures {
+        let start = capture.start_byte.max(requested_bytes.start);
+        let end = capture.end_byte.min(requested_bytes.end);
+        if start < end {
+            boundaries.push(start);
+            boundaries.push(end);
+        }
+    }
+
+    boundaries.sort_unstable();
+    boundaries.dedup();
+
+    let mut chunks: Vec<CoreTreeSitterChunk> = Vec::new();
+    for window in boundaries.windows(2) {
+        let start = window[0];
+        let end = window[1];
+        if start >= end {
+            continue;
+        }
+
+        let Some(winner) = raw_captures
+            .iter()
+            .filter(|capture| capture.start_byte <= start && capture.end_byte >= end)
+            .max_by_key(|capture| (capture.priority, capture.query_order))
+        else {
+            continue;
+        };
+
+        if matches!(winner.category, CoreSyntaxCategory::Text) && winner.capture_name == "none" {
+            continue;
+        }
+
+        let range = CoreTextRange {
+            start: position_for_byte(&line_starts, start),
+            end: position_for_byte(&line_starts, end),
+        };
+        if let Some(previous) = chunks.last_mut() {
+            if previous.range.end == range.start
+                && previous.capture_name == winner.capture_name
+                && previous.category == winner.category
+                && previous.modifiers == winner.modifiers
+            {
+                previous.range.end = range.end;
+                continue;
+            }
+        }
+
+        chunks.push(CoreTreeSitterChunk {
+            range,
+            capture_name: winner.capture_name.clone(),
+            category: winner.category,
+            modifiers: winner.modifiers.clone(),
+        });
+    }
+
+    chunks
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn parse_tree_sitter_syntax(
+    text: &str,
+    range: CoreTextRange,
+    resolved: &CoreResolvedLanguage,
+) -> (CoreTreeSitterStatus, bool, Vec<CoreTreeSitterChunk>) {
+    if !matches!(resolved.status, CoreLanguageResolutionStatus::Resolved) {
+        return (
+            tree_sitter_status_from_resolution(resolved),
+            false,
+            Vec::new(),
+        );
+    }
+    let Some(language_id) = resolved.language_id.as_deref() else {
+        return (CoreTreeSitterStatus::Unsupported, false, Vec::new());
+    };
+    let Some((language, query_source)) = tree_sitter_package_language_and_query(language_id) else {
+        return (CoreTreeSitterStatus::Unavailable, false, Vec::new());
+    };
+
+    let mut parser = Parser::new();
+    if parser.set_language(&language).is_err() {
+        return (CoreTreeSitterStatus::Unavailable, false, Vec::new());
+    }
+    let Some(tree) = parser.parse(text, None) else {
+        return (CoreTreeSitterStatus::Partial, true, Vec::new());
+    };
+    let has_error = tree.root_node().has_error();
+    let Ok(query) = Query::new(&language, query_source) else {
+        return (CoreTreeSitterStatus::Unavailable, has_error, Vec::new());
+    };
+
+    let requested_bytes = bytes_for_text_range(text, range);
+    let mut cursor = QueryCursor::new();
+    cursor.set_byte_range(requested_bytes.start..requested_bytes.end);
+    let capture_names = query.capture_names();
+    let mut captures = cursor.captures(&query, tree.root_node(), text.as_bytes());
+    let mut raw_captures = Vec::new();
+    while let Some((query_match, capture_index)) = captures.next() {
+        let capture = query_match.captures[*capture_index];
+        let node = capture.node;
+        let start_byte = node.start_byte().max(requested_bytes.start);
+        let end_byte = node.end_byte().min(requested_bytes.end);
+        if start_byte >= end_byte {
+            continue;
+        }
+        let capture_name = capture_names
+            .get(capture.index as usize)
+            .copied()
+            .unwrap_or("unknown");
+        let mapping = capture_mapping(capture_name);
+        raw_captures.push(RawTreeSitterCapture {
+            start_byte,
+            end_byte,
+            capture_name: capture_name.to_string(),
+            category: mapping.category,
+            modifiers: mapping.modifiers,
+            priority: mapping.priority,
+            query_order: query_match.pattern_index,
+        });
+    }
+    drop(captures);
+
+    let mut status = CoreTreeSitterStatus::Prepared;
+    if cursor.did_exceed_match_limit() {
+        status = CoreTreeSitterStatus::Partial;
+    }
+    let chunks = normalize_tree_sitter_captures(text, range, raw_captures);
+    (status, has_error, chunks)
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn clip_tree_sitter_syntax_to_range(
+    syntax: &CoreTreeSitterRangeSyntax,
+    requested_range: CoreTextRange,
+) -> CoreTreeSitterRangeSyntax {
+    let mut clipped = syntax.clone();
+    clipped.chunks = syntax
+        .chunks
+        .iter()
+        .filter_map(|chunk| intersect_tree_sitter_chunk(chunk, requested_range))
+        .collect();
+    clipped
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn intersect_tree_sitter_chunk(
+    chunk: &CoreTreeSitterChunk,
+    range: CoreTextRange,
+) -> Option<CoreTreeSitterChunk> {
+    let start = chunk.range.start.max(range.start);
+    let end = chunk.range.end.min(range.end);
+    if start >= end {
+        return None;
+    }
+    Some(CoreTreeSitterChunk {
+        range: CoreTextRange { start, end },
+        capture_name: chunk.capture_name.clone(),
+        category: chunk.category,
+        modifiers: chunk.modifiers.clone(),
+    })
 }
 
 /// メッセージイベントのペイロード
@@ -1471,10 +1817,20 @@ impl VimCoreSession {
         source_revision: CoreBufferRevision,
         range: CoreTextRange,
     ) -> Option<CoreTreeSitterRangeSyntax> {
-        self.committed_tree_sitter_syntax
-            .borrow()
-            .get(&(buffer_id, source_revision, range))
-            .cloned()
+        let cache = self.committed_tree_sitter_syntax.borrow();
+        if let Some(exact) = cache.get(&(buffer_id, source_revision, range)) {
+            return Some(exact.clone());
+        }
+        cache
+            .iter()
+            .filter(|((cached_buffer_id, cached_revision, cached_range), _)| {
+                *cached_buffer_id == buffer_id
+                    && *cached_revision == source_revision
+                    && cached_range.start <= range.start
+                    && cached_range.end >= range.end
+            })
+            .min_by_key(|((_, _, cached_range), _)| (cached_range.start, cached_range.end))
+            .map(|(_, syntax)| clip_tree_sitter_syntax_to_range(syntax, range))
     }
 
     #[cfg(feature = "experimental-tree-sitter")]
@@ -1619,13 +1975,31 @@ impl VimCoreSession {
             buffer_name: request.buffer_name.clone(),
             host_language_hint: request.host_language_hint.clone(),
         });
+        let mut status = status;
+        let mut has_error = false;
+        let mut chunks = Vec::new();
+        if matches!(status, CoreTreeSitterStatus::Prepared) {
+            if let Some(text) = self
+                .tree_sitter_snapshots
+                .borrow()
+                .text(buffer_id, source_revision)
+            {
+                let (parse_status, parse_has_error, parse_chunks) =
+                    parse_tree_sitter_syntax(text, range, &resolved);
+                status = parse_status;
+                has_error = parse_has_error;
+                chunks = parse_chunks;
+            } else {
+                status = CoreTreeSitterStatus::Stale;
+            }
+        }
         CoreTreeSitterRangeSyntax {
             buffer_id,
             source_revision,
             provenance: provenance_for_resolved_language(&resolved),
             status,
-            has_error: false,
-            chunks: Vec::new(),
+            has_error,
+            chunks,
         }
     }
 

@@ -176,6 +176,9 @@ You can understand the crate as a composition of four contracts.
   `CoreSyntaxChunk`.
 - Tree-sitter extraction, when enabled, must use a separate public surface and
   must not route output through `CoreSyntaxChunk`.
+- Enabled Markdown and Rust Tree-sitter packages own parser/query metadata,
+  capture mapping, explicit priorities, overlap normalization, and visible
+  range reads from committed cache.
 - `get_syntax_name` may return `None` when Vim does not provide a non-empty
   group name.
 
