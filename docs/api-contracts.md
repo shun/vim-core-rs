@@ -307,16 +307,18 @@ ownership stays host-owned presentation.
 - Markdown fenced blocks are detected as data-only embedded regions. The
   returned region records preserve raw and normalized info strings, and they
   are classified through the registry-backed embedded-region resolver rather
-  than host-side ad hoc parsing. Child syntax injection is out of scope for
-  this phase.
+  than host-side ad hoc parsing. Markdown fenced TypeScript and TSX syntax
+  injection is bounded to the fenced content range and remains separate from
+  diagram and media regions.
 - Markdown linked SVG and PNG targets are detected as data-only media embedded
   regions. The raw link target is preserved on the region record, linked
   `*.drawio.svg` targets are classified as SVG media with `DrawioSvg` flavor,
   and rendering or decoding remains host-owned.
-- Enabled Markdown and Rust Tree-sitter packages own parser/query metadata,
-  capture-to-category/modifier mapping, explicit capture priorities, and
-  overlap normalization. The standard public chunks are non-overlapping, and
-  visible range queries clip committed cache results without parsing.
+- Enabled Markdown, Rust, TypeScript, and TSX Tree-sitter packages own
+  parser/query metadata, capture-to-category/modifier mapping, explicit capture
+  priorities, and overlap normalization. The standard public chunks are
+  non-overlapping, and visible range queries clip committed cache results
+  without parsing.
 - Tree-sitter preparation snapshots are immutable and keyed by
   `(buffer_id, source_revision)`. Queued or running requests pin snapshots.
   Completed snapshots are retained with latest-N-per-buffer and global

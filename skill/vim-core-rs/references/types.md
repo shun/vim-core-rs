@@ -198,6 +198,9 @@ pub struct CoreTreeSitterRangeSyntax {
     pub provenance: CoreTreeSitterProvenance,
     pub status: CoreTreeSitterStatus,
     pub has_error: bool,
+    pub covered_ranges: Vec<CoreTextRange>,
+    pub error_ranges: Vec<CoreTextRange>,
+    pub budget_status: CoreTreeSitterBudgetStatus,
     pub chunks: Vec<CoreTreeSitterChunk>,
     pub embedded_regions: Vec<CoreEmbeddedRegion>,
 }

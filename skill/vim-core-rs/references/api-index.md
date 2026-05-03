@@ -44,13 +44,13 @@ Read the bundled pages in this order when you need complete coverage.
   `CoreCursorMatchInfo`, `CoreSessionOptions`, `CoreSnapshot`
 - Experimental Tree-sitter symbols, only with `experimental-tree-sitter`:
   `CoreTextPosition`, `CoreTextRange`, `CoreTreeSitterProvenance`,
-  `CoreTreeSitterStatus`, `CoreTreeSitterRangeSyntax`,
-  `CoreTreeSitterChunk`, `CoreTreeSitterRequestId`,
-  `CoreTreeSitterPreparationRequest`, `CoreTreeSitterPreparation`,
-  `CoreTreeSitterPreparationResult`, `CoreTreeSitterSnapshotPolicy`,
-  `CoreTreeSitterSnapshotStoreEntry`, `CoreTreeSitterSnapshotStoreStats`,
-  `CoreSyntaxCategory`, `CoreSyntaxModifier`, `CoreResolvedLanguage`, and
-  `CoreEmbeddedRegion`
+  `CoreTreeSitterStatus`, `CoreTreeSitterBudgetStatus`,
+  `CoreTreeSitterRangeSyntax`, `CoreTreeSitterChunk`,
+  `CoreTreeSitterRequestId`, `CoreTreeSitterPreparationRequest`,
+  `CoreTreeSitterPreparation`, `CoreTreeSitterPreparationResult`,
+  `CoreTreeSitterSnapshotPolicy`, `CoreTreeSitterSnapshotStoreEntry`,
+  `CoreTreeSitterSnapshotStoreStats`, `CoreSyntaxCategory`,
+  `CoreSyntaxModifier`, `CoreResolvedLanguage`, and `CoreEmbeddedRegion`
 - Re-exported VFS items: `CoreBufferBinding`, `CoreBufferSourceKind`,
   `CoreDeferredClose`, `CorePendingVfsOperation`, `CoreRequestEntry`,
   `CoreRequestStatus`, `CoreVfsError`, `CoreVfsErrorKind`,
@@ -84,16 +84,17 @@ Read the bundled pages in this order when you need complete coverage.
 
 ### Experimental Tree-sitter surface
 
-The `experimental-tree-sitter` feature is default-off. It exposes the Phase 2
-type skeleton for a separate Tree-sitter syntax surface and package features
-for Markdown and Rust parser/query packages.
+The `experimental-tree-sitter` feature is default-off. It exposes a separate
+Tree-sitter syntax surface and package features for Markdown, Rust,
+TypeScript, and TSX parser/query packages.
 Tree-sitter output stays separate from `get_line_syntax()` and
 `CoreSyntaxChunk`; it uses source revisions, package/query provenance,
 explicit statuses, byte ranges, capture names, normalized categories and
-modifiers, and embedded region records. Markdown fenced blocks are detected as
-embedded regions with raw and normalized info strings. Markdown linked SVG and
-PNG targets are detected as data-only media regions, and linked `*.drawio.svg`
-targets are SVG media with `DrawioSvg` flavor.
+modifiers, coverage ranges, error ranges, budget state, and embedded region
+records. Markdown fenced blocks are detected as embedded regions with raw and
+normalized info strings. Markdown linked SVG and PNG targets are detected as
+data-only media regions, and linked `*.drawio.svg` targets are SVG media with
+`DrawioSvg` flavor.
 Phase 4 adds request, poll, and cache-query preparation methods plus an
 immutable text snapshot store with in-flight pinning, latest-N-per-buffer
 retention, a global byte budget, and explicit `TooLarge` or `BudgetExceeded`
@@ -105,6 +106,8 @@ Phase 6 adds data-only Markdown fenced-block embedded region records and does
 not perform child syntax injection.
 Phase 7 adds data-only Markdown linked SVG/PNG media region records and keeps
 all rendering and decoding host-owned.
+Phase 8 adds TypeScript and TSX packages, result coverage and budget fields,
+and bounded Markdown fenced TypeScript/TSX syntax injection.
 
 ### Internal-only areas
 

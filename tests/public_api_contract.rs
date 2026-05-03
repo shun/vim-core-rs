@@ -13,9 +13,10 @@ use vim_core_rs::{
     CoreEmbeddedRegion, CoreEmbeddedRegionSource, CoreLanguageResolutionSource,
     CoreLanguageResolutionStatus, CoreLanguageRole, CoreMediaFlavor, CoreMediaKind,
     CoreResolutionConfidence, CoreResolvedLanguage, CoreRootLanguageResolutionRequest,
-    CoreSyntaxCategory, CoreSyntaxModifier, CoreTextPosition, CoreTextRange, CoreTreeSitterChunk,
-    CoreTreeSitterLanguagePackage, CoreTreeSitterPreparationRequest, CoreTreeSitterProvenance,
-    CoreTreeSitterRangeSyntax, CoreTreeSitterSnapshotPolicy, CoreTreeSitterStatus,
+    CoreSyntaxCategory, CoreSyntaxModifier, CoreTextPosition, CoreTextRange,
+    CoreTreeSitterBudgetStatus, CoreTreeSitterChunk, CoreTreeSitterLanguagePackage,
+    CoreTreeSitterPreparationRequest, CoreTreeSitterProvenance, CoreTreeSitterRangeSyntax,
+    CoreTreeSitterSnapshotPolicy, CoreTreeSitterStatus,
 };
 use vim_core_rs::{
     CoreCommandOutcome, CoreEvent, CoreHostAction, CoreInputRequestKind, CoreInputResponse,
@@ -1751,7 +1752,8 @@ fn tree_sitter_features_are_default_off_and_separate_from_vim_syntax() {
         cargo_toml.contains("default = []")
             && cargo_toml.contains("experimental-tree-sitter = [\"dep:tree-sitter\"]")
             && cargo_toml.contains("tree-sitter-markdown = [\"experimental-tree-sitter\", \"dep:tree-sitter-md\", \"tree-sitter-md/parser\"]")
-            && cargo_toml.contains("tree-sitter-rust = [\"experimental-tree-sitter\", \"dep:tree-sitter-rust\"]"),
+            && cargo_toml.contains("tree-sitter-rust = [\"experimental-tree-sitter\", \"dep:tree-sitter-rust\"]")
+            && cargo_toml.contains("tree-sitter-typescript = [\"experimental-tree-sitter\", \"dep:tree-sitter-typescript\"]"),
         "Tree-sitter feature flags should be opt-in and default-off"
     );
     let dependency_sections = cargo_toml
@@ -1764,7 +1766,9 @@ fn tree_sitter_features_are_default_off_and_separate_from_vim_syntax() {
             && dependency_sections
                 .contains("tree-sitter-md = { version = \"0.5.3\", optional = true")
             && dependency_sections
-                .contains("tree-sitter-rust = { version = \"0.24.2\", optional = true }"),
+                .contains("tree-sitter-rust = { version = \"0.24.2\", optional = true }")
+            && dependency_sections
+                .contains("tree-sitter-typescript = { version = \"0.23.2\", optional = true }"),
         "Tree-sitter parser and grammar dependencies should be optional"
     );
     assert!(
@@ -1823,6 +1827,9 @@ fn experimental_tree_sitter_public_types_are_constructible() {
         provenance: provenance.clone(),
         status: CoreTreeSitterStatus::Prepared,
         has_error: false,
+        covered_ranges: vec![range],
+        error_ranges: Vec::new(),
+        budget_status: CoreTreeSitterBudgetStatus::WithinBudget,
         chunks: vec![chunk],
         embedded_regions: vec![embedded_region.clone()],
     };
@@ -1868,6 +1875,30 @@ fn tree_sitter_registry_registers_only_feature_enabled_packages() {
             0
         },
         "Rust package registration should follow the Cargo feature"
+    );
+    assert_eq!(
+        packages
+            .iter()
+            .filter(|package| package.package_id == "tree-sitter-typescript")
+            .count(),
+        if cfg!(feature = "tree-sitter-typescript") {
+            1
+        } else {
+            0
+        },
+        "TypeScript package registration should follow the Cargo feature"
+    );
+    assert_eq!(
+        packages
+            .iter()
+            .filter(|package| package.package_id == "tree-sitter-tsx")
+            .count(),
+        if cfg!(feature = "tree-sitter-typescript") {
+            1
+        } else {
+            0
+        },
+        "TSX package registration should follow the TypeScript Cargo feature"
     );
     for package in packages {
         assert!(
@@ -1920,6 +1951,18 @@ fn tree_sitter_root_resolver_uses_registry_backed_inputs() {
     assert_eq!(markdown.package_id.as_deref(), Some("tree-sitter-markdown"));
     assert_eq!(markdown.source, CoreLanguageResolutionSource::BufferName);
 
+    let tsx =
+        VimCoreSession::resolve_tree_sitter_root_language(CoreRootLanguageResolutionRequest {
+            range,
+            vim_filetype: None,
+            buffer_name: Some("component.tsx".to_string()),
+            host_language_hint: None,
+        });
+
+    assert_eq!(tsx.language_id.as_deref(), Some("tsx"));
+    assert_eq!(tsx.package_id.as_deref(), Some("tree-sitter-tsx"));
+    assert_eq!(tsx.source, CoreLanguageResolutionSource::BufferName);
+
     let unknown =
         VimCoreSession::resolve_tree_sitter_root_language(CoreRootLanguageResolutionRequest {
             range,
@@ -1958,6 +2001,27 @@ fn tree_sitter_embedded_resolver_normalizes_markdown_info_strings() {
     assert_eq!(
         rust.status,
         if cfg!(feature = "tree-sitter-rust") {
+            CoreLanguageResolutionStatus::Resolved
+        } else {
+            CoreLanguageResolutionStatus::Unavailable
+        }
+    );
+
+    let typescript = VimCoreSession::resolve_tree_sitter_embedded_language(
+        CoreEmbeddedLanguageResolutionRequest {
+            range,
+            raw_info_string: Some("typescript".to_string()),
+        },
+    );
+
+    assert_eq!(typescript.language_id.as_deref(), Some("typescript"));
+    assert_eq!(
+        typescript.package_id.as_deref(),
+        Some("tree-sitter-typescript")
+    );
+    assert_eq!(
+        typescript.status,
+        if cfg!(feature = "tree-sitter-typescript") {
             CoreLanguageResolutionStatus::Resolved
         } else {
             CoreLanguageResolutionStatus::Unavailable
@@ -2513,6 +2577,13 @@ fn tree_sitter_snapshot_store_reports_too_large_and_budget_statuses() {
             .status,
         CoreTreeSitterStatus::TooLarge
     );
+    let too_large_syntax = session
+        .query_tree_sitter_syntax_range(buffer.id, buffer.source_revision, range)
+        .expect("too-large status should be committed for diagnostics");
+    assert_eq!(
+        too_large_syntax.budget_status,
+        CoreTreeSitterBudgetStatus::SnapshotTooLarge
+    );
 
     let budgeted = session
         .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
@@ -2537,6 +2608,155 @@ fn tree_sitter_snapshot_store_reports_too_large_and_budget_statuses() {
             .syntax
             .status,
         CoreTreeSitterStatus::BudgetExceeded
+    );
+}
+
+#[cfg(all(
+    feature = "experimental-tree-sitter",
+    feature = "tree-sitter-typescript"
+))]
+#[test]
+fn tree_sitter_typescript_and_tsx_packages_parse_and_report_ranges() {
+    let _guard = acquire_session_test_lock();
+    let mut session =
+        VimCoreSession::new("const value: number = 1;\n").expect("session should initialize");
+    let buffer = session
+        .snapshot()
+        .buffers
+        .into_iter()
+        .find(|buffer| buffer.is_active)
+        .expect("active buffer should exist");
+    let range = CoreTextRange {
+        start: CoreTextPosition { row: 0, col: 0 },
+        end: CoreTextPosition { row: 1, col: 0 },
+    };
+
+    session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: buffer.id,
+            source_revision: Some(buffer.source_revision),
+            range,
+            vim_filetype: Some("typescript".to_string()),
+            buffer_name: Some("src/main.ts".to_string()),
+            host_language_hint: None,
+            snapshot_policy: CoreTreeSitterSnapshotPolicy::default(),
+        })
+        .expect("preparation should be accepted");
+
+    let syntax = session
+        .poll_tree_sitter_preparation()
+        .expect("result should be ready")
+        .syntax;
+    assert_eq!(syntax.status, CoreTreeSitterStatus::Prepared);
+    assert_eq!(syntax.provenance.language_id, "typescript");
+    assert_eq!(syntax.provenance.package_id, "tree-sitter-typescript");
+    assert_eq!(syntax.covered_ranges, vec![range]);
+    assert_eq!(
+        syntax.budget_status,
+        CoreTreeSitterBudgetStatus::WithinBudget
+    );
+    assert!(syntax.error_ranges.is_empty(), "{syntax:#?}");
+    assert!(
+        syntax
+            .chunks
+            .iter()
+            .any(|chunk| chunk.capture_name == "type.builtin"
+                && chunk.category == CoreSyntaxCategory::Type),
+        "TypeScript package should map highlights through normalized chunks: {:?}",
+        syntax.chunks
+    );
+
+    let tsx =
+        VimCoreSession::resolve_tree_sitter_root_language(CoreRootLanguageResolutionRequest {
+            range,
+            vim_filetype: None,
+            buffer_name: Some("src/App.tsx".to_string()),
+            host_language_hint: None,
+        });
+    assert_eq!(tsx.status, CoreLanguageResolutionStatus::Resolved);
+    assert_eq!(tsx.language_id.as_deref(), Some("tsx"));
+    assert_eq!(tsx.package_id.as_deref(), Some("tree-sitter-tsx"));
+}
+
+#[cfg(all(
+    feature = "experimental-tree-sitter",
+    feature = "tree-sitter-markdown",
+    feature = "tree-sitter-typescript"
+))]
+#[test]
+fn tree_sitter_markdown_fenced_typescript_injection_is_bounded_to_region() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new(
+        "# Title\n\n```typescript\nconst value: number = 1;\n```\n\nplain text\n",
+    )
+    .expect("session should initialize");
+    let buffer = session
+        .snapshot()
+        .buffers
+        .into_iter()
+        .find(|buffer| buffer.is_active)
+        .expect("active buffer should exist");
+    let range = CoreTextRange {
+        start: CoreTextPosition { row: 0, col: 0 },
+        end: CoreTextPosition { row: 7, col: 0 },
+    };
+
+    session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: buffer.id,
+            source_revision: Some(buffer.source_revision),
+            range,
+            vim_filetype: Some("markdown".to_string()),
+            buffer_name: Some("README.md".to_string()),
+            host_language_hint: None,
+            snapshot_policy: CoreTreeSitterSnapshotPolicy::default(),
+        })
+        .expect("preparation should be accepted");
+
+    let syntax = session
+        .poll_tree_sitter_preparation()
+        .expect("result should be ready")
+        .syntax;
+    assert_eq!(syntax.status, CoreTreeSitterStatus::Prepared);
+    let ts_region = syntax
+        .embedded_regions
+        .iter()
+        .find(|region| region.normalized_info_string.as_deref() == Some("typescript"))
+        .expect("typescript fence should be detected");
+    assert_eq!(
+        ts_region
+            .resolved_language
+            .as_ref()
+            .and_then(|language| language.language_id.as_deref()),
+        Some("typescript")
+    );
+    assert!(
+        syntax.chunks.iter().any(|chunk| {
+            chunk.capture_name == "type.builtin"
+                && chunk.category == CoreSyntaxCategory::Type
+                && chunk.range.start >= ts_region.content_range.start
+                && chunk.range.end <= ts_region.content_range.end
+        }),
+        "injected TypeScript highlights should be bounded to the fenced content range: {:?}",
+        syntax.chunks
+    );
+    assert!(
+        syntax
+            .chunks
+            .iter()
+            .filter(|chunk| chunk.capture_name == "type.builtin")
+            .all(|chunk| chunk.range.start >= ts_region.content_range.start
+                && chunk.range.end <= ts_region.content_range.end),
+        "injected child chunks must not escape the content range: {:?}",
+        syntax.chunks
+    );
+    assert!(
+        syntax
+            .chunks
+            .windows(2)
+            .all(|pair| pair[0].range.end <= pair[1].range.start),
+        "bounded injection should keep public chunks sorted and non-overlapping: {:?}",
+        syntax.chunks
     );
 }
 

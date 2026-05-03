@@ -380,6 +380,15 @@ pub enum CoreTreeSitterStatus {
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreTreeSitterBudgetStatus {
+    WithinBudget,
+    SnapshotTooLarge,
+    GlobalBudgetExceeded,
+    MatchLimitExceeded,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreSyntaxCategory {
     Attribute,
@@ -433,6 +442,9 @@ pub struct CoreTreeSitterRangeSyntax {
     pub provenance: CoreTreeSitterProvenance,
     pub status: CoreTreeSitterStatus,
     pub has_error: bool,
+    pub covered_ranges: Vec<CoreTextRange>,
+    pub error_ranges: Vec<CoreTextRange>,
+    pub budget_status: CoreTreeSitterBudgetStatus,
     pub chunks: Vec<CoreTreeSitterChunk>,
     pub embedded_regions: Vec<CoreEmbeddedRegion>,
 }
@@ -924,6 +936,22 @@ fn tree_sitter_language_packages() -> &'static [BuiltInTreeSitterPackage] {
             parser_version: "tree-sitter-rust-0.24.2",
             query_version: "tree-sitter-rust-highlights-0.24.2",
         },
+        #[cfg(feature = "tree-sitter-typescript")]
+        BuiltInTreeSitterPackage {
+            language_id: "typescript",
+            package_id: "tree-sitter-typescript",
+            package_version: "tree-sitter-typescript-0.23.2",
+            parser_version: "tree-sitter-typescript-0.23.2",
+            query_version: "tree-sitter-typescript-highlights-0.23.2",
+        },
+        #[cfg(feature = "tree-sitter-typescript")]
+        BuiltInTreeSitterPackage {
+            language_id: "tsx",
+            package_id: "tree-sitter-tsx",
+            package_version: "tree-sitter-typescript-0.23.2",
+            parser_version: "tree-sitter-tsx-0.23.2",
+            query_version: "tree-sitter-typescript-highlights-0.23.2",
+        },
     ]
 }
 
@@ -950,6 +978,30 @@ fn rust_tree_sitter_language() -> Language {
 #[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-rust"))]
 fn rust_highlight_query() -> &'static str {
     tree_sitter_rust::HIGHLIGHTS_QUERY
+}
+
+#[cfg(all(
+    feature = "experimental-tree-sitter",
+    feature = "tree-sitter-typescript"
+))]
+fn typescript_tree_sitter_language() -> Language {
+    tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
+}
+
+#[cfg(all(
+    feature = "experimental-tree-sitter",
+    feature = "tree-sitter-typescript"
+))]
+fn tsx_tree_sitter_language() -> Language {
+    tree_sitter_typescript::LANGUAGE_TSX.into()
+}
+
+#[cfg(all(
+    feature = "experimental-tree-sitter",
+    feature = "tree-sitter-typescript"
+))]
+fn typescript_highlight_query() -> &'static str {
+    tree_sitter_typescript::HIGHLIGHTS_QUERY
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
@@ -1131,6 +1183,12 @@ fn language_from_buffer_name(buffer_name: &str) -> Option<KnownTreeSitterLanguag
     if lower.ends_with(".rs") {
         return known_syntax_language("rust", "tree-sitter-rust");
     }
+    if lower.ends_with(".tsx") {
+        return known_syntax_language("tsx", "tree-sitter-tsx");
+    }
+    if lower.ends_with(".ts") || lower.ends_with(".mts") || lower.ends_with(".cts") {
+        return known_syntax_language("typescript", "tree-sitter-typescript");
+    }
     if lower.ends_with(".md")
         || lower.ends_with(".markdown")
         || lower.ends_with(".mkd")
@@ -1149,6 +1207,10 @@ fn language_from_hint(hint: &str) -> Option<KnownTreeSitterLanguage> {
         "markdown" | "md" | "mkd" | "mdown" => {
             known_syntax_language("markdown", "tree-sitter-markdown")
         }
+        "typescript" | "ts" | "mts" | "cts" => {
+            known_syntax_language("typescript", "tree-sitter-typescript")
+        }
+        "tsx" => known_syntax_language("tsx", "tree-sitter-tsx"),
         _ => None,
     }
 }
@@ -1180,6 +1242,20 @@ fn built_in_embedded_region_rules() -> &'static [BuiltInEmbeddedRegionRule] {
             kind: BuiltInEmbeddedRegionKind::Syntax {
                 language_id: "markdown",
                 package_id: "tree-sitter-markdown",
+            },
+        },
+        BuiltInEmbeddedRegionRule {
+            aliases: &["typescript", "ts", "mts", "cts"],
+            kind: BuiltInEmbeddedRegionKind::Syntax {
+                language_id: "typescript",
+                package_id: "tree-sitter-typescript",
+            },
+        },
+        BuiltInEmbeddedRegionRule {
+            aliases: &["tsx"],
+            kind: BuiltInEmbeddedRegionKind::Syntax {
+                language_id: "tsx",
+                package_id: "tree-sitter-tsx",
             },
         },
         BuiltInEmbeddedRegionRule {
@@ -1291,6 +1367,13 @@ fn tree_sitter_package_language_and_query(language_id: &str) -> Option<(Language
         "markdown" => Some((markdown_tree_sitter_language(), markdown_highlight_query())),
         #[cfg(feature = "tree-sitter-rust")]
         "rust" => Some((rust_tree_sitter_language(), rust_highlight_query())),
+        #[cfg(feature = "tree-sitter-typescript")]
+        "typescript" => Some((
+            typescript_tree_sitter_language(),
+            typescript_highlight_query(),
+        )),
+        #[cfg(feature = "tree-sitter-typescript")]
+        "tsx" => Some((tsx_tree_sitter_language(), typescript_highlight_query())),
         _ => None,
     }
 }
@@ -1488,6 +1571,9 @@ fn parse_tree_sitter_syntax(
 ) -> (
     CoreTreeSitterStatus,
     bool,
+    Vec<CoreTextRange>,
+    Vec<CoreTextRange>,
+    CoreTreeSitterBudgetStatus,
     Vec<CoreTreeSitterChunk>,
     Vec<CoreEmbeddedRegion>,
 ) {
@@ -1495,6 +1581,9 @@ fn parse_tree_sitter_syntax(
         return (
             tree_sitter_status_from_resolution(resolved),
             false,
+            Vec::new(),
+            Vec::new(),
+            CoreTreeSitterBudgetStatus::WithinBudget,
             Vec::new(),
             Vec::new(),
         );
@@ -1505,12 +1594,18 @@ fn parse_tree_sitter_syntax(
             false,
             Vec::new(),
             Vec::new(),
+            CoreTreeSitterBudgetStatus::WithinBudget,
+            Vec::new(),
+            Vec::new(),
         );
     };
     let Some((language, query_source)) = tree_sitter_package_language_and_query(language_id) else {
         return (
             CoreTreeSitterStatus::Unavailable,
             false,
+            Vec::new(),
+            Vec::new(),
+            CoreTreeSitterBudgetStatus::WithinBudget,
             Vec::new(),
             Vec::new(),
         );
@@ -1523,12 +1618,28 @@ fn parse_tree_sitter_syntax(
             false,
             Vec::new(),
             Vec::new(),
+            CoreTreeSitterBudgetStatus::WithinBudget,
+            Vec::new(),
+            Vec::new(),
         );
     }
     let Some(tree) = parser.parse(text, None) else {
-        return (CoreTreeSitterStatus::Partial, true, Vec::new(), Vec::new());
+        return (
+            CoreTreeSitterStatus::Partial,
+            true,
+            Vec::new(),
+            Vec::new(),
+            CoreTreeSitterBudgetStatus::WithinBudget,
+            Vec::new(),
+            Vec::new(),
+        );
     };
     let has_error = tree.root_node().has_error();
+    let line_starts = line_start_offsets(text);
+    let requested_bytes = bytes_for_text_range(text, range);
+    let covered_ranges = vec![range];
+    let error_ranges =
+        collect_tree_sitter_error_ranges(&line_starts, requested_bytes, tree.root_node());
     let embedded_regions = if language_id == "markdown" {
         collect_markdown_embedded_regions(text, range, tree.root_node())
     } else {
@@ -1538,12 +1649,14 @@ fn parse_tree_sitter_syntax(
         return (
             CoreTreeSitterStatus::Unavailable,
             has_error,
+            covered_ranges,
+            error_ranges,
+            CoreTreeSitterBudgetStatus::WithinBudget,
             Vec::new(),
             embedded_regions,
         );
     };
 
-    let requested_bytes = bytes_for_text_range(text, range);
     let mut cursor = QueryCursor::new();
     cursor.set_byte_range(requested_bytes.start..requested_bytes.end);
     let capture_names = query.capture_names();
@@ -1579,7 +1692,139 @@ fn parse_tree_sitter_syntax(
         status = CoreTreeSitterStatus::Partial;
     }
     let chunks = normalize_tree_sitter_captures(text, range, raw_captures);
-    (status, has_error, chunks, embedded_regions)
+    let budget_status = if matches!(status, CoreTreeSitterStatus::Partial) {
+        CoreTreeSitterBudgetStatus::MatchLimitExceeded
+    } else {
+        CoreTreeSitterBudgetStatus::WithinBudget
+    };
+    let chunks = if language_id == "markdown" {
+        inject_markdown_embedded_syntax_chunks(text, chunks, &embedded_regions)
+    } else {
+        chunks
+    };
+    (
+        status,
+        has_error,
+        covered_ranges,
+        error_ranges,
+        budget_status,
+        chunks,
+        embedded_regions,
+    )
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn collect_tree_sitter_error_ranges(
+    line_starts: &[usize],
+    requested_bytes: TextRangeBytes,
+    node: Node<'_>,
+) -> Vec<CoreTextRange> {
+    let mut ranges = Vec::new();
+    collect_tree_sitter_error_ranges_from_node(line_starts, requested_bytes, node, &mut ranges);
+    ranges.sort_by_key(|range| (range.start, range.end));
+    ranges.dedup();
+    ranges
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn collect_tree_sitter_error_ranges_from_node(
+    line_starts: &[usize],
+    requested_bytes: TextRangeBytes,
+    node: Node<'_>,
+    ranges: &mut Vec<CoreTextRange>,
+) {
+    if node.end_byte() <= requested_bytes.start || node.start_byte() >= requested_bytes.end {
+        return;
+    }
+    if node.is_error() || node.is_missing() {
+        let start = node.start_byte().max(requested_bytes.start);
+        let end = node.end_byte().min(requested_bytes.end);
+        if start < end {
+            ranges.push(text_range_from_bytes(line_starts, start, end));
+        }
+    }
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        collect_tree_sitter_error_ranges_from_node(line_starts, requested_bytes, child, ranges);
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn inject_markdown_embedded_syntax_chunks(
+    text: &str,
+    mut chunks: Vec<CoreTreeSitterChunk>,
+    embedded_regions: &[CoreEmbeddedRegion],
+) -> Vec<CoreTreeSitterChunk> {
+    for region in embedded_regions {
+        let Some(resolved) = region.resolved_language.as_ref() else {
+            continue;
+        };
+        if !matches!(region.normalized_kind, CoreEmbeddedBlockKind::Syntax)
+            || !matches!(resolved.status, CoreLanguageResolutionStatus::Resolved)
+            || !matches!(resolved.language_id.as_deref(), Some("typescript" | "tsx"))
+        {
+            continue;
+        }
+
+        let child_text_bytes = bytes_for_text_range(text, region.content_range);
+        let child_text = &text[child_text_bytes.start..child_text_bytes.end];
+        let child_line_starts = line_start_offsets(child_text);
+        let child_range = CoreTextRange {
+            start: CoreTextPosition { row: 0, col: 0 },
+            end: position_for_byte(&child_line_starts, child_text.len()),
+        };
+        let (status, _, _, _, _, child_chunks, _) =
+            parse_tree_sitter_syntax(child_text, child_range, resolved);
+        if matches!(
+            status,
+            CoreTreeSitterStatus::Prepared | CoreTreeSitterStatus::Partial
+        ) {
+            chunks.retain(|chunk| {
+                chunk.range.end <= region.content_range.start
+                    || chunk.range.start >= region.content_range.end
+            });
+            chunks.extend(
+                child_chunks
+                    .into_iter()
+                    .map(|chunk| offset_tree_sitter_chunk(chunk, region.content_range.start))
+                    .filter(|chunk| {
+                        chunk.range.start >= region.content_range.start
+                            && chunk.range.end <= region.content_range.end
+                    }),
+            );
+        }
+    }
+    chunks.sort_by_key(|chunk| (chunk.range.start, chunk.range.end));
+    chunks
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn offset_tree_sitter_chunk(
+    chunk: CoreTreeSitterChunk,
+    base: CoreTextPosition,
+) -> CoreTreeSitterChunk {
+    CoreTreeSitterChunk {
+        range: CoreTextRange {
+            start: offset_text_position(chunk.range.start, base),
+            end: offset_text_position(chunk.range.end, base),
+        },
+        capture_name: chunk.capture_name,
+        category: chunk.category,
+        modifiers: chunk.modifiers,
+    }
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+fn offset_text_position(position: CoreTextPosition, base: CoreTextPosition) -> CoreTextPosition {
+    CoreTextPosition {
+        row: base.row + position.row,
+        col: if position.row == 0 {
+            base.col + position.col
+        } else {
+            position.col
+        },
+    }
 }
 
 #[cfg(feature = "experimental-tree-sitter")]
@@ -2437,6 +2682,15 @@ impl VimCoreSession {
         });
         let mut status = status;
         let mut has_error = false;
+        let mut covered_ranges = Vec::new();
+        let mut error_ranges = Vec::new();
+        let mut budget_status = match status {
+            CoreTreeSitterStatus::TooLarge => CoreTreeSitterBudgetStatus::SnapshotTooLarge,
+            CoreTreeSitterStatus::BudgetExceeded => {
+                CoreTreeSitterBudgetStatus::GlobalBudgetExceeded
+            }
+            _ => CoreTreeSitterBudgetStatus::WithinBudget,
+        };
         let mut chunks = Vec::new();
         let mut embedded_regions = Vec::new();
         if matches!(status, CoreTreeSitterStatus::Prepared) {
@@ -2445,10 +2699,20 @@ impl VimCoreSession {
                 .borrow()
                 .text(buffer_id, source_revision)
             {
-                let (parse_status, parse_has_error, parse_chunks, parse_embedded_regions) =
-                    parse_tree_sitter_syntax(text, range, &resolved);
+                let (
+                    parse_status,
+                    parse_has_error,
+                    parse_covered_ranges,
+                    parse_error_ranges,
+                    parse_budget_status,
+                    parse_chunks,
+                    parse_embedded_regions,
+                ) = parse_tree_sitter_syntax(text, range, &resolved);
                 status = parse_status;
                 has_error = parse_has_error;
+                covered_ranges = parse_covered_ranges;
+                error_ranges = parse_error_ranges;
+                budget_status = parse_budget_status;
                 chunks = parse_chunks;
                 embedded_regions = parse_embedded_regions;
             } else {
@@ -2461,6 +2725,9 @@ impl VimCoreSession {
             provenance: provenance_for_resolved_language(&resolved),
             status,
             has_error,
+            covered_ranges,
+            error_ranges,
+            budget_status,
             chunks,
             embedded_regions,
         }

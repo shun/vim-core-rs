@@ -176,12 +176,13 @@ You can understand the crate as a composition of four contracts.
   `CoreSyntaxChunk`.
 - Tree-sitter extraction, when enabled, must use a separate public surface and
   must not route output through `CoreSyntaxChunk`.
-- Enabled Markdown and Rust Tree-sitter packages own parser/query metadata,
-  capture mapping, explicit priorities, overlap normalization, and visible
-  range reads from committed cache.
+- Enabled Markdown, Rust, TypeScript, and TSX Tree-sitter packages own
+  parser/query metadata, capture mapping, explicit priorities, overlap
+  normalization, and visible range reads from committed cache.
 - Markdown fenced blocks are extracted as data-only embedded regions. The
   region records preserve raw and normalized info strings, and classification
-  stays registry-backed. Child syntax injection remains out of scope.
+  stays registry-backed. Markdown fenced TypeScript and TSX syntax injection
+  is bounded to the fenced content range.
 - Markdown linked SVG and PNG targets are extracted as data-only media
   embedded regions. The raw link target is preserved, linked `*.drawio.svg`
   targets carry SVG media with `DrawioSvg` flavor, and rendering or decoding

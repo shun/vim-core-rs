@@ -121,18 +121,21 @@ The public session methods are grouped by role.
 
 The `experimental-tree-sitter` feature adds type definitions for a separate
 Tree-sitter extraction surface. The feature is default-off, and the
-`tree-sitter-markdown` and `tree-sitter-rust` package features opt into that
-surface with optional parser and query packages.
+`tree-sitter-markdown`, `tree-sitter-rust`, and `tree-sitter-typescript`
+package features opt into that surface with optional parser and query
+packages.
 
 The Tree-sitter surface is separate from `CoreSyntaxChunk` and
 `get_line_syntax()`. It carries crate-owned `source_revision` provenance,
 package and query versions, explicit preparation status, byte ranges, capture
-names, normalized categories and modifiers, and data-only embedded region
-records. Markdown fenced blocks are detected as embedded regions with raw and
-normalized info strings. Markdown linked SVG and PNG targets are detected as
-media embedded regions with the raw target preserved on the region record.
-Linked `*.drawio.svg` targets are SVG media with `DrawioSvg` flavor. It does
-not expose Vim syntax IDs, Vim highlight attributes, or conceal substitutions.
+names, normalized categories and modifiers, coverage ranges, error ranges,
+budget state, and data-only embedded region records. Markdown fenced blocks
+are detected as embedded regions with raw and normalized info strings.
+Markdown linked SVG and PNG targets are detected as media embedded regions
+with the raw target preserved on the region record. Linked `*.drawio.svg`
+targets are SVG media with `DrawioSvg` flavor. Markdown fenced TypeScript and
+TSX syntax injection is bounded to the fenced content range. It does not expose
+Vim syntax IDs, Vim highlight attributes, or conceal substitutions.
 
 `tree_sitter_language_packages()` exposes the feature-enabled built-in package
 registry. `resolve_tree_sitter_root_language()` uses Vim `filetype`, buffer
@@ -147,10 +150,11 @@ data-only extraction.
 `request_tree_sitter_syntax_preparation()` adds the request/response
 preparation shape. The implementation creates or reuses immutable text
 snapshots keyed by `(buffer_id, source_revision)`, pins queued or running
-requests, parses enabled Markdown or Rust packages synchronously, normalizes
-captures into non-overlapping chunks, and queues completed results for
-`poll_tree_sitter_preparation()`. `query_tree_sitter_syntax_range()` reads
-committed cache state only and clips cached results to visible subranges.
+requests, parses enabled Markdown, Rust, TypeScript, or TSX packages
+synchronously, normalizes captures into non-overlapping chunks, and queues
+completed results for `poll_tree_sitter_preparation()`.
+`query_tree_sitter_syntax_range()` reads committed cache state only and clips
+cached results to visible subranges.
 `tree_sitter_snapshot_store_stats()` exposes retention diagnostics for tests
 and host debugging, including pinned counts and unpinned byte usage.
 

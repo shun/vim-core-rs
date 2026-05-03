@@ -462,9 +462,10 @@ These structs feed editor UI and history views.
 
 The `experimental-tree-sitter` Cargo feature exposes a preview Tree-sitter
 extraction surface. The feature is default-off, and the
-`tree-sitter-markdown` and `tree-sitter-rust` package features enable parser
-and query packages for those languages. Enabled package features are the only
-packages registered by the built-in registry.
+`tree-sitter-markdown`, `tree-sitter-rust`, and `tree-sitter-typescript`
+package features enable parser and query packages for those languages.
+Enabled package features are the only packages registered by the built-in
+registry.
 
 > **Note:** This is a preview feature currently under active development.
 
@@ -476,7 +477,10 @@ non-overlapping public chunks. Markdown fenced blocks are detected as
 data-only embedded regions and carry raw and normalized info strings. Markdown
 linked SVG and PNG targets are also detected as data-only media regions. Linked
 `*.drawio.svg` targets are classified as SVG media with `DrawioSvg` flavor.
-Child syntax injection is not part of this phase.
+The TypeScript package feature registers TypeScript and TSX packages. Markdown
+fenced TypeScript and TSX syntax injection is bounded to the fenced content
+range and reports coverage, error ranges, and budget state on the parent
+result.
 
 - `CoreTextPosition { row, col }`
 - `CoreTextRange { start, end }`
@@ -486,9 +490,11 @@ Child syntax injection is not part of this phase.
   { language_id, package_id, package_version, parser_version, query_version }`
 - `CoreTreeSitterStatus`: `Prepared`, `Stale`, `Unavailable`, `Unsupported`,
   `Partial`, `TimedOut`, `BudgetExceeded`, `TooLarge`
+- `CoreTreeSitterBudgetStatus`: `WithinBudget`, `SnapshotTooLarge`,
+  `GlobalBudgetExceeded`, `MatchLimitExceeded`
 - `CoreTreeSitterRangeSyntax
   { buffer_id, source_revision, provenance, status, has_error, chunks,
-  embedded_regions }`
+  covered_ranges, error_ranges, budget_status, embedded_regions }`
 - `CoreTreeSitterChunk { range, capture_name, category, modifiers }`
 - `CoreTreeSitterRequestId { value }`
 - `CoreTreeSitterSnapshotPolicy
@@ -539,12 +545,12 @@ embedded regions. Known languages without an enabled package return
 `Unavailable`; unknown or non-syntax embedded kinds return `Unsupported`.
 `request_tree_sitter_syntax_preparation()` creates or reuses an immutable text
 snapshot keyed by `(buffer_id, source_revision)`, pins it for the synchronous
-preparation, parses enabled Markdown or Rust packages when available, commits
-normalized non-overlapping chunks with an explicit status, and queues a
-pollable completion. `poll_tree_sitter_preparation()` drains completed
-results. `query_tree_sitter_syntax_range()` reads the committed cache only,
-clips cached results to the requested visible range, and doesn't parse in the
-draw path.
+preparation, parses enabled Markdown, Rust, TypeScript, or TSX packages when
+available, commits normalized non-overlapping chunks with an explicit status,
+and queues a pollable completion. `poll_tree_sitter_preparation()` drains
+completed results. `query_tree_sitter_syntax_range()` reads the committed
+cache only, clips cached results to the requested visible range, and doesn't
+parse in the draw path.
 
 Snapshot retention keeps only unpinned snapshots, preserves pinned in-flight
 snapshots, and applies both latest-N-per-buffer and global byte-budget

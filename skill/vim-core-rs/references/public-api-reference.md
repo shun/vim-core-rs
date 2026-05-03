@@ -222,13 +222,15 @@ the requested 1-based inclusive row range for the target window.
 ### Experimental Tree-sitter structs
 
 These structs are available only with the default-off
-`experimental-tree-sitter` feature. The `tree-sitter-markdown` and
-`tree-sitter-rust` package features enable parser and query packages for those
-languages. Prepared package results use crate-owned capture mapping and return
-normalized, non-overlapping chunks. Markdown fenced blocks are detected as
-data-only embedded regions and carry raw and normalized info strings. Markdown
-linked SVG and PNG targets are detected as data-only media regions, and linked
-`*.drawio.svg` targets are SVG media with `DrawioSvg` flavor.
+`experimental-tree-sitter` feature. The `tree-sitter-markdown`,
+`tree-sitter-rust`, and `tree-sitter-typescript` package features enable
+parser and query packages for those languages. Prepared package results use
+crate-owned capture mapping and return normalized, non-overlapping chunks.
+Markdown fenced blocks are detected as data-only embedded regions and carry
+raw and normalized info strings. Markdown linked SVG and PNG targets are
+detected as data-only media regions, and linked `*.drawio.svg` targets are SVG
+media with `DrawioSvg` flavor. Markdown fenced TypeScript and TSX syntax
+injection is bounded to the fenced content range.
 
 - `CoreTextPosition { row, col }`
 - `CoreTextRange { start, end }`
@@ -236,9 +238,11 @@ linked SVG and PNG targets are detected as data-only media regions, and linked
   { language_id, package_id, package_version, parser_version, query_version }`
 - `CoreTreeSitterStatus`: `Prepared`, `Stale`, `Unavailable`, `Unsupported`,
   `Partial`, `TimedOut`, `BudgetExceeded`, `TooLarge`
+- `CoreTreeSitterBudgetStatus`: `WithinBudget`, `SnapshotTooLarge`,
+  `GlobalBudgetExceeded`, `MatchLimitExceeded`
 - `CoreTreeSitterRangeSyntax
   { buffer_id, source_revision, provenance, status, has_error, chunks,
-  embedded_regions }`
+  covered_ranges, error_ranges, budget_status, embedded_regions }`
 - `CoreTreeSitterChunk { range, capture_name, category, modifiers }`
 - `CoreTreeSitterRequestId { value }`
 - `CoreTreeSitterSnapshotPolicy
@@ -267,9 +271,9 @@ Tree-sitter output is feature-gated and separate from `CoreSyntaxChunk`. It
 does not carry Vim `syn_id` values, Vim highlight attributes, or conceal
 display substitutions.
 `request_tree_sitter_syntax_preparation()` creates or reuses an immutable
-snapshot, parses enabled Markdown or Rust packages synchronously, commits
-normalized chunks and embedded region records, and queues a result for
-`poll_tree_sitter_preparation()`.
+snapshot, parses enabled Markdown, Rust, TypeScript, or TSX packages
+synchronously, commits normalized chunks and embedded region records, and
+queues a result for `poll_tree_sitter_preparation()`.
 `query_tree_sitter_syntax_range()` reads committed cache state only and clips
 cached results to visible subranges.
 
