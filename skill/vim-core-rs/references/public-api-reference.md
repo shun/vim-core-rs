@@ -219,6 +219,36 @@ the requested 1-based inclusive row range for the target window.
 - `CorePumItem { word, abbr, menu, kind, info }`
 - `CorePumInfo { row, col, width, height, selected_index, items }`
 
+### Experimental Tree-sitter structs
+
+These structs are available only with the default-off
+`experimental-tree-sitter` feature. The `tree-sitter-markdown` and
+`tree-sitter-rust` package features enable the same experimental surface for
+later language-package work, but this skeleton does not execute parsers or add
+grammar dependencies yet.
+
+- `CoreTextPosition { row, col }`
+- `CoreTextRange { start, end }`
+- `CoreTreeSitterProvenance
+  { language_id, package_id, package_version, parser_version, query_version }`
+- `CoreTreeSitterStatus`: `Prepared`, `Stale`, `Unavailable`, `Unsupported`,
+  `Partial`, `TimedOut`, `BudgetExceeded`, `TooLarge`
+- `CoreTreeSitterRangeSyntax
+  { buffer_id, source_revision, provenance, status, has_error, chunks }`
+- `CoreTreeSitterChunk { range, capture_name, category, modifiers }`
+- `CoreSyntaxCategory` and `CoreSyntaxModifier`
+- `CoreEmbeddedRegion
+  { range, content_range, source, raw_info_string, normalized_info_string,
+  normalized_kind, resolved_language }`
+- `CoreEmbeddedBlockKind`: `Syntax`, `Diagram`, `Media`, `Unknown`
+- `CoreResolvedLanguage
+  { range, role, language_id, package_id, package_version, kind, confidence,
+  source }`
+
+Tree-sitter output is feature-gated and separate from `CoreSyntaxChunk`. It
+does not carry Vim `syn_id` values, Vim highlight attributes, or conceal
+display substitutions.
+
 ### Search and message types
 
 - `CoreMessageSeverity`

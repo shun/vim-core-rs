@@ -328,6 +328,195 @@ pub struct CoreSyntaxChunk {
     pub name: Option<String>,
 }
 
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CoreTextPosition {
+    pub row: usize,
+    pub col: usize,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CoreTextRange {
+    pub start: CoreTextPosition,
+    pub end: CoreTextPosition,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreTreeSitterProvenance {
+    pub language_id: String,
+    pub package_id: String,
+    pub package_version: String,
+    pub parser_version: String,
+    pub query_version: String,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreTreeSitterStatus {
+    Prepared,
+    Stale,
+    Unavailable,
+    Unsupported,
+    Partial,
+    TimedOut,
+    BudgetExceeded,
+    TooLarge,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreSyntaxCategory {
+    Attribute,
+    Comment,
+    Constant,
+    Constructor,
+    Function,
+    Keyword,
+    Label,
+    Markup,
+    Module,
+    Number,
+    Operator,
+    Property,
+    Punctuation,
+    String,
+    Tag,
+    Text,
+    Type,
+    Variable,
+    Unknown,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreSyntaxModifier {
+    Async,
+    Declaration,
+    Definition,
+    Deprecated,
+    Documentation,
+    Mutable,
+    Readonly,
+    Static,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreTreeSitterChunk {
+    pub range: CoreTextRange,
+    pub capture_name: String,
+    pub category: CoreSyntaxCategory,
+    pub modifiers: Vec<CoreSyntaxModifier>,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreTreeSitterRangeSyntax {
+    pub buffer_id: i32,
+    pub source_revision: CoreBufferRevision,
+    pub provenance: CoreTreeSitterProvenance,
+    pub status: CoreTreeSitterStatus,
+    pub has_error: bool,
+    pub chunks: Vec<CoreTreeSitterChunk>,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreLanguageRole {
+    RootDocument,
+    EmbeddedRegion,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreLanguageResolutionSource {
+    Registry,
+    VimFiletype,
+    BufferName,
+    HostHint,
+    MarkdownInfoString,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreResolutionConfidence {
+    Exact,
+    Alias,
+    Heuristic,
+    Unknown,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreEmbeddedRegionSource {
+    MarkdownFence,
+    MarkdownLink,
+    Unknown,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreDiagramKind {
+    Mermaid,
+    Drawio,
+    Unknown,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreMediaKind {
+    Svg,
+    Png,
+    Unknown,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreMediaFlavor {
+    DrawioSvg,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreEmbeddedBlockKind {
+    Syntax,
+    Diagram {
+        diagram_kind: CoreDiagramKind,
+    },
+    Media {
+        media_kind: CoreMediaKind,
+        flavor: Option<CoreMediaFlavor>,
+    },
+    Unknown,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreResolvedLanguage {
+    pub range: CoreTextRange,
+    pub role: CoreLanguageRole,
+    pub language_id: Option<String>,
+    pub package_id: Option<String>,
+    pub package_version: Option<String>,
+    pub kind: CoreEmbeddedBlockKind,
+    pub confidence: CoreResolutionConfidence,
+    pub source: CoreLanguageResolutionSource,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreEmbeddedRegion {
+    pub range: CoreTextRange,
+    pub content_range: CoreTextRange,
+    pub source: CoreEmbeddedRegionSource,
+    pub raw_info_string: Option<String>,
+    pub normalized_info_string: Option<String>,
+    pub normalized_kind: CoreEmbeddedBlockKind,
+    pub resolved_language: Option<CoreResolvedLanguage>,
+}
+
 /// Vimメッセージの重要度
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreMessageSeverity {

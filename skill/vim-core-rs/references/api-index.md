@@ -42,6 +42,11 @@ Read the bundled pages in this order when you need complete coverage.
   `CoreMessageEvent`,
   `CoreCommandTransaction`, `CorePumItem`, `CorePumInfo`, `CoreMatchRange`,
   `CoreCursorMatchInfo`, `CoreSessionOptions`, `CoreSnapshot`
+- Experimental Tree-sitter symbols, only with `experimental-tree-sitter`:
+  `CoreTextPosition`, `CoreTextRange`, `CoreTreeSitterProvenance`,
+  `CoreTreeSitterStatus`, `CoreTreeSitterRangeSyntax`,
+  `CoreTreeSitterChunk`, `CoreSyntaxCategory`, `CoreSyntaxModifier`,
+  `CoreResolvedLanguage`, and `CoreEmbeddedRegion`
 - Re-exported VFS items: `CoreBufferBinding`, `CoreBufferSourceKind`,
   `CoreDeferredClose`, `CorePendingVfsOperation`, `CoreRequestEntry`,
   `CoreRequestStatus`, `CoreVfsError`, `CoreVfsErrorKind`,
@@ -72,6 +77,16 @@ Read the bundled pages in this order when you need complete coverage.
 - Undo and backend metadata: `get_undo_tree`, `undo_jump`,
   `backend_identity`
 - Job and VFD bridge helpers: `inject_vfd_data`, `notify_job_status`
+
+### Experimental Tree-sitter surface
+
+The `experimental-tree-sitter` feature is default-off. It exposes the Phase 2
+type skeleton for a separate Tree-sitter syntax surface and package features
+for Markdown and Rust. It does not add parser or grammar dependencies yet.
+Tree-sitter output stays separate from `get_line_syntax()` and
+`CoreSyntaxChunk`; it uses source revisions, package/query provenance,
+explicit statuses, byte ranges, capture names, normalized categories and
+modifiers, and embedded region records.
 
 ### Internal-only areas
 

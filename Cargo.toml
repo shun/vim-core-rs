@@ -35,6 +35,12 @@ include = [
 [lib]
 path = "src/lib.rs"
 
+[features]
+default = []
+experimental-tree-sitter = []
+tree-sitter-markdown = ["experimental-tree-sitter"]
+tree-sitter-rust = ["experimental-tree-sitter"]
+
 [dependencies]
 log = "0.4"
 

@@ -458,6 +458,49 @@ These structs feed editor UI and history views.
 - `CorePumItem { word, abbr, menu, kind, info }`
 - `CorePumInfo { row, col, width, height, selected_index, items }`
 
+### Experimental Tree-sitter structs
+
+The `experimental-tree-sitter` Cargo feature exposes a preview type skeleton
+for Tree-sitter extraction. The feature is default-off, and the
+`tree-sitter-markdown` and `tree-sitter-rust` package features enable the same
+experimental surface for language-package work in later phases.
+
+> **Note:** This is a preview feature currently under active development.
+
+These types are feature-gated and separate from `CoreSyntaxChunk`. They model
+Tree-sitter provenance, explicit preparation status, byte ranges, capture
+names, normalized categories and modifiers, and embedded regions without
+implementing parser execution yet.
+
+- `CoreTextPosition { row, col }`
+- `CoreTextRange { start, end }`
+- `CoreTreeSitterProvenance
+  { language_id, package_id, package_version, parser_version, query_version }`
+- `CoreTreeSitterStatus`: `Prepared`, `Stale`, `Unavailable`, `Unsupported`,
+  `Partial`, `TimedOut`, `BudgetExceeded`, `TooLarge`
+- `CoreTreeSitterRangeSyntax
+  { buffer_id, source_revision, provenance, status, has_error, chunks }`
+- `CoreTreeSitterChunk { range, capture_name, category, modifiers }`
+- `CoreSyntaxCategory`: normalized public highlight categories such as
+  `Keyword`, `String`, `Function`, `Type`, `Variable`, `Comment`, and
+  `Unknown`
+- `CoreSyntaxModifier`: normalized public modifiers such as `Declaration`,
+  `Definition`, `Readonly`, `Static`, `Deprecated`, `Async`, and `Mutable`
+- `CoreEmbeddedRegion
+  { range, content_range, source, raw_info_string, normalized_info_string,
+  normalized_kind, resolved_language }`
+- `CoreEmbeddedBlockKind`: `Syntax`, `Diagram`, `Media`, `Unknown`
+- `CoreDiagramKind`, `CoreMediaKind`, and `CoreMediaFlavor`
+- `CoreResolvedLanguage
+  { range, role, language_id, package_id, package_version, kind, confidence,
+  source }`
+
+Tree-sitter output must not be routed through `CoreSyntaxChunk`. It does not
+carry Vim `syn_id` values, Vim highlight attributes, or conceal display
+substitutions. Hosts compare `CoreBufferInfo.source_revision` with
+`CoreTreeSitterRangeSyntax.source_revision` before using delayed or cached
+syntax data.
+
 ### Search and message structs
 
 These types capture message and search metadata.

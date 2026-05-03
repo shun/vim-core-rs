@@ -191,6 +191,24 @@ pub struct CoreSyntaxChunk {
     pub name: Option<String>,
 }
 
+#[cfg(feature = "experimental-tree-sitter")]
+pub struct CoreTreeSitterRangeSyntax {
+    pub buffer_id: i32,
+    pub source_revision: CoreBufferRevision,
+    pub provenance: CoreTreeSitterProvenance,
+    pub status: CoreTreeSitterStatus,
+    pub has_error: bool,
+    pub chunks: Vec<CoreTreeSitterChunk>,
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+pub struct CoreTreeSitterChunk {
+    pub range: CoreTextRange,
+    pub capture_name: String,
+    pub category: CoreSyntaxCategory,
+    pub modifiers: Vec<CoreSyntaxModifier>,
+}
+
 pub struct CorePumItem {
     pub word: String,
     pub abbr: String,

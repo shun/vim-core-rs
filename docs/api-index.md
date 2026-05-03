@@ -61,6 +61,15 @@ The crate root exports these user-facing symbols.
   `CoreMessageEvent`,
   `CoreCommandTransaction`, `CoreSessionOptions`, `CorePumItem`, `CorePumInfo`,
   `CoreMatchRange`, `CoreCursorMatchInfo`, `CoreSnapshot`
+- Experimental Tree-sitter symbols, available only with
+  `experimental-tree-sitter`: `CoreTextPosition`, `CoreTextRange`,
+  `CoreTreeSitterProvenance`, `CoreTreeSitterStatus`,
+  `CoreTreeSitterRangeSyntax`, `CoreTreeSitterChunk`,
+  `CoreSyntaxCategory`, `CoreSyntaxModifier`, `CoreLanguageRole`,
+  `CoreLanguageResolutionSource`, `CoreResolutionConfidence`,
+  `CoreResolvedLanguage`, `CoreEmbeddedRegionSource`, `CoreDiagramKind`,
+  `CoreMediaKind`, `CoreMediaFlavor`, `CoreEmbeddedBlockKind`, and
+  `CoreEmbeddedRegion`
 - Re-exported VFS enums and structs: `CoreBufferBinding`,
   `CoreBufferSourceKind`, `CoreDeferredClose`, `CorePendingVfsOperation`,
   `CoreRequestEntry`, `CoreRequestStatus`, `CoreVfsError`,
@@ -103,6 +112,20 @@ The public session methods are grouped by role.
 - Undo and backend metadata: `get_undo_tree`, `undo_jump`,
   `backend_identity`
 - Job and VFD bridge helpers: `inject_vfd_data`, `notify_job_status`
+
+### Experimental Tree-sitter surface
+
+The `experimental-tree-sitter` feature adds type definitions for a separate
+Tree-sitter extraction surface. The feature is default-off, and the
+`tree-sitter-markdown` and `tree-sitter-rust` package features opt into that
+surface without adding parser behavior in the Phase 2 skeleton.
+
+The Tree-sitter surface is separate from `CoreSyntaxChunk` and
+`get_line_syntax()`. It carries crate-owned `source_revision` provenance,
+package and query versions, explicit preparation status, byte ranges, capture
+names, normalized categories and modifiers, and data-only embedded region
+records. It does not expose Vim syntax IDs, Vim highlight attributes, or
+conceal substitutions.
 
 ### Internal-only symbols
 

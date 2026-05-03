@@ -2271,6 +2271,7 @@ fn bridge_buffer_info_exposes_vfs_metadata_fields() {
         id: 5,
         name_ptr: std::ptr::null(),
         name_len: 0,
+        source_revision: 0,
         dirty: false,
         is_active: true,
         source_kind: vim_core_rs::ffi::VIM_CORE_BUFFER_SOURCE_VFS,

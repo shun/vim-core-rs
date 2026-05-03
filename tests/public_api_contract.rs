@@ -7,6 +7,13 @@ use std::{
     io::Read,
     os::fd::{FromRawFd, RawFd},
 };
+#[cfg(feature = "experimental-tree-sitter")]
+use vim_core_rs::{
+    CoreBufferRevision, CoreEmbeddedBlockKind, CoreEmbeddedRegion, CoreEmbeddedRegionSource,
+    CoreLanguageResolutionSource, CoreLanguageRole, CoreResolutionConfidence, CoreResolvedLanguage,
+    CoreSyntaxCategory, CoreSyntaxModifier, CoreTextPosition, CoreTextRange, CoreTreeSitterChunk,
+    CoreTreeSitterProvenance, CoreTreeSitterRangeSyntax, CoreTreeSitterStatus,
+};
 use vim_core_rs::{
     CoreCommandOutcome, CoreEvent, CoreHostAction, CoreInputRequestKind, CoreInputResponse,
     CoreInputResponseError, CoreMode, CoreOptionError, CoreOptionScope, CoreOptionType,
@@ -1725,4 +1732,101 @@ fn api_index_maps_rendering_state_family_without_new_surface() {
             && content.contains("textprop"),
         "api index should map the existing search/syntax accessors to the family boundary and keep textprop deferred"
     );
+}
+
+#[test]
+fn tree_sitter_features_are_default_off_and_separate_from_vim_syntax() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let cargo_toml =
+        fs::read_to_string(repo_root.join("Cargo.toml")).expect("Cargo.toml should be readable");
+    let public_api_reference = fs::read_to_string(repo_root.join("docs/public-api-reference.md"))
+        .expect("public API reference should be readable");
+    let api_index = fs::read_to_string(repo_root.join("docs/api-index.md"))
+        .expect("api index should be readable");
+
+    assert!(
+        cargo_toml.contains("default = []")
+            && cargo_toml.contains("experimental-tree-sitter = []")
+            && cargo_toml.contains("tree-sitter-markdown = [\"experimental-tree-sitter\"]")
+            && cargo_toml.contains("tree-sitter-rust = [\"experimental-tree-sitter\"]"),
+        "Tree-sitter feature flags should be opt-in and default-off"
+    );
+    let dependency_sections = cargo_toml
+        .split("[dependencies]")
+        .nth(1)
+        .and_then(|after_dependencies| after_dependencies.split("[build-dependencies]").next())
+        .expect("Cargo.toml should contain dependency sections");
+    assert!(
+        !dependency_sections.contains("tree-sitter =")
+            && !dependency_sections.contains("tree-sitter-markdown =")
+            && !dependency_sections.contains("tree-sitter-rust ="),
+        "Phase 2 should not add parser or grammar dependencies"
+    );
+    assert!(
+        public_api_reference.contains("CoreTreeSitterRangeSyntax")
+            && public_api_reference.contains("feature-gated")
+            && public_api_reference.contains("separate from `CoreSyntaxChunk`")
+            && api_index.contains("Experimental Tree-sitter"),
+        "docs should describe the feature-gated Tree-sitter surface separately from Vim syntax"
+    );
+}
+
+#[cfg(feature = "experimental-tree-sitter")]
+#[test]
+fn experimental_tree_sitter_public_types_are_constructible() {
+    let range = CoreTextRange {
+        start: CoreTextPosition { row: 0, col: 0 },
+        end: CoreTextPosition { row: 0, col: 4 },
+    };
+    let provenance = CoreTreeSitterProvenance {
+        language_id: "rust".to_string(),
+        package_id: "tree-sitter-rust".to_string(),
+        package_version: "0.0.0-skeleton".to_string(),
+        parser_version: "0.0.0-skeleton".to_string(),
+        query_version: "0.0.0-skeleton".to_string(),
+    };
+    let chunk = CoreTreeSitterChunk {
+        range,
+        capture_name: "keyword".to_string(),
+        category: CoreSyntaxCategory::Keyword,
+        modifiers: vec![CoreSyntaxModifier::Definition],
+    };
+    let syntax = CoreTreeSitterRangeSyntax {
+        buffer_id: 1,
+        source_revision: CoreBufferRevision { value: 7 },
+        provenance: provenance.clone(),
+        status: CoreTreeSitterStatus::Prepared,
+        has_error: false,
+        chunks: vec![chunk],
+    };
+    let resolved_language = CoreResolvedLanguage {
+        range,
+        role: CoreLanguageRole::EmbeddedRegion,
+        language_id: Some("rust".to_string()),
+        package_id: Some(provenance.package_id),
+        package_version: Some(provenance.package_version),
+        kind: CoreEmbeddedBlockKind::Syntax,
+        confidence: CoreResolutionConfidence::Exact,
+        source: CoreLanguageResolutionSource::Registry,
+    };
+    let embedded_region = CoreEmbeddedRegion {
+        range,
+        content_range: range,
+        source: CoreEmbeddedRegionSource::MarkdownFence,
+        raw_info_string: Some("rust".to_string()),
+        normalized_info_string: Some("rust".to_string()),
+        normalized_kind: CoreEmbeddedBlockKind::Syntax,
+        resolved_language: Some(resolved_language),
+    };
+
+    assert_eq!(syntax.source_revision, CoreBufferRevision { value: 7 });
+    assert_eq!(syntax.chunks[0].capture_name, "keyword");
+    assert!(matches!(
+        syntax.chunks[0].category,
+        CoreSyntaxCategory::Keyword
+    ));
+    assert!(matches!(
+        embedded_region.normalized_kind,
+        CoreEmbeddedBlockKind::Syntax
+    ));
 }
