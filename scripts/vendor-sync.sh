@@ -139,6 +139,12 @@ apply_patches() {
   return $failed
 }
 
+cleanup_patch_backups() {
+  local target="$1"
+
+  find "$target" \( -name '*.orig' -o -name '*.rej' \) -type f -delete
+}
+
 # --- コマンド ---
 
 cmd_apply() {
@@ -156,6 +162,7 @@ cmd_apply() {
 
   echo "==> パッチ適用"
   if apply_patches "$TARGET"; then
+    cleanup_patch_backups "$TARGET"
     mkdir -p "$REPO_ROOT/target"
     touch "$REPO_ROOT/target/.vendor-patched"
     echo "==> 完了"
@@ -223,6 +230,7 @@ cmd_update() {
 
   echo "==> パッチ適用を試行"
   if apply_patches "$TARGET"; then
+    cleanup_patch_backups "$TARGET"
     mkdir -p "$REPO_ROOT/target"
     touch "$REPO_ROOT/target/.vendor-patched"
     echo ""

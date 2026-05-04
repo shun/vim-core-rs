@@ -158,7 +158,81 @@ index ba18a41..b7c0602 100644
  
  #if defined(FEAT_EVAL)
  
-@@ -7969,32 +7970,68 @@ ex_execute(exarg_T *eap)
+@@ -7809,8 +7810,11 @@ ex_echo(exarg_T *eap)
+     int		did_emsg_before = did_emsg;
+     int		called_emsg_before = called_emsg;
+     evalarg_T	evalarg;
++    int		embedded_message = vim_core_bridge_embedded_mode_active();
++    garray_T	embedded_ga;
+ 
+     fill_evalarg_from_eap(&evalarg, eap, eap->skip);
++    ga_init2(&embedded_ga, 1, 80);
+ 
+     if (eap->skip)
+ 	++emsg_skip;
+@@ -7843,7 +7847,33 @@ ex_echo(exarg_T *eap)
+ 		semsg(_(e_expression_does_not_result_in_value_str), arg_start);
+ 		break;
+ 	    }
+-	    echo_one(&rettv, eap->cmdidx == CMD_echo, &atstart, &needclr);
++	    if (embedded_message)
++	    {
++		char_u	*tofree;
++		char_u	numbuf[NUMBUFLEN];
++		char_u	*p = echo_string(&rettv, &tofree, numbuf, get_copyID());
++
++		if (p != NULL)
++		{
++		    int len = (int)STRLEN(p);
++		    int needs_space = eap->cmdidx == CMD_echo && !atstart;
++
++		    if (ga_grow(&embedded_ga, len + needs_space + 1) == FAIL)
++		    {
++			vim_free(tofree);
++			clear_tv(&rettv);
++			break;
++		    }
++		    if (needs_space)
++			((char_u *)(embedded_ga.ga_data))[embedded_ga.ga_len++] = ' ';
++		    STRCPY((char_u *)(embedded_ga.ga_data) + embedded_ga.ga_len, p);
++		    embedded_ga.ga_len += len;
++		}
++		atstart = FALSE;
++		vim_free(tofree);
++	    }
++	    else
++		echo_one(&rettv, eap->cmdidx == CMD_echo, &atstart, &needclr);
+ 	}
+ 
+ 	clear_tv(&rettv);
+@@ -7854,6 +7884,18 @@ ex_echo(exarg_T *eap)
+ 
+     if (eap->skip)
+ 	--emsg_skip;
++    else if (embedded_message)
++    {
++	if (embedded_ga.ga_data != NULL && embedded_ga.ga_len > 0)
++	{
++	    ((char_u *)(embedded_ga.ga_data))[embedded_ga.ga_len] = NUL;
++	    vim_core_bridge_enqueue_message_event(
++		    (char *)embedded_ga.ga_data,
++		    (uintptr_t)embedded_ga.ga_len,
++		    VIM_CORE_MESSAGE_SEVERITY_INFO,
++		    VIM_CORE_MESSAGE_CATEGORY_USER_VISIBLE);
++	}
++    }
+     else
+     {
+ 	// remove text that may still be there from the command
+@@ -7862,6 +7904,7 @@ ex_echo(exarg_T *eap)
+ 	if (eap->cmdidx == CMD_echo)
+ 	    msg_end();
+     }
++    ga_clear(&embedded_ga);
+ }
+ 
+ /*
+@@ -7969,32 +8012,68 @@ ex_execute(exarg_T *eap)
  
  	if (eap->cmdidx == CMD_echomsg)
  	{

@@ -9,10 +9,10 @@
     "note": "This manifest records the intended and enforced test-scope classification for vendored upstream Vim src/testdir cases. build_test_runner.rs consumes this manifest to decide which cases stay in the generated runner and which are covered by repository contract tests or excluded by policy."
   },
   "counts": {
-    "total_cases": 311,
+    "total_cases": 313,
     "preserve_directly": 231,
-    "preserve_through_adaptation": 42,
-    "out_of_scope": 38,
+    "preserve_through_adaptation": 43,
+    "out_of_scope": 39,
     "temporarily_excluded": 0
   },
   "cases": [
@@ -2355,6 +2355,16 @@
       "related_contract_suites": []
     },
     {
+      "name": "test_plugin_vimball.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_plugin_vimball.vim",
+      "classification": "out_of_scope",
+      "rationale": "Runtime plugin behavior is out of scope for the embedded core.",
+      "intended_harness": "excluded",
+      "currently_collected_by_generated_runner": false,
+      "current_generated_runner_status": "excluded",
+      "related_contract_suites": []
+    },
+    {
       "name": "test_plugin_termdebug.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_plugin_termdebug.vim",
       "classification": "out_of_scope",
@@ -3405,6 +3415,20 @@
     {
       "name": "test_textprop.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_textprop.vim",
+      "classification": "preserve_through_adaptation",
+      "rationale": "Text property and popup extraction are preserved through repository extraction contracts.",
+      "intended_harness": "contract_tests",
+      "currently_collected_by_generated_runner": false,
+      "current_generated_runner_status": "excluded",
+      "related_contract_suites": [
+        "pum_contract.rs",
+        "syntax_contract.rs",
+        "integration_contract.rs"
+      ]
+    },
+    {
+      "name": "test_textprop2.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_textprop2.vim",
       "classification": "preserve_through_adaptation",
       "rationale": "Text property and popup extraction are preserved through repository extraction contracts.",
       "intended_harness": "contract_tests",
@@ -4727,6 +4751,18 @@
       "upstream_case_name": "test_textprop.vim",
       "relative_path": "vendor/vim_src/src/testdir/test_textprop.vim",
       "rationale": "Text property behavior remains deferred annotation-state extraction today: the deferred placeholder has no public textprop extraction API, so the case cannot be promoted to an extraction contract without a new surface, and any later promotion must define narrow contract-test coverage first.",
+      "related_contract_suites": [
+        "pum_contract.rs",
+        "syntax_contract.rs",
+        "integration_contract.rs"
+      ],
+      "coverage_status": "uncovered"
+    },
+    {
+      "id": "test_textprop2",
+      "upstream_case_name": "test_textprop2.vim",
+      "relative_path": "vendor/vim_src/src/testdir/test_textprop2.vim",
+      "rationale": "Additional text property behavior remains deferred annotation-state extraction today: the deferred placeholder has no public textprop extraction API, so the case cannot be promoted to an extraction contract without a new surface, and any later promotion must define narrow contract-test coverage first.",
       "related_contract_suites": [
         "pum_contract.rs",
         "syntax_contract.rs",

@@ -547,8 +547,8 @@ mod tests {
             target_triple: target.to_string(),
             artifact_profile: "release".to_string(),
             abi_version: PREBUILT_ABI_VERSION,
-            upstream_vim_tag: "v9.2.0131".to_string(),
-            upstream_vim_commit: "9360647715c2d7e4ed484ef0188f7fcbb5c414a7".to_string(),
+            upstream_vim_tag: "v9.2.0437".to_string(),
+            upstream_vim_commit: "9d3019104c37bad56ff5bdc7614b26cb3fea7ce4".to_string(),
             generated_at_utc: "2026-03-24T00:00:00Z".to_string(),
             files,
         }
@@ -586,7 +586,7 @@ mod tests {
         write_file(
             &artifact_root,
             "upstream_build_fingerprint.json",
-            br#"{"tag":"v9.2.0131","commit":"9360647715c2d7e4ed484ef0188f7fcbb5c414a7","native_sources":[],"vendor_sources":[]}"#,
+            br#"{"tag":"v9.2.0437","commit":"9d3019104c37bad56ff5bdc7614b26cb3fea7ce4","native_sources":[],"vendor_sources":[]}"#,
         );
         write_file(&artifact_root, "upstream_vim_tests.rs", b"");
         write_file(

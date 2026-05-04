@@ -3,7 +3,7 @@
 `vim-core-rs` vendors and modifies portions of Vim. `vim-core-rs` vendors and
 modifies portions of Vim as part of a modified Vim distribution. The embedded
 upstream baseline is recorded in `upstream-metadata.json`, and the current
-repository tracks Vim `v9.2.0131`.
+repository tracks Vim `v9.2.0437`.
 
 The repository's original code is licensed under Apache License 2.0. This file
 only describes the third-party material that remains under other license

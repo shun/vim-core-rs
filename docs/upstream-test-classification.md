@@ -8,19 +8,19 @@ machine-readable manifest in `upstream-test-classification.json`.
 
 ## Summary
 
-- Vendored upstream files: `311`
-- In-scope compatibility denominator: `273`
+- Vendored upstream files: `313`
+- In-scope compatibility denominator: `274`
 - Preserve directly files: `231`
-- Preserve through adaptation files: `42`
-- Out of scope files: `38`
+- Preserve through adaptation files: `43`
+- Out of scope files: `39`
 - Temporarily excluded files: `0`
-- Adapted behaviors: `50`
-- Covered adapted behaviors: `14`
-- Uncovered adapted behaviors: `36`
+- Adapted behaviors: `51`
+- Covered adapted behaviors: `27`
+- Uncovered adapted behaviors: `24`
 
 The in-scope denominator is the upstream-derived embedded Vim core
-baseline. It is computed as `231 preserve_directly + 42
-preserve_through_adaptation = 273`, and it excludes the `38
+baseline. It is computed as `231 preserve_directly + 43
+preserve_through_adaptation = 274`, and it excludes the `39
 out_of_scope` files.
 
 ## Manifest model

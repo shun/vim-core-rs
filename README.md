@@ -309,7 +309,7 @@ published release.
    you need an immediate packaging sanity check.
 5. When you are ready to cut a release, start `Release Crate` manually and set
    these inputs:
-   - `vim_version`: the upstream Vim tag to vendor, such as `v9.2.0131`
+   - `vim_version`: the upstream Vim tag to vendor, such as `v9.2.0437`
    - `crate_version`: the crate version to publish, such as `0.2.0`
    - `publish`: `false` for a full dry run without publishing, or `true` to
      continue through the approval and publish stages

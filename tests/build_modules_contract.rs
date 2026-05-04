@@ -823,11 +823,11 @@ mod build_test_runner_contract_tests {
             .expect("manifest should expose a compatibility baseline summary");
         assert_eq!(
             baseline.get("total").and_then(|value| value.as_u64()),
-            Some(311)
+            Some(313)
         );
         assert_eq!(
             baseline.get("in_scope").and_then(|value| value.as_u64()),
-            Some(273)
+            Some(274)
         );
         assert_eq!(
             baseline.get("direct").and_then(|value| value.as_u64()),
@@ -835,13 +835,13 @@ mod build_test_runner_contract_tests {
         );
         assert_eq!(
             baseline.get("adapted").and_then(|value| value.as_u64()),
-            Some(42)
+            Some(43)
         );
         assert_eq!(
             baseline
                 .get("out_of_scope")
                 .and_then(|value| value.as_u64()),
-            Some(38)
+            Some(39)
         );
         let adaptation = manifest
             .get("adaptation_coverage")
@@ -862,7 +862,7 @@ mod build_test_runner_contract_tests {
             adaptation
                 .get("uncovered_units")
                 .and_then(|value| value.as_u64()),
-            Some(23)
+            Some(24)
         );
         assert_eq!(
             adaptation
@@ -2142,7 +2142,7 @@ fn generated_pathdef_c_vimruntime_dir_contains_version() {
 
     // upstream-metadata.json の tag から major.minor を取得して、
     // vim{major}{minor} が pathdef.c に含まれることを確認する。
-    // tag は v9.2.0131 なので vim92 が含まれるべき。
+    // tag は v9.2.0437 なので vim92 が含まれるべき。
     assert!(
         content.contains("vim9"),
         "default_vimruntime_dir should contain Vim version identifier (vim9x)"

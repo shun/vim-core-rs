@@ -746,7 +746,7 @@ upstream_runtime_session_t* upstream_runtime_session_new(const char* initial_tex
 
     while (firstbuf != lastbuf) {
         buf_T* target = (lastbuf == curbuf) ? firstbuf : lastbuf;
-        close_buffer(NULL, target, DOBUF_WIPE, FALSE, FALSE);
+        close_buffer(NULL, target, DOBUF_WIPE, FALSE, FALSE, FALSE);
     }
 
     /* Re-allocate screen after closing windows to keep Vim's internal state consistent */

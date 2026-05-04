@@ -3829,11 +3829,13 @@ impl VimCoreSession {
         mut snapshot: CoreSnapshot,
     ) -> CoreCommandTransaction {
         self.drain_native_host_actions();
-        self.drain_native_events();
+        let events = self.drain_native_events_to_vec();
 
         let drained_host_actions: Vec<CoreHostAction> =
             self.pending_host_actions.borrow_mut().drain(..).collect();
-        let events: Vec<CoreEvent> = self.pending_events.borrow_mut().drain(..).collect();
+        self.pending_events
+            .borrow_mut()
+            .extend(events.iter().cloned());
         let host_actions = drained_host_actions;
         self.record_active_input_request_from_host_actions(&host_actions, None);
         let outcome = normalize_transaction_outcome(outcome, &host_actions);
@@ -4022,13 +4024,20 @@ impl VimCoreSession {
     }
 
     fn drain_native_events(&mut self) {
+        let events = self.drain_native_events_to_vec();
+        self.pending_events.borrow_mut().extend(events);
+    }
+
+    fn drain_native_events_to_vec(&mut self) -> Vec<CoreEvent> {
+        let mut events = Vec::new();
         loop {
             let event = unsafe { bindings::vim_bridge_take_pending_event(self.state.as_ptr()) };
             let Some(event) = convert_event(event) else {
                 break;
             };
-            self.pending_events.borrow_mut().push_back(event);
+            events.push(event);
         }
+        events
     }
 
     pub fn set_register(&mut self, regname: char, text: &str) {
