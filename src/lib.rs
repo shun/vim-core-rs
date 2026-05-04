@@ -3605,12 +3605,11 @@ impl VimCoreSession {
                 let should_chain_trailing_quit =
                     should_chain_trailing_quit_for_local_write(self, &intent, &segments[idx + 1..]);
                 let outcome = self.apply_intent(intent)?;
-                if should_chain_trailing_quit {
-                    if let Some(trailing_quit) =
+                if should_chain_trailing_quit
+                    && let Some(trailing_quit) =
                         find_first_trailing_quit_intent(&segments[idx + 1..])
-                    {
-                        let _ = self.apply_intent(trailing_quit)?;
-                    }
+                {
+                    let _ = self.apply_intent(trailing_quit)?;
                 }
                 return Ok(self.collect_transaction(outcome, self.snapshot()));
             }
@@ -5428,10 +5427,7 @@ fn parse_ex_prefix(input: &str) -> ParsedExPrefix {
     }
 
     let mut modifier_spans = Vec::new();
-    loop {
-        let Some((modifier_start, modifier_end)) = parse_command_modifier(input, i) else {
-            break;
-        };
+    while let Some((modifier_start, modifier_end)) = parse_command_modifier(input, i) {
         modifier_spans.push(modifier_start..modifier_end);
         i = modifier_end;
         while i < len && bytes[i].is_ascii_whitespace() {
@@ -5447,10 +5443,7 @@ fn parse_ex_prefix(input: &str) -> ParsedExPrefix {
         }
     }
 
-    loop {
-        let Some((modifier_start, modifier_end)) = parse_command_modifier(input, i) else {
-            break;
-        };
+    while let Some((modifier_start, modifier_end)) = parse_command_modifier(input, i) {
         modifier_spans.push(modifier_start..modifier_end);
         i = modifier_end;
         while i < len && bytes[i].is_ascii_whitespace() {

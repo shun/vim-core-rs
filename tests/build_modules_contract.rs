@@ -570,7 +570,7 @@ mod build_test_runner_contract_tests {
         fs::write(path, content).expect("should write file");
     }
 
-    fn adapted_behaviors<'a>(manifest: &'a serde_json::Value) -> &'a [serde_json::Value] {
+    fn adapted_behaviors(manifest: &serde_json::Value) -> &[serde_json::Value] {
         manifest
             .get("adapted_behaviors")
             .and_then(|value| value.as_array())
