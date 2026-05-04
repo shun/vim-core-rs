@@ -244,6 +244,7 @@ pub enum CoreHostAction {
         force: bool,
         issued_after_revision: u64,
     },
+    Suspend,
     Redraw {
         full: bool,
         clear_before_draw: bool,
@@ -2408,6 +2409,7 @@ enum ParsedExIntent {
     SaveAndClose { force: bool, path: String },
     SaveIfDirtyAndClose { path: String },
     Quit { force: bool },
+    Suspend,
 }
 
 impl VimCoreSession {
@@ -3337,6 +3339,13 @@ impl VimCoreSession {
                     });
                 Ok(CoreCommandOutcome::HostActionQueued)
             }
+            ParsedExIntent::Suspend => {
+                debug_log!("[DEBUG] apply_intent: suspend requested through host action");
+                self.pending_host_actions
+                    .borrow_mut()
+                    .push_back(CoreHostAction::Suspend);
+                Ok(CoreCommandOutcome::HostActionQueued)
+            }
         }
     }
 
@@ -3473,6 +3482,19 @@ impl VimCoreSession {
 
         let mode_at_dispatch = self.mode();
         let previous_pending = self.pending_input();
+        if key == "\x1a" && !previous_pending.is_pending() {
+            debug_log!(
+                "[DEBUG] dispatch_key: Ctrl-Z suspend requested in mode={:?}",
+                mode_at_dispatch
+            );
+            self.pending_host_actions
+                .borrow_mut()
+                .push_back(CoreHostAction::Suspend);
+            self.store_pending_input(CorePendingInput::none());
+            return Ok(
+                self.collect_transaction(CoreCommandOutcome::HostActionQueued, self.snapshot())
+            );
+        }
         let interprets_sequential_input =
             previous_pending.is_pending() || mode_uses_normal_sequence_grammar(mode_at_dispatch);
         if key == "\x02" && !previous_pending.is_pending() {
@@ -5312,6 +5334,7 @@ fn parse_single_ex_intent(trimmed: &str) -> Option<ParsedExIntent> {
             path: String::new(),
         }),
         "quit" | "q" | "quitall" | "qall" | "qa" => Some(ParsedExIntent::Quit { force: bang }),
+        "suspend" | "stop" => Some(ParsedExIntent::Suspend),
         _ => None,
     }
 }

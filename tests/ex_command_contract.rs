@@ -162,6 +162,38 @@ fn ex_quit_bang_queues_force_quit_action() {
 }
 
 #[test]
+fn ex_suspend_queues_suspend_action() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("some content").expect("session should initialize");
+
+    let outcome = session
+        .execute_ex_command(":suspend")
+        .expect("suspend command should be host-mediated");
+
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::HostActionQueued
+    ));
+    assert_eq!(outcome.host_actions, vec![CoreHostAction::Suspend]);
+}
+
+#[test]
+fn ex_stop_queues_suspend_action() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("some content").expect("session should initialize");
+
+    let outcome = session
+        .execute_ex_command(":stop")
+        .expect("stop command should be host-mediated");
+
+    assert!(matches!(
+        outcome.outcome,
+        CoreCommandOutcome::HostActionQueued
+    ));
+    assert_eq!(outcome.host_actions, vec![CoreHostAction::Suspend]);
+}
+
+#[test]
 fn ex_wq_is_intercepted_as_write_then_quit_action() {
     let _guard = acquire_session_test_lock();
     let mut session = VimCoreSession::new("some content").expect("session should initialize");

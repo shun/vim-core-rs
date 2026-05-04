@@ -1,7 +1,7 @@
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use vim_core_rs::{
-    CoreEvent, CoreMode, CoreOptionScope, CorePendingArgumentKind, CorePendingInput, CoreSnapshot,
-    VimCoreSession,
+    CoreCommandOutcome, CoreEvent, CoreHostAction, CoreMode, CoreOptionScope,
+    CorePendingArgumentKind, CorePendingInput, CoreSnapshot, VimCoreSession,
 };
 
 fn session_test_lock() -> &'static Mutex<()> {
@@ -905,5 +905,19 @@ fn sequential_dispatch_keeps_normal_prefix_keys_literal_in_insert_mode() {
 
     assert_eq!(session.snapshot().mode, CoreMode::Insert);
     assert_eq!(session.snapshot().text, "g2\n");
+    assert_eq!(session.pending_input(), CorePendingInput::none());
+}
+
+#[test]
+fn ctrl_z_queues_suspend_host_action_without_native_terminal_ownership() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("alpha\n").expect("session should initialize");
+
+    let outcome = session
+        .dispatch_key("\u{1a}")
+        .expect("Ctrl-Z should be host-mediated");
+
+    assert_eq!(outcome.outcome, CoreCommandOutcome::HostActionQueued);
+    assert_eq!(outcome.host_actions, vec![CoreHostAction::Suspend]);
     assert_eq!(session.pending_input(), CorePendingInput::none());
 }
