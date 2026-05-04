@@ -313,7 +313,10 @@ fn compile_archive(
         build.define(key, Some(*value));
     }
 
-    if library_name == "vimcore_vendor" {
+    // Vendor Vim is split into multiple archives (for example os_unix/main).
+    // Keep all of them behind the VFD hooks so embedded mode never bypasses
+    // host-owned stdio/job fd handling through a split archive.
+    if library_name.starts_with("vimcore_vendor") {
         build.define("read", "vim_bridge_vfd_read");
         build.define("write", "vim_bridge_vfd_write");
         build.define("close", "vim_bridge_vfd_close");

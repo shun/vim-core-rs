@@ -21,6 +21,12 @@ ssize_t vim_bridge_vfd_write(int fd, const void *buf, size_t count) {
     if (fd >= VFD_MIN_FD) {
         return vim_core_vfd_write(fd, buf, count);
     }
+    /* Embedded core must not write terminal streams directly. Host UI updates
+     * are delivered through structured events/actions instead. */
+    if (fd == STDOUT_FILENO || fd == STDERR_FILENO) {
+        (void)buf;
+        return (ssize_t)count;
+    }
     return write(fd, buf, count);
 }
 

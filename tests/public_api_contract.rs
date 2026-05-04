@@ -1178,6 +1178,86 @@ fn normal_insert_command_switches_mode() {
     assert_eq!(session.mode(), CoreMode::Insert);
 }
 
+#[cfg(unix)]
+#[test]
+fn embedded_dispatch_insert_does_not_write_terminal_streams() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    let (tx, stdout, stderr) = capture_standard_streams(|| {
+        session
+            .dispatch_key("i")
+            .expect("i should enter insert mode")
+    });
+
+    assert_eq!(tx.snapshot.mode, CoreMode::Insert);
+    assert_eq!(session.mode(), CoreMode::Insert);
+    assert!(
+        sanitize_harness_output(&stdout).is_empty(),
+        "embedded dispatch_key(\"i\") must not write to stdout: {stdout:?}"
+    );
+    assert!(
+        sanitize_harness_output(&stderr).is_empty(),
+        "embedded dispatch_key(\"i\") must not write to stderr: {stderr:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn embedded_dispatch_insert_text_does_not_write_terminal_streams() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    session
+        .dispatch_key("i")
+        .expect("i should enter insert mode");
+
+    let (tx, stdout, stderr) = capture_standard_streams(|| {
+        session
+            .dispatch_key("X")
+            .expect("insert text should succeed")
+    });
+
+    assert_eq!(tx.snapshot.mode, CoreMode::Insert);
+    assert_eq!(tx.snapshot.text, "Xbuffer\n");
+    assert!(matches!(
+        tx.outcome,
+        CoreCommandOutcome::BufferChanged { .. }
+    ));
+    assert!(
+        sanitize_harness_output(&stdout).is_empty(),
+        "embedded insert text must not write to stdout: {stdout:?}"
+    );
+    assert!(
+        sanitize_harness_output(&stderr).is_empty(),
+        "embedded insert text must not write to stderr: {stderr:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn embedded_execute_insert_does_not_write_terminal_streams() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("buffer").expect("session should initialize");
+
+    let (tx, stdout, stderr) = capture_standard_streams(|| {
+        session
+            .execute_normal_command("i")
+            .expect("i should enter insert mode")
+    });
+
+    assert_eq!(tx.snapshot.mode, CoreMode::Insert);
+    assert_eq!(session.mode(), CoreMode::Insert);
+    assert!(
+        sanitize_harness_output(&stdout).is_empty(),
+        "embedded execute_normal_command(\"i\") must not write to stdout: {stdout:?}"
+    );
+    assert!(
+        sanitize_harness_output(&stderr).is_empty(),
+        "embedded execute_normal_command(\"i\") must not write to stderr: {stderr:?}"
+    );
+}
+
 #[test]
 fn normal_other_insert_commands_switch_mode() {
     let _guard = acquire_session_test_lock();
