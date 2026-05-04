@@ -295,8 +295,12 @@ ownership stays host-owned presentation.
   resolved highlight attribute tables yet.
 - Tree-sitter extraction, when enabled, must use a separate public surface and
   must not route output through `CoreSyntaxChunk`.
-- The experimental Tree-sitter package registry registers only packages
-  enabled by Cargo features. Root language resolution uses Vim `filetype`,
+- The stable opt-in Tree-sitter package registry is enabled with
+  `tree-sitter-syntax`. The older `experimental-tree-sitter` feature remains
+  as a compatibility alias. Hosts must prefer `tree-sitter-syntax` for new
+  integrations and migrate preview integrations to that feature name. No alias
+  removal release is scheduled. The registry registers only packages enabled
+  by per-language Cargo features. Root language resolution uses Vim `filetype`,
   buffer name, and an optional host hint as inputs. Embedded language
   resolution uses Markdown info strings as inputs. Missing enabled-package
   support is reported as `Unavailable`, and unknown language or non-syntax
@@ -304,6 +308,16 @@ ownership stays host-owned presentation.
 - Tree-sitter preparation uses a request, poll, and query model. Request
   methods may prepare synchronously in the current implementation, poll methods
   drain completed results, and range queries read committed cache state only.
+  Hosts must render only `Prepared` results whose `source_revision` matches
+  the current buffer revision. `Stale`, `Unavailable`, `Unsupported`,
+  `TooLarge`, `BudgetExceeded`, `TimedOut`, and `Partial` are explicit
+  diagnostic states rather than fresh highlight.
+- Conservative hosts render only `Prepared` results. Hosts that support
+  degraded rendering may render `Partial` chunks clipped to `covered_ranges`
+  when `budget_status == MatchLimitExceeded`. For parser errors, conservative
+  hosts may skip rendering when `has_error` is true or `error_ranges` is
+  non-empty, while richer hosts may render valid chunks outside
+  `error_ranges`.
 - Markdown fenced blocks are detected as data-only embedded regions. The
   returned region records preserve raw and normalized info strings, and they
   are classified through the registry-backed embedded-region resolver rather
@@ -319,12 +333,23 @@ ownership stays host-owned presentation.
   priorities, and overlap normalization. The standard public chunks are
   non-overlapping, and visible range queries clip committed cache results
   without parsing.
+- Host styling must treat `CoreTreeSitterChunk.category` and `modifiers` as
+  the primary public styling contract. `capture_name` remains provenance,
+  debugging, and advanced-styling metadata.
 - Tree-sitter preparation snapshots are immutable and keyed by
   `(buffer_id, source_revision)`. Queued or running requests pin snapshots.
   Completed snapshots are retained with latest-N-per-buffer and global
   byte-budget eviction for unpinned snapshots only. Oversized snapshots return
   `TooLarge`, and requests that can't fit within the configured budget return
   `BudgetExceeded`.
+- Host render caches must use buffer-local syntax freshness keys such as
+  `(buffer_id, source_revision, visible_range)`. Hosts must not substitute the
+  session-wide `CoreSnapshot.revision` for `CoreBufferInfo.source_revision`.
+- Hosts such as `saya` must route editor integration through
+  `saya/editor_core -> vim-core-rs -> Vim native/FFI`, not through a parallel
+  direct `saya/editor_core -> vim_ffi` dependency. During migration, avoid
+  linking both direct `vim_ffi` and `vim-core-rs` into the same `sy` process
+  because the embedded Vim native runtime has process-global state.
 - `textprop` is deferred as future annotation-state extraction. The crate does
   not expose it as a public contract yet.
 - popup placement, popup composition, popup borders, and overlay layout stay

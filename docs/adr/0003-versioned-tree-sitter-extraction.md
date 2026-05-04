@@ -47,12 +47,12 @@ The Tree-sitter MVP will start with Markdown and Rust. TypeScript and TSX are
 the next target languages, and the MVP API must not block that extension.
 
 Tree-sitter dependencies are opt-in. The default build must not include the
-Tree-sitter runtime or grammar crates. The experimental surface is enabled by
-a root `experimental-tree-sitter` Cargo feature, and built-in language
-packages are enabled by per-language package features such as
-`tree-sitter-markdown`, `tree-sitter-rust`, and `tree-sitter-typescript`.
-Tree-sitter public APIs and types remain feature-gated while the surface is
-experimental.
+Tree-sitter runtime or grammar crates. The stable opt-in surface is enabled by
+a root `tree-sitter-syntax` Cargo feature, and built-in language packages are
+enabled by per-language package features such as `tree-sitter-markdown`,
+`tree-sitter-rust`, and `tree-sitter-typescript`. The older
+`experimental-tree-sitter` feature remains as a compatibility alias for hosts
+that adopted the preview feature name.
 
 `vim-core-rs` will own a versioned language package registry. The MVP may only
 ship built-in Markdown and Rust packages, but the architecture must support
@@ -110,10 +110,8 @@ MVP must include:
 - data-only byte-range chunks
 
 The default public API remains the existing Vim-derived surface. When
-`experimental-tree-sitter` is disabled, Tree-sitter APIs and types are not
-compiled into the public surface. Stabilizing the feature may revisit whether
-the data types should become always visible while implementation remains
-feature-gated.
+`tree-sitter-syntax` is disabled, Tree-sitter APIs and types are not compiled
+into the public surface.
 
 For Markdown fenced blocks, the MVP may also expose embedded block records:
 
@@ -516,7 +514,7 @@ The repository rejects the following alternatives:
 Implementation is expected to proceed in phases:
 
 1. Add the source revision model and documentation contracts.
-2. Add the `experimental-tree-sitter` root Cargo feature.
+2. Add the `tree-sitter-syntax` root Cargo feature.
 3. Add per-language package features for Markdown and Rust.
 4. Add feature-gated Tree-sitter public types with provenance and parse
    status.

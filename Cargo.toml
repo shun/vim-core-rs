@@ -37,10 +37,11 @@ path = "src/lib.rs"
 
 [features]
 default = []
-experimental-tree-sitter = ["dep:tree-sitter"]
-tree-sitter-markdown = ["experimental-tree-sitter", "dep:tree-sitter-md", "tree-sitter-md/parser"]
-tree-sitter-rust = ["experimental-tree-sitter", "dep:tree-sitter-rust"]
-tree-sitter-typescript = ["experimental-tree-sitter", "dep:tree-sitter-typescript"]
+tree-sitter-syntax = ["dep:tree-sitter"]
+experimental-tree-sitter = ["tree-sitter-syntax"]
+tree-sitter-markdown = ["tree-sitter-syntax", "dep:tree-sitter-md", "tree-sitter-md/parser"]
+tree-sitter-rust = ["tree-sitter-syntax", "dep:tree-sitter-rust"]
+tree-sitter-typescript = ["tree-sitter-syntax", "dep:tree-sitter-typescript"]
 
 [dependencies]
 log = "0.4"

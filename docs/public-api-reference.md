@@ -458,16 +458,20 @@ These structs feed editor UI and history views.
 - `CorePumItem { word, abbr, menu, kind, info }`
 - `CorePumInfo { row, col, width, height, selected_index, items }`
 
-### Experimental Tree-sitter structs
+### Tree-sitter syntax structs
 
-The `experimental-tree-sitter` Cargo feature exposes a preview Tree-sitter
-extraction surface. The feature is default-off, and the
+The `tree-sitter-syntax` Cargo feature exposes the stable opt-in
+Tree-sitter extraction surface. The feature is default-off, and the
 `tree-sitter-markdown`, `tree-sitter-rust`, and `tree-sitter-typescript`
 package features enable parser and query packages for those languages.
-Enabled package features are the only packages registered by the built-in
-registry.
-
-> **Note:** This is a preview feature currently under active development.
+`tree-sitter-typescript` registers both TypeScript and TSX packages. Enabled
+package features are the only packages registered by the built-in registry.
+The older `experimental-tree-sitter` feature remains as a compatibility alias
+for `tree-sitter-syntax`. Host applications must prefer
+`tree-sitter-syntax` for new integrations and migrate existing preview
+integrations to that feature name. No alias removal release is scheduled; if
+the alias is removed in a later release, that removal must be documented as a
+breaking change.
 
 These types are feature-gated and separate from `CoreSyntaxChunk`. They model
 Tree-sitter provenance, explicit preparation status, byte ranges, capture
@@ -543,6 +547,93 @@ Vim `filetype`, buffer name, and an optional host hint.
 `resolve_tree_sitter_embedded_language()` resolves Markdown info strings for
 embedded regions. Known languages without an enabled package return
 `Unavailable`; unknown or non-syntax embedded kinds return `Unsupported`.
+Use this flow from host renderers:
+
+1. Read the active `CoreBufferInfo` and visible range from `snapshot()`.
+2. Call `request_tree_sitter_syntax_preparation()` with the buffer ID,
+   `source_revision`, visible range, Vim `filetype`, buffer name, optional
+   host language hint, and snapshot policy.
+3. Drain `poll_tree_sitter_preparation()` until the matching request result is
+   returned.
+4. Render only results whose `status` is `Prepared` and whose
+   `syntax.source_revision` equals the current `buffer.source_revision`.
+5. Use `query_tree_sitter_syntax_range()` on later draw passes to read and clip
+   committed cache entries for the visible range.
+
+A minimal host integration looks like this:
+
+```rust
+let snapshot = session.snapshot();
+let buffer = snapshot
+    .buffers
+    .iter()
+    .find(|buffer| buffer.is_active)
+    .expect("active buffer");
+let window = snapshot
+    .windows
+    .iter()
+    .find(|window| window.is_active)
+    .expect("active window");
+
+let visible_range = CoreTextRange {
+    start: CoreTextPosition {
+        row: window.topline.saturating_sub(1) as usize,
+        col: 0,
+    },
+    end: CoreTextPosition {
+        row: window.botline as usize,
+        col: 0,
+    },
+};
+let vim_filetype = session.get_option_string("filetype", CoreOptionScope::Local).ok();
+
+let preparation = session.request_tree_sitter_syntax_preparation(
+    CoreTreeSitterPreparationRequest {
+        buffer_id: buffer.id,
+        source_revision: Some(buffer.source_revision),
+        range: visible_range,
+        vim_filetype,
+        buffer_name: (!buffer.name.is_empty()).then(|| buffer.name.clone()),
+        host_language_hint: None,
+        snapshot_policy: CoreTreeSitterSnapshotPolicy::default(),
+    },
+)?;
+
+while let Some(completed) = session.poll_tree_sitter_preparation() {
+    if completed.request_id == preparation.request_id {
+        let syntax = completed.syntax;
+        if syntax.status == CoreTreeSitterStatus::Prepared
+            && syntax.source_revision == buffer.source_revision
+        {
+            for chunk in &syntax.chunks {
+                render_highlight(chunk.range, chunk.category, &chunk.modifiers);
+            }
+        }
+        break;
+    }
+}
+
+if let Some(syntax) = session.query_tree_sitter_syntax_range(
+    buffer.id,
+    buffer.source_revision,
+    visible_range,
+) {
+    if syntax.status == CoreTreeSitterStatus::Prepared
+        && syntax.source_revision == buffer.source_revision
+    {
+        for chunk in &syntax.chunks {
+            render_highlight(chunk.range, chunk.category, &chunk.modifiers);
+        }
+    }
+}
+```
+
+The host render cache key must include the buffer-local source revision. Use a
+shape such as `(buffer_id, source_revision, visible_range)`. Do not use
+`CoreSnapshot.revision` as a substitute for `CoreBufferInfo.source_revision`;
+the snapshot revision is session-wide, while Tree-sitter freshness is
+buffer-local.
+
 `request_tree_sitter_syntax_preparation()` creates or reuses an immutable text
 snapshot keyed by `(buffer_id, source_revision)`, pins it for the synchronous
 preparation, parses enabled Markdown, Rust, TypeScript, or TSX packages when
@@ -551,6 +642,40 @@ and queues a pollable completion. `poll_tree_sitter_preparation()` drains
 completed results. `query_tree_sitter_syntax_range()` reads the committed
 cache only, clips cached results to the requested visible range, and doesn't
 parse in the draw path.
+
+Hosts must interpret non-`Prepared` statuses as diagnostic states rather than
+fresh highlight:
+
+- `Unavailable` means the language is known but its package feature isn't
+  enabled in this build.
+- `Unsupported` means `vim-core-rs` doesn't support the requested language or
+  embedded block kind as Tree-sitter syntax.
+- `Stale` means the requested source revision is no longer current and no
+  matching prepared snapshot can be reused.
+- `TooLarge` means the snapshot exceeds `max_snapshot_bytes`.
+- `BudgetExceeded` means the snapshot can't fit within `global_byte_budget`.
+- `TimedOut` is reserved for preparation implementations that can time out.
+- `Partial` means parsing completed with partial coverage, such as
+  `budget_status == MatchLimitExceeded`. Conservative host MVPs can render
+  only `Prepared` results. Hosts that support degraded rendering may render
+  `Partial` chunks clipped to `covered_ranges` and surface the budget status
+  as a diagnostic.
+- Parser errors keep `status` as `Prepared`, set `has_error`, and populate
+  `error_ranges`. A conservative host MVP may skip rendering when `has_error`
+  is true or `error_ranges` is non-empty. The recommended richer behavior is
+  to render valid chunks outside `error_ranges` and surface parser errors as a
+  diagnostic.
+
+For basic styling, hosts must use `CoreTreeSitterChunk.category` and
+`CoreTreeSitterChunk.modifiers`. `capture_name` remains provenance and
+advanced-styling metadata and isn't required for basic highlight rendering.
+
+Hosts such as `saya` must route editor integration through this crate:
+`saya/editor_core -> vim-core-rs -> Vim native/FFI`. They must not keep a
+parallel `saya/editor_core -> vim_ffi` path for Tree-sitter syntax migration.
+During migration, avoid linking both a direct `vim_ffi` dependency and
+`vim-core-rs` into the same `sy` process, because the embedded Vim native
+runtime has process-global state.
 
 Snapshot retention keeps only unpinned snapshots, preserves pinned in-flight
 snapshots, and applies both latest-N-per-buffer and global byte-budget

@@ -210,7 +210,8 @@ Dependency cost:
 
 Feature flag:
 
-- Required. Use an experimental feature such as `experimental-tree-sitter`.
+- Required. Use the stable opt-in `tree-sitter-syntax` feature. The
+  `experimental-tree-sitter` feature remains as a compatibility alias.
 
 TypeScript extension surface:
 

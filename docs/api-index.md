@@ -61,8 +61,9 @@ The crate root exports these user-facing symbols.
   `CoreMessageEvent`,
   `CoreCommandTransaction`, `CoreSessionOptions`, `CorePumItem`, `CorePumInfo`,
   `CoreMatchRange`, `CoreCursorMatchInfo`, `CoreSnapshot`
-- Experimental Tree-sitter symbols, available only with
-  `experimental-tree-sitter`: `CoreTextPosition`, `CoreTextRange`,
+- Tree-sitter syntax symbols, available only with `tree-sitter-syntax`
+  or the compatibility alias `experimental-tree-sitter`: `CoreTextPosition`,
+  `CoreTextRange`,
   `CoreTreeSitterProvenance`, `CoreTreeSitterStatus`,
   `CoreTreeSitterRangeSyntax`, `CoreTreeSitterChunk`,
   `CoreTreeSitterRequestId`, `CoreTreeSitterPreparationRequest`,
@@ -117,13 +118,16 @@ The public session methods are grouped by role.
   `backend_identity`
 - Job and VFD bridge helpers: `inject_vfd_data`, `notify_job_status`
 
-### Experimental Tree-sitter surface
+### Tree-sitter syntax surface
 
-The `experimental-tree-sitter` feature adds type definitions for a separate
-Tree-sitter extraction surface. The feature is default-off, and the
+The `tree-sitter-syntax` feature adds type definitions for a separate stable
+opt-in Tree-sitter extraction surface. The feature is default-off, and the
 `tree-sitter-markdown`, `tree-sitter-rust`, and `tree-sitter-typescript`
 package features opt into that surface with optional parser and query
-packages.
+packages. The older `experimental-tree-sitter` feature remains as a
+compatibility alias for `tree-sitter-syntax`. Host applications must use
+`tree-sitter-syntax` for new integrations and migrate preview integrations to
+that feature name. No alias removal release is scheduled.
 
 The Tree-sitter surface is separate from `CoreSyntaxChunk` and
 `get_line_syntax()`. It carries crate-owned `source_revision` provenance,
@@ -157,6 +161,22 @@ completed results for `poll_tree_sitter_preparation()`.
 cached results to visible subranges.
 `tree_sitter_snapshot_store_stats()` exposes retention diagnostics for tests
 and host debugging, including pinned counts and unpinned byte usage.
+
+Host renderers request preparation, poll completion, render only `Prepared`
+results whose `source_revision` matches the current buffer, and use later
+queries as committed-cache reads. `Unavailable`, `Unsupported`, `Stale`,
+`TooLarge`, `BudgetExceeded`, `TimedOut`, and `Partial` are explicit
+diagnostic states, not fresh highlight. Normalized `category` and `modifiers`
+are the primary styling contract; `capture_name` is provenance and optional
+advanced styling metadata.
+
+Conservative hosts render only `Prepared` results with matching
+`CoreBufferInfo.source_revision`. Hosts that support degraded rendering may
+render `Partial` chunks clipped to `covered_ranges` when
+`budget_status == MatchLimitExceeded`, and may render valid parser output
+outside `error_ranges` when `has_error` is true. Host render caches must use a
+buffer-local key such as `(buffer_id, source_revision, visible_range)` and must
+not substitute the session-wide `CoreSnapshot.revision`.
 
 ### Internal-only symbols
 

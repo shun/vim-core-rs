@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::CString;
 use std::marker::PhantomData;
@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::slice;
 use std::str;
 use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIterator};
 
 macro_rules! debug_log {
@@ -332,21 +332,21 @@ pub struct CoreSyntaxChunk {
     pub name: Option<String>,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CoreTextPosition {
     pub row: usize,
     pub col: usize,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CoreTextRange {
     pub start: CoreTextPosition,
     pub end: CoreTextPosition,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreTreeSitterProvenance {
     pub language_id: String,
@@ -356,7 +356,7 @@ pub struct CoreTreeSitterProvenance {
     pub query_version: String,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreTreeSitterLanguagePackage {
     pub language_id: String,
@@ -366,7 +366,7 @@ pub struct CoreTreeSitterLanguagePackage {
     pub query_version: String,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreTreeSitterStatus {
     Prepared,
@@ -379,7 +379,7 @@ pub enum CoreTreeSitterStatus {
     TooLarge,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreTreeSitterBudgetStatus {
     WithinBudget,
@@ -388,7 +388,7 @@ pub enum CoreTreeSitterBudgetStatus {
     MatchLimitExceeded,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreSyntaxCategory {
     Attribute,
@@ -412,7 +412,7 @@ pub enum CoreSyntaxCategory {
     Unknown,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreSyntaxModifier {
     Async,
@@ -425,7 +425,7 @@ pub enum CoreSyntaxModifier {
     Static,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreTreeSitterChunk {
     pub range: CoreTextRange,
@@ -434,7 +434,7 @@ pub struct CoreTreeSitterChunk {
     pub modifiers: Vec<CoreSyntaxModifier>,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreTreeSitterRangeSyntax {
     pub buffer_id: i32,
@@ -449,13 +449,13 @@ pub struct CoreTreeSitterRangeSyntax {
     pub embedded_regions: Vec<CoreEmbeddedRegion>,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CoreTreeSitterRequestId {
     pub value: u64,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreTreeSitterSnapshotPolicy {
     pub retain_latest_per_buffer: usize,
@@ -463,7 +463,7 @@ pub struct CoreTreeSitterSnapshotPolicy {
     pub max_snapshot_bytes: Option<usize>,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 impl Default for CoreTreeSitterSnapshotPolicy {
     fn default() -> Self {
         Self {
@@ -474,7 +474,7 @@ impl Default for CoreTreeSitterSnapshotPolicy {
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreTreeSitterPreparationRequest {
     pub buffer_id: i32,
@@ -486,7 +486,7 @@ pub struct CoreTreeSitterPreparationRequest {
     pub snapshot_policy: CoreTreeSitterSnapshotPolicy,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreTreeSitterPreparation {
     pub request_id: CoreTreeSitterRequestId,
@@ -495,14 +495,14 @@ pub struct CoreTreeSitterPreparation {
     pub status: CoreTreeSitterStatus,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreTreeSitterPreparationResult {
     pub request_id: CoreTreeSitterRequestId,
     pub syntax: CoreTreeSitterRangeSyntax,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreTreeSitterSnapshotStoreEntry {
     pub buffer_id: i32,
@@ -511,7 +511,7 @@ pub struct CoreTreeSitterSnapshotStoreEntry {
     pub pin_count: usize,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreTreeSitterSnapshotStoreStats {
     pub snapshot_count: usize,
@@ -520,14 +520,14 @@ pub struct CoreTreeSitterSnapshotStoreStats {
     pub snapshots: Vec<CoreTreeSitterSnapshotStoreEntry>,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreLanguageRole {
     RootDocument,
     EmbeddedRegion,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreLanguageResolutionSource {
     Registry,
@@ -538,7 +538,7 @@ pub enum CoreLanguageResolutionSource {
     MarkdownLinkTarget,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreResolutionConfidence {
     Exact,
@@ -547,7 +547,7 @@ pub enum CoreResolutionConfidence {
     Unknown,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreLanguageResolutionStatus {
     Resolved,
@@ -555,7 +555,7 @@ pub enum CoreLanguageResolutionStatus {
     Unsupported,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreEmbeddedRegionSource {
     MarkdownFence,
@@ -563,7 +563,7 @@ pub enum CoreEmbeddedRegionSource {
     Unknown,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreDiagramKind {
     Mermaid,
@@ -571,7 +571,7 @@ pub enum CoreDiagramKind {
     Unknown,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreMediaKind {
     Svg,
@@ -579,13 +579,13 @@ pub enum CoreMediaKind {
     Unknown,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreMediaFlavor {
     DrawioSvg,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreEmbeddedBlockKind {
     Syntax,
@@ -599,7 +599,7 @@ pub enum CoreEmbeddedBlockKind {
     Unknown,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreResolvedLanguage {
     pub range: CoreTextRange,
@@ -613,7 +613,7 @@ pub struct CoreResolvedLanguage {
     pub source: CoreLanguageResolutionSource,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreRootLanguageResolutionRequest {
     pub range: CoreTextRange,
@@ -622,14 +622,14 @@ pub struct CoreRootLanguageResolutionRequest {
     pub host_language_hint: Option<String>,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreEmbeddedLanguageResolutionRequest {
     pub range: CoreTextRange,
     pub raw_info_string: Option<String>,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreEmbeddedRegion {
     pub range: CoreTextRange,
@@ -667,7 +667,7 @@ impl CoreMessageCategory {
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct BuiltInTreeSitterPackage {
     language_id: &'static str,
@@ -677,7 +677,7 @@ struct BuiltInTreeSitterPackage {
     query_version: &'static str,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CaptureMapping {
     category: CoreSyntaxCategory,
@@ -685,7 +685,7 @@ struct CaptureMapping {
     priority: u16,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RawTreeSitterCapture {
     start_byte: usize,
@@ -697,14 +697,14 @@ struct RawTreeSitterCapture {
     query_order: usize,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TextRangeBytes {
     start: usize,
     end: usize,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct KnownTreeSitterLanguage {
     language_id: &'static str,
@@ -712,7 +712,7 @@ struct KnownTreeSitterLanguage {
     kind: CoreEmbeddedBlockKind,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum BuiltInEmbeddedRegionKind {
     Syntax {
@@ -728,14 +728,14 @@ enum BuiltInEmbeddedRegionKind {
     },
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BuiltInEmbeddedRegionRule {
     aliases: &'static [&'static str],
     kind: BuiltInEmbeddedRegionKind,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Clone)]
 struct TreeSitterTextSnapshot {
     buffer_id: i32,
@@ -745,14 +745,14 @@ struct TreeSitterTextSnapshot {
     last_used_tick: u64,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[derive(Debug, Default)]
 struct TreeSitterSnapshotStore {
     snapshots: HashMap<(i32, CoreBufferRevision), TreeSitterTextSnapshot>,
     access_tick: u64,
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 impl TreeSitterSnapshotStore {
     fn pin_existing(&mut self, buffer_id: i32, source_revision: CoreBufferRevision) -> bool {
         self.access_tick = self.access_tick.saturating_add(1);
@@ -917,7 +917,7 @@ impl TreeSitterSnapshotStore {
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn tree_sitter_language_packages() -> &'static [BuiltInTreeSitterPackage] {
     &[
         #[cfg(feature = "tree-sitter-markdown")]
@@ -955,56 +955,47 @@ fn tree_sitter_language_packages() -> &'static [BuiltInTreeSitterPackage] {
     ]
 }
 
-#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-markdown"))]
 fn markdown_tree_sitter_language() -> Language {
     tree_sitter_md::LANGUAGE.into()
 }
 
-#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-markdown"))]
 fn markdown_inline_tree_sitter_language() -> Language {
     tree_sitter_md::INLINE_LANGUAGE.into()
 }
 
-#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-markdown"))]
 fn markdown_highlight_query() -> &'static str {
     tree_sitter_md::HIGHLIGHT_QUERY_BLOCK
 }
 
-#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-rust"))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-rust"))]
 fn rust_tree_sitter_language() -> Language {
     tree_sitter_rust::LANGUAGE.into()
 }
 
-#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-rust"))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-rust"))]
 fn rust_highlight_query() -> &'static str {
     tree_sitter_rust::HIGHLIGHTS_QUERY
 }
 
-#[cfg(all(
-    feature = "experimental-tree-sitter",
-    feature = "tree-sitter-typescript"
-))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-typescript"))]
 fn typescript_tree_sitter_language() -> Language {
     tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
 }
 
-#[cfg(all(
-    feature = "experimental-tree-sitter",
-    feature = "tree-sitter-typescript"
-))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-typescript"))]
 fn tsx_tree_sitter_language() -> Language {
     tree_sitter_typescript::LANGUAGE_TSX.into()
 }
 
-#[cfg(all(
-    feature = "experimental-tree-sitter",
-    feature = "tree-sitter-typescript"
-))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-typescript"))]
 fn typescript_highlight_query() -> &'static str {
     tree_sitter_typescript::HIGHLIGHTS_QUERY
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn resolve_root_language(request: CoreRootLanguageResolutionRequest) -> CoreResolvedLanguage {
     let candidates = [
         request
@@ -1040,7 +1031,7 @@ fn resolve_root_language(request: CoreRootLanguageResolutionRequest) -> CoreReso
         .unwrap_or_else(|| unsupported_language(request.range, CoreLanguageRole::RootDocument))
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn resolve_embedded_language(
     request: CoreEmbeddedLanguageResolutionRequest,
 ) -> CoreResolvedLanguage {
@@ -1064,7 +1055,7 @@ fn resolve_embedded_language(
     })
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn resolved_markdown_link_media(
     range: CoreTextRange,
     kind: CoreEmbeddedBlockKind,
@@ -1082,7 +1073,7 @@ fn resolved_markdown_link_media(
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn resolved_language_from_known(
     range: CoreTextRange,
     role: CoreLanguageRole,
@@ -1108,12 +1099,12 @@ fn resolved_language_from_known(
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn unsupported_language(range: CoreTextRange, role: CoreLanguageRole) -> CoreResolvedLanguage {
     unsupported_language_with_source(range, role, CoreLanguageResolutionSource::Registry)
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn unsupported_language_with_source(
     range: CoreTextRange,
     role: CoreLanguageRole,
@@ -1132,7 +1123,7 @@ fn unsupported_language_with_source(
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn registered_package_for_language(language_id: &str) -> Option<BuiltInTreeSitterPackage> {
     tree_sitter_language_packages()
         .iter()
@@ -1140,7 +1131,7 @@ fn registered_package_for_language(language_id: &str) -> Option<BuiltInTreeSitte
         .find(|package| package.language_id == language_id)
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn tree_sitter_status_from_resolution(resolved: &CoreResolvedLanguage) -> CoreTreeSitterStatus {
     match resolved.status {
         CoreLanguageResolutionStatus::Resolved => CoreTreeSitterStatus::Prepared,
@@ -1149,7 +1140,7 @@ fn tree_sitter_status_from_resolution(resolved: &CoreResolvedLanguage) -> CoreTr
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn provenance_for_resolved_language(resolved: &CoreResolvedLanguage) -> CoreTreeSitterProvenance {
     let package = resolved
         .language_id
@@ -1171,13 +1162,13 @@ fn provenance_for_resolved_language(resolved: &CoreResolvedLanguage) -> CoreTree
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn language_from_filetype(filetype: &str) -> Option<KnownTreeSitterLanguage> {
     let normalized = normalize_language_token(filetype)?;
     language_from_hint(&normalized)
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn language_from_buffer_name(buffer_name: &str) -> Option<KnownTreeSitterLanguage> {
     let lower = buffer_name.to_ascii_lowercase();
     if lower.ends_with(".rs") {
@@ -1199,7 +1190,7 @@ fn language_from_buffer_name(buffer_name: &str) -> Option<KnownTreeSitterLanguag
     None
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn language_from_hint(hint: &str) -> Option<KnownTreeSitterLanguage> {
     let normalized = normalize_language_token(hint)?;
     match normalized.as_str() {
@@ -1215,7 +1206,7 @@ fn language_from_hint(hint: &str) -> Option<KnownTreeSitterLanguage> {
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn known_syntax_language(
     language_id: &'static str,
     package_id: &'static str,
@@ -1227,7 +1218,7 @@ fn known_syntax_language(
     })
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn built_in_embedded_region_rules() -> &'static [BuiltInEmbeddedRegionRule] {
     &[
         BuiltInEmbeddedRegionRule {
@@ -1281,7 +1272,7 @@ fn built_in_embedded_region_rules() -> &'static [BuiltInEmbeddedRegionRule] {
     ]
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn resolve_markdown_embedded_region_kind(
     range: CoreTextRange,
     normalized_info_string: &str,
@@ -1341,7 +1332,7 @@ fn resolve_markdown_embedded_region_kind(
     Some(resolved)
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn normalize_markdown_info_string(info_string: Option<&str>) -> Option<String> {
     let info_string = info_string?.trim();
     let first_token = info_string
@@ -1350,7 +1341,7 @@ fn normalize_markdown_info_string(info_string: Option<&str>) -> Option<String> {
     normalize_language_token(first_token)
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn normalize_language_token(value: &str) -> Option<String> {
     let normalized = value.trim().trim_start_matches('.').to_ascii_lowercase();
     if normalized.is_empty() {
@@ -1360,7 +1351,7 @@ fn normalize_language_token(value: &str) -> Option<String> {
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn tree_sitter_package_language_and_query(language_id: &str) -> Option<(Language, &'static str)> {
     match language_id {
         #[cfg(feature = "tree-sitter-markdown")]
@@ -1378,7 +1369,7 @@ fn tree_sitter_package_language_and_query(language_id: &str) -> Option<(Language
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn text_range_from_bytes(line_starts: &[usize], start: usize, end: usize) -> CoreTextRange {
     CoreTextRange {
         start: position_for_byte(line_starts, start),
@@ -1386,7 +1377,7 @@ fn text_range_from_bytes(line_starts: &[usize], start: usize, end: usize) -> Cor
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn capture_mapping(capture_name: &str) -> CaptureMapping {
     let mut parts = capture_name.split('.');
     let base = parts.next().unwrap_or_default();
@@ -1441,7 +1432,7 @@ fn capture_mapping(capture_name: &str) -> CaptureMapping {
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn line_start_offsets(text: &str) -> Vec<usize> {
     let mut offsets = vec![0];
     for (index, byte) in text.bytes().enumerate() {
@@ -1452,7 +1443,7 @@ fn line_start_offsets(text: &str) -> Vec<usize> {
     offsets
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn line_end_offset(text: &str, line_starts: &[usize], row: usize) -> usize {
     let Some(&line_start) = line_starts.get(row) else {
         return text.len();
@@ -1465,7 +1456,7 @@ fn line_end_offset(text: &str, line_starts: &[usize], row: usize) -> usize {
         .max(line_start)
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn byte_for_position(text: &str, line_starts: &[usize], position: CoreTextPosition) -> usize {
     let Some(&line_start) = line_starts.get(position.row) else {
         return text.len();
@@ -1474,7 +1465,7 @@ fn byte_for_position(text: &str, line_starts: &[usize], position: CoreTextPositi
     line_start.saturating_add(position.col).min(line_end)
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn position_for_byte(line_starts: &[usize], byte: usize) -> CoreTextPosition {
     let row = match line_starts.binary_search(&byte) {
         Ok(row) => row,
@@ -1487,7 +1478,7 @@ fn position_for_byte(line_starts: &[usize], byte: usize) -> CoreTextPosition {
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn bytes_for_text_range(text: &str, range: CoreTextRange) -> TextRangeBytes {
     let line_starts = line_start_offsets(text);
     let start = byte_for_position(text, &line_starts, range.start);
@@ -1495,7 +1486,7 @@ fn bytes_for_text_range(text: &str, range: CoreTextRange) -> TextRangeBytes {
     TextRangeBytes { start, end }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn normalize_tree_sitter_captures(
     text: &str,
     requested_range: CoreTextRange,
@@ -1563,7 +1554,7 @@ fn normalize_tree_sitter_captures(
     chunks
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn parse_tree_sitter_syntax(
     text: &str,
     range: CoreTextRange,
@@ -1713,7 +1704,7 @@ fn parse_tree_sitter_syntax(
     )
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn collect_tree_sitter_error_ranges(
     line_starts: &[usize],
     requested_bytes: TextRangeBytes,
@@ -1726,7 +1717,7 @@ fn collect_tree_sitter_error_ranges(
     ranges
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn collect_tree_sitter_error_ranges_from_node(
     line_starts: &[usize],
     requested_bytes: TextRangeBytes,
@@ -1750,7 +1741,7 @@ fn collect_tree_sitter_error_ranges_from_node(
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn inject_markdown_embedded_syntax_chunks(
     text: &str,
     mut chunks: Vec<CoreTreeSitterChunk>,
@@ -1799,7 +1790,7 @@ fn inject_markdown_embedded_syntax_chunks(
     chunks
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn offset_tree_sitter_chunk(
     chunk: CoreTreeSitterChunk,
     base: CoreTextPosition,
@@ -1815,7 +1806,7 @@ fn offset_tree_sitter_chunk(
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn offset_text_position(position: CoreTextPosition, base: CoreTextPosition) -> CoreTextPosition {
     CoreTextPosition {
         row: base.row + position.row,
@@ -1827,7 +1818,7 @@ fn offset_text_position(position: CoreTextPosition, base: CoreTextPosition) -> C
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn clip_tree_sitter_syntax_to_range(
     syntax: &CoreTreeSitterRangeSyntax,
     requested_range: CoreTextRange,
@@ -1859,7 +1850,7 @@ fn clip_tree_sitter_syntax_to_range(
     clipped
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn intersect_text_range(
     range: CoreTextRange,
     requested_range: CoreTextRange,
@@ -1872,7 +1863,7 @@ fn intersect_text_range(
     Some(CoreTextRange { start, end })
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn intersect_tree_sitter_chunk(
     chunk: &CoreTreeSitterChunk,
     range: CoreTextRange,
@@ -1886,7 +1877,7 @@ fn intersect_tree_sitter_chunk(
     })
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn collect_markdown_embedded_regions(
     text: &str,
     requested_range: CoreTextRange,
@@ -1905,7 +1896,7 @@ fn collect_markdown_embedded_regions(
     embedded_regions
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn collect_markdown_embedded_regions_from_node(
     text: &str,
     line_starts: &[usize],
@@ -1942,7 +1933,7 @@ fn collect_markdown_embedded_regions_from_node(
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn collect_markdown_linked_media_regions(
     text: &str,
     line_starts: &[usize],
@@ -1971,7 +1962,7 @@ fn collect_markdown_linked_media_regions(
     }
 }
 
-#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-markdown"))]
 fn parse_markdown_inline_tree(text: &str, inline_node: Node<'_>) -> Option<tree_sitter::Tree> {
     let mut parser = Parser::new();
     parser
@@ -1981,7 +1972,7 @@ fn parse_markdown_inline_tree(text: &str, inline_node: Node<'_>) -> Option<tree_
     parser.parse(text, None)
 }
 
-#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-markdown"))]
 fn collect_markdown_linked_media_regions_from_inline_node(
     text: &str,
     line_starts: &[usize],
@@ -2009,7 +2000,7 @@ fn collect_markdown_linked_media_regions_from_inline_node(
     }
 }
 
-#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-markdown"))]
 fn markdown_embedded_region_for_linked_media(
     text: &str,
     line_starts: &[usize],
@@ -2055,7 +2046,7 @@ fn markdown_embedded_region_for_linked_media(
     })
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn markdown_link_media_kind_from_target(target: &str) -> Option<(String, CoreEmbeddedBlockKind)> {
     let media_target = normalized_markdown_link_media_target(target)?;
     if media_target.ends_with(".drawio.svg") {
@@ -2088,7 +2079,7 @@ fn markdown_link_media_kind_from_target(target: &str) -> Option<(String, CoreEmb
     None
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn normalized_markdown_link_media_target(target: &str) -> Option<String> {
     let target = target.trim();
     if target.is_empty() {
@@ -2111,7 +2102,7 @@ fn normalized_markdown_link_media_target(target: &str) -> Option<String> {
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn markdown_embedded_region_for_fenced_code_block(
     text: &str,
     line_starts: &[usize],
@@ -2389,13 +2380,13 @@ pub struct VimCoreSession {
     completed_input_eval_result: RefCell<Option<String>>,
     pending_host_actions: RefCell<VecDeque<CoreHostAction>>,
     pending_events: RefCell<VecDeque<CoreEvent>>,
-    #[cfg(feature = "experimental-tree-sitter")]
+    #[cfg(feature = "tree-sitter-syntax")]
     next_tree_sitter_request_id: RefCell<u64>,
-    #[cfg(feature = "experimental-tree-sitter")]
+    #[cfg(feature = "tree-sitter-syntax")]
     tree_sitter_snapshots: RefCell<TreeSitterSnapshotStore>,
-    #[cfg(feature = "experimental-tree-sitter")]
+    #[cfg(feature = "tree-sitter-syntax")]
     completed_tree_sitter_preparations: RefCell<VecDeque<CoreTreeSitterPreparationResult>>,
-    #[cfg(feature = "experimental-tree-sitter")]
+    #[cfg(feature = "tree-sitter-syntax")]
     committed_tree_sitter_syntax:
         RefCell<BTreeMap<(i32, CoreBufferRevision, CoreTextRange), CoreTreeSitterRangeSyntax>>,
     not_send_sync: PhantomData<Rc<()>>,
@@ -2420,7 +2411,7 @@ enum ParsedExIntent {
 }
 
 impl VimCoreSession {
-    #[cfg(feature = "experimental-tree-sitter")]
+    #[cfg(feature = "tree-sitter-syntax")]
     pub fn tree_sitter_language_packages() -> Vec<CoreTreeSitterLanguagePackage> {
         tree_sitter_language_packages()
             .iter()
@@ -2434,21 +2425,21 @@ impl VimCoreSession {
             .collect()
     }
 
-    #[cfg(feature = "experimental-tree-sitter")]
+    #[cfg(feature = "tree-sitter-syntax")]
     pub fn resolve_tree_sitter_root_language(
         request: CoreRootLanguageResolutionRequest,
     ) -> CoreResolvedLanguage {
         resolve_root_language(request)
     }
 
-    #[cfg(feature = "experimental-tree-sitter")]
+    #[cfg(feature = "tree-sitter-syntax")]
     pub fn resolve_tree_sitter_embedded_language(
         request: CoreEmbeddedLanguageResolutionRequest,
     ) -> CoreResolvedLanguage {
         resolve_embedded_language(request)
     }
 
-    #[cfg(feature = "experimental-tree-sitter")]
+    #[cfg(feature = "tree-sitter-syntax")]
     pub fn request_tree_sitter_syntax_preparation(
         &mut self,
         mut request: CoreTreeSitterPreparationRequest,
@@ -2527,14 +2518,14 @@ impl VimCoreSession {
         })
     }
 
-    #[cfg(feature = "experimental-tree-sitter")]
+    #[cfg(feature = "tree-sitter-syntax")]
     pub fn poll_tree_sitter_preparation(&mut self) -> Option<CoreTreeSitterPreparationResult> {
         self.completed_tree_sitter_preparations
             .borrow_mut()
             .pop_front()
     }
 
-    #[cfg(feature = "experimental-tree-sitter")]
+    #[cfg(feature = "tree-sitter-syntax")]
     pub fn query_tree_sitter_syntax_range(
         &self,
         buffer_id: i32,
@@ -2557,7 +2548,7 @@ impl VimCoreSession {
             .map(|(_, syntax)| clip_tree_sitter_syntax_to_range(syntax, range))
     }
 
-    #[cfg(feature = "experimental-tree-sitter")]
+    #[cfg(feature = "tree-sitter-syntax")]
     pub fn tree_sitter_snapshot_store_stats(&self) -> CoreTreeSitterSnapshotStoreStats {
         self.tree_sitter_snapshots.borrow().stats()
     }
@@ -2622,13 +2613,13 @@ impl VimCoreSession {
             completed_input_eval_result: RefCell::new(None),
             pending_host_actions: RefCell::new(VecDeque::new()),
             pending_events: RefCell::new(VecDeque::new()),
-            #[cfg(feature = "experimental-tree-sitter")]
+            #[cfg(feature = "tree-sitter-syntax")]
             next_tree_sitter_request_id: RefCell::new(1),
-            #[cfg(feature = "experimental-tree-sitter")]
+            #[cfg(feature = "tree-sitter-syntax")]
             tree_sitter_snapshots: RefCell::new(TreeSitterSnapshotStore::default()),
-            #[cfg(feature = "experimental-tree-sitter")]
+            #[cfg(feature = "tree-sitter-syntax")]
             completed_tree_sitter_preparations: RefCell::new(VecDeque::new()),
-            #[cfg(feature = "experimental-tree-sitter")]
+            #[cfg(feature = "tree-sitter-syntax")]
             committed_tree_sitter_syntax: RefCell::new(BTreeMap::new()),
             not_send_sync: PhantomData,
         };
@@ -2656,7 +2647,7 @@ impl VimCoreSession {
         let _ = self.execute_ex_command(&command);
     }
 
-    #[cfg(feature = "experimental-tree-sitter")]
+    #[cfg(feature = "tree-sitter-syntax")]
     fn pin_tree_sitter_text_snapshot(
         &self,
         buffer_id: i32,
@@ -2684,7 +2675,7 @@ impl VimCoreSession {
             .err()
     }
 
-    #[cfg(feature = "experimental-tree-sitter")]
+    #[cfg(feature = "tree-sitter-syntax")]
     fn tree_sitter_syntax_result_for_request(
         &self,
         buffer_id: i32,

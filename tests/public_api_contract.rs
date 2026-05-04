@@ -7,7 +7,7 @@ use std::{
     io::Read,
     os::fd::{FromRawFd, RawFd},
 };
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 use vim_core_rs::{
     CoreBufferRevision, CoreEmbeddedBlockKind, CoreEmbeddedLanguageResolutionRequest,
     CoreEmbeddedRegion, CoreEmbeddedRegionSource, CoreLanguageResolutionSource,
@@ -1750,10 +1750,11 @@ fn tree_sitter_features_are_default_off_and_separate_from_vim_syntax() {
 
     assert!(
         cargo_toml.contains("default = []")
-            && cargo_toml.contains("experimental-tree-sitter = [\"dep:tree-sitter\"]")
-            && cargo_toml.contains("tree-sitter-markdown = [\"experimental-tree-sitter\", \"dep:tree-sitter-md\", \"tree-sitter-md/parser\"]")
-            && cargo_toml.contains("tree-sitter-rust = [\"experimental-tree-sitter\", \"dep:tree-sitter-rust\"]")
-            && cargo_toml.contains("tree-sitter-typescript = [\"experimental-tree-sitter\", \"dep:tree-sitter-typescript\"]"),
+            && cargo_toml.contains("tree-sitter-syntax = [\"dep:tree-sitter\"]")
+            && cargo_toml.contains("experimental-tree-sitter = [\"tree-sitter-syntax\"]")
+            && cargo_toml.contains("tree-sitter-markdown = [\"tree-sitter-syntax\", \"dep:tree-sitter-md\", \"tree-sitter-md/parser\"]")
+            && cargo_toml.contains("tree-sitter-rust = [\"tree-sitter-syntax\", \"dep:tree-sitter-rust\"]")
+            && cargo_toml.contains("tree-sitter-typescript = [\"tree-sitter-syntax\", \"dep:tree-sitter-typescript\"]"),
         "Tree-sitter feature flags should be opt-in and default-off"
     );
     let dependency_sections = cargo_toml
@@ -1774,16 +1775,30 @@ fn tree_sitter_features_are_default_off_and_separate_from_vim_syntax() {
     assert!(
         public_api_reference.contains("CoreTreeSitterRangeSyntax")
             && public_api_reference.contains("feature-gated")
+            && public_api_reference.contains("tree-sitter-syntax")
+            && public_api_reference.contains("stable opt-in")
+            && public_api_reference.contains("Host applications must prefer")
+            && public_api_reference.contains("No alias removal release is scheduled")
             && public_api_reference.contains("separate from `CoreSyntaxChunk`")
             && public_api_reference.contains("embedded_regions")
-            && api_index.contains("Experimental Tree-sitter"),
+            && public_api_reference.contains("CoreTextRange")
+            && public_api_reference.contains("request_tree_sitter_syntax_preparation")
+            && public_api_reference.contains("poll_tree_sitter_preparation")
+            && public_api_reference.contains("query_tree_sitter_syntax_range")
+            && public_api_reference.contains("(buffer_id, source_revision, visible_range)")
+            && public_api_reference.contains("CoreSnapshot.revision")
+            && public_api_reference.contains("MatchLimitExceeded")
+            && public_api_reference.contains("has_error")
+            && public_api_reference.contains("error_ranges")
+            && public_api_reference.contains("vim_ffi")
+            && api_index.contains("Tree-sitter syntax"),
         "docs should describe the feature-gated Tree-sitter surface separately from Vim syntax"
     );
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[test]
-fn experimental_tree_sitter_public_types_are_constructible() {
+fn tree_sitter_syntax_public_types_are_constructible() {
     let range = CoreTextRange {
         start: CoreTextPosition { row: 0, col: 0 },
         end: CoreTextPosition { row: 0, col: 4 },
@@ -1847,7 +1862,7 @@ fn experimental_tree_sitter_public_types_are_constructible() {
     ));
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[test]
 fn tree_sitter_registry_registers_only_feature_enabled_packages() {
     let packages = VimCoreSession::tree_sitter_language_packages();
@@ -1910,7 +1925,7 @@ fn tree_sitter_registry_registers_only_feature_enabled_packages() {
     }
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[test]
 fn tree_sitter_root_resolver_uses_registry_backed_inputs() {
     let range = CoreTextRange {
@@ -1976,7 +1991,7 @@ fn tree_sitter_root_resolver_uses_registry_backed_inputs() {
     assert_eq!(unknown.package_id, None);
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[test]
 fn tree_sitter_embedded_resolver_normalizes_markdown_info_strings() {
     let range = CoreTextRange {
@@ -2084,7 +2099,7 @@ fn tree_sitter_embedded_resolver_normalizes_markdown_info_strings() {
     assert_eq!(unknown.kind, CoreEmbeddedBlockKind::Unknown);
 }
 
-#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-markdown"))]
 #[test]
 fn tree_sitter_markdown_fenced_blocks_are_data_only_embedded_regions() {
     let _guard = acquire_session_test_lock();
@@ -2204,7 +2219,7 @@ fn tree_sitter_markdown_fenced_blocks_are_data_only_embedded_regions() {
     );
 }
 
-#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-markdown"))]
 #[test]
 fn tree_sitter_markdown_linked_svg_png_media_are_data_only_embedded_regions() {
     let _guard = acquire_session_test_lock();
@@ -2299,7 +2314,7 @@ fn tree_sitter_markdown_linked_svg_png_media_are_data_only_embedded_regions() {
     ));
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[test]
 fn tree_sitter_preparation_uses_request_poll_and_query_shape() {
     let _guard = acquire_session_test_lock();
@@ -2352,7 +2367,8 @@ fn tree_sitter_preparation_uses_request_poll_and_query_shape() {
                 .chunks
                 .iter()
                 .any(|chunk| chunk.capture_name == "keyword"
-                    && chunk.category == CoreSyntaxCategory::Keyword),
+                    && chunk.category == CoreSyntaxCategory::Keyword
+                    && chunk.modifiers.is_empty()),
             "Phase 5 should parse Rust highlights into normalized chunks: {:?}",
             completed.syntax.chunks
         );
@@ -2367,10 +2383,35 @@ fn tree_sitter_preparation_uses_request_poll_and_query_shape() {
         .query_tree_sitter_syntax_range(buffer.id, buffer.source_revision, range)
         .expect("completed preparation should be queryable from the committed cache");
     assert_eq!(queried, completed.syntax);
+    if cfg!(feature = "tree-sitter-rust") {
+        let active_window_id = snapshot
+            .windows
+            .iter()
+            .find(|window| window.is_active)
+            .expect("active window should exist")
+            .id;
+        assert_ne!(
+            session
+                .get_line_syntax(active_window_id, 1)
+                .expect("Vim syntax should be queryable"),
+            completed
+                .syntax
+                .chunks
+                .iter()
+                .map(|chunk| vim_core_rs::CoreSyntaxChunk {
+                    start_col: chunk.range.start.col,
+                    end_col: chunk.range.end.col,
+                    syn_id: 0,
+                    name: Some(chunk.capture_name.clone()),
+                })
+                .collect::<Vec<_>>(),
+            "Tree-sitter output must stay separate from get_line_syntax/CoreSyntaxChunk"
+        );
+    }
     assert!(session.poll_tree_sitter_preparation().is_none());
 }
 
-#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-rust"))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-rust"))]
 #[test]
 fn tree_sitter_rust_package_maps_captures_and_normalizes_overlaps() {
     let _guard = acquire_session_test_lock();
@@ -2432,7 +2473,7 @@ fn tree_sitter_rust_package_maps_captures_and_normalizes_overlaps() {
     );
 }
 
-#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-rust"))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-rust"))]
 #[test]
 fn tree_sitter_visible_range_query_reads_committed_cache_without_reparsing() {
     let _guard = acquire_session_test_lock();
@@ -2513,7 +2554,7 @@ fn tree_sitter_visible_range_query_reads_committed_cache_without_reparsing() {
     );
 }
 
-#[cfg(all(feature = "experimental-tree-sitter", feature = "tree-sitter-markdown"))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-markdown"))]
 #[test]
 fn tree_sitter_markdown_package_parses_highlight_query() {
     let _guard = acquire_session_test_lock();
@@ -2556,7 +2597,7 @@ fn tree_sitter_markdown_package_parses_highlight_query() {
     );
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[test]
 fn tree_sitter_snapshot_store_reports_too_large_and_budget_statuses() {
     let _guard = acquire_session_test_lock();
@@ -2602,6 +2643,8 @@ fn tree_sitter_snapshot_store_reports_too_large_and_budget_statuses() {
         too_large_syntax.budget_status,
         CoreTreeSitterBudgetStatus::SnapshotTooLarge
     );
+    assert_eq!(too_large_syntax.status, CoreTreeSitterStatus::TooLarge);
+    assert!(too_large_syntax.chunks.is_empty());
 
     let budgeted = session
         .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
@@ -2627,12 +2670,94 @@ fn tree_sitter_snapshot_store_reports_too_large_and_budget_statuses() {
             .status,
         CoreTreeSitterStatus::BudgetExceeded
     );
+    let budgeted_syntax = session
+        .query_tree_sitter_syntax_range(buffer.id, buffer.source_revision, range)
+        .expect("budget status should be committed for diagnostics");
+    assert_eq!(
+        budgeted_syntax.budget_status,
+        CoreTreeSitterBudgetStatus::GlobalBudgetExceeded
+    );
+    assert!(budgeted_syntax.chunks.is_empty());
 }
 
-#[cfg(all(
-    feature = "experimental-tree-sitter",
-    feature = "tree-sitter-typescript"
-))]
+#[cfg(feature = "tree-sitter-syntax")]
+#[test]
+fn tree_sitter_preparation_reports_unsupported_and_stale_without_fresh_chunks() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("fn main() {}\n").expect("session should initialize");
+    let first_buffer = session
+        .snapshot()
+        .buffers
+        .into_iter()
+        .find(|buffer| buffer.is_active)
+        .expect("active buffer should exist");
+    let range = CoreTextRange {
+        start: CoreTextPosition { row: 0, col: 0 },
+        end: CoreTextPosition { row: 1, col: 0 },
+    };
+
+    session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: first_buffer.id,
+            source_revision: Some(first_buffer.source_revision),
+            range,
+            vim_filetype: Some("totally-unknown".to_string()),
+            buffer_name: Some("scratch.unknown".to_string()),
+            host_language_hint: None,
+            snapshot_policy: CoreTreeSitterSnapshotPolicy::default(),
+        })
+        .expect("unsupported language should return a diagnostic result");
+    let unsupported = session
+        .poll_tree_sitter_preparation()
+        .expect("unsupported result should be pollable")
+        .syntax;
+    assert_eq!(unsupported.status, CoreTreeSitterStatus::Unsupported);
+    assert!(unsupported.chunks.is_empty());
+
+    drop(session);
+
+    let mut stale_session =
+        VimCoreSession::new("fn main() {}\n").expect("session should initialize");
+    let stale_first_buffer = stale_session
+        .snapshot()
+        .buffers
+        .into_iter()
+        .find(|buffer| buffer.is_active)
+        .expect("active buffer should exist");
+    stale_session
+        .execute_normal_command("Gochanged\x1b")
+        .expect("edit should advance the source revision");
+    let stale = stale_session
+        .request_tree_sitter_syntax_preparation(CoreTreeSitterPreparationRequest {
+            buffer_id: stale_first_buffer.id,
+            source_revision: Some(stale_first_buffer.source_revision),
+            range,
+            vim_filetype: Some("rust".to_string()),
+            buffer_name: Some("src/main.rs".to_string()),
+            host_language_hint: None,
+            snapshot_policy: CoreTreeSitterSnapshotPolicy::default(),
+        })
+        .expect("stale request should return a diagnostic result");
+    assert_eq!(stale.status, CoreTreeSitterStatus::Stale);
+    let stale_syntax = stale_session
+        .poll_tree_sitter_preparation()
+        .expect("stale result should be pollable")
+        .syntax;
+    assert_eq!(stale_syntax.status, CoreTreeSitterStatus::Stale);
+    assert!(stale_syntax.chunks.is_empty());
+    assert!(
+        stale_session
+            .query_tree_sitter_syntax_range(
+                stale_first_buffer.id,
+                stale_first_buffer.source_revision,
+                range,
+            )
+            .is_none(),
+        "stale results must not be committed as fresh cache entries"
+    );
+}
+
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-typescript"))]
 #[test]
 fn tree_sitter_typescript_and_tsx_packages_parse_and_report_ranges() {
     let _guard = acquire_session_test_lock();
@@ -2696,10 +2821,7 @@ fn tree_sitter_typescript_and_tsx_packages_parse_and_report_ranges() {
     assert_eq!(tsx.package_id.as_deref(), Some("tree-sitter-tsx"));
 }
 
-#[cfg(all(
-    feature = "experimental-tree-sitter",
-    feature = "tree-sitter-typescript"
-))]
+#[cfg(all(feature = "tree-sitter-syntax", feature = "tree-sitter-typescript"))]
 #[test]
 fn tree_sitter_typescript_and_tsx_malformed_input_reports_error_ranges() {
     let _guard = acquire_session_test_lock();
@@ -2770,7 +2892,7 @@ fn tree_sitter_typescript_and_tsx_malformed_input_reports_error_ranges() {
 }
 
 #[cfg(all(
-    feature = "experimental-tree-sitter",
+    feature = "tree-sitter-syntax",
     feature = "tree-sitter-markdown",
     feature = "tree-sitter-typescript"
 ))]
@@ -2851,7 +2973,7 @@ fn tree_sitter_markdown_fenced_typescript_injection_is_bounded_to_region() {
     );
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 #[test]
 fn tree_sitter_snapshot_store_retains_latest_unpinned_revision_per_buffer() {
     let _guard = acquire_session_test_lock();
@@ -2918,7 +3040,7 @@ fn tree_sitter_snapshot_store_retains_latest_unpinned_revision_per_buffer() {
     );
 }
 
-#[cfg(feature = "experimental-tree-sitter")]
+#[cfg(feature = "tree-sitter-syntax")]
 fn _tree_sitter_package_type_is_public(package: CoreTreeSitterLanguagePackage) {
     assert!(!package.package_id.is_empty());
 }
