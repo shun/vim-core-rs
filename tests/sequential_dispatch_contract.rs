@@ -1,6 +1,7 @@
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use vim_core_rs::{
-    CoreMode, CorePendingArgumentKind, CorePendingInput, CoreSnapshot, VimCoreSession,
+    CoreEvent, CoreMode, CoreOptionScope, CorePendingArgumentKind, CorePendingInput, CoreSnapshot,
+    VimCoreSession,
 };
 
 fn session_test_lock() -> &'static Mutex<()> {
@@ -83,6 +84,16 @@ fn assert_sessions_match(direct_snapshot: &CoreSnapshot, sequential: &VimCoreSes
     assert_eq!(sequential.pending_input(), CorePendingInput::none());
 }
 
+fn assert_contains_message(events: &[CoreEvent], expected: &str) {
+    assert!(
+        events.iter().any(|event| matches!(
+            event,
+            CoreEvent::Message(message) if message.content.contains(expected)
+        )),
+        "expected message {expected:?} in events: {events:?}"
+    );
+}
+
 #[test]
 fn sequential_dispatch_handles_gg_and_reports_pending_prefix() {
     let _guard = acquire_session_test_lock();
@@ -94,6 +105,47 @@ fn sequential_dispatch_handles_gg_and_reports_pending_prefix() {
     session.dispatch_key("g").expect("second g should succeed");
     assert_eq!(session.pending_input(), CorePendingInput::none());
     assert_eq!(session.snapshot().cursor_row, 0);
+}
+
+#[test]
+fn sequential_dispatch_repeated_u_stays_at_oldest_without_toggling_to_redo() {
+    let _guard = acquire_session_test_lock();
+    let mut session = VimCoreSession::new("base").expect("session should initialize");
+
+    let cpoptions = session
+        .get_option_string("cpoptions", CoreOptionScope::Default)
+        .expect("cpoptions should be readable");
+    assert!(
+        !cpoptions.contains('u'),
+        "embedded editing sessions should not enable Vi-compatible undo toggling: {cpoptions:?}"
+    );
+
+    for key in ["A", "1", "\u{1b}", "A", "2", "\u{1b}"] {
+        session.dispatch_key(key).expect("edit key should succeed");
+    }
+    assert_eq!(session.snapshot().text, "base12\n");
+
+    session
+        .dispatch_key("u")
+        .expect("first undo should succeed");
+    assert_eq!(session.snapshot().text, "base1\n");
+
+    session
+        .dispatch_key("u")
+        .expect("second undo should succeed");
+    assert_eq!(session.snapshot().text, "base\n");
+
+    let oldest_tx = session
+        .dispatch_key("u")
+        .expect("oldest undo should succeed");
+    assert_eq!(session.snapshot().text, "base\n");
+    assert_contains_message(&oldest_tx.events, "Already at oldest change");
+
+    let repeated_oldest_tx = session
+        .dispatch_key("u")
+        .expect("repeated oldest undo should succeed");
+    assert_eq!(session.snapshot().text, "base\n");
+    assert_contains_message(&repeated_oldest_tx.events, "Already at oldest change");
 }
 
 #[test]

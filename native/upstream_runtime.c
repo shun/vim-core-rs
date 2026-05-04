@@ -29,6 +29,7 @@
 #include "proto/list.pro"
 #include "proto/typval.pro"
 #include "proto/search.pro"
+#include "proto/undo.pro"
 /* NOTE: dict.pro and popupmenu.pro are included via vim.h auto-generated protos */
 #include "proto/insexpand.pro"
 
@@ -713,6 +714,10 @@ upstream_runtime_session_t* upstream_runtime_session_new(const char* initial_tex
      * vi 互換モードでは 'more' がデフォルト OFF のため、明示的に有効化する。 */
     p_more = TRUE;
 
+    /* Embedded editing should use Vim undo semantics: repeated "u" keeps
+     * moving backward and does not toggle into redo at the oldest change. */
+    do_cmdline_cmd((char_u*)"set cpo-=u");
+
     /* Session-local tests may override 'helpfile', which changes how Vim
      * re-derives $VIM and $VIMRUNTIME. Reset those globals before each
      * session so runtime discovery falls back to the generated pathdef
@@ -817,6 +822,12 @@ upstream_runtime_session_t* upstream_runtime_session_new(const char* initial_tex
         curbuf->b_changed = 0;
         free(copy);
     }
+
+    /* The embedded runtime reuses one Vim instance across sessions. After
+     * installing the initial text, discard the previous buffer's undo tree so
+     * undo starts from this session's initial state. */
+    u_clearallandblockfree(curbuf);
+
     /* Reset revision tracking AFTER initialization */
     session->revision = 0;
     session->last_changedtick = CHANGEDTICK(curbuf);
@@ -3219,6 +3230,7 @@ vim_core_match_list_t vim_bridge_get_search_highlights(int window_id, int start_
     pos_T cursor;
     pos_T incsearch_match;
     int has_incsearch_match = FALSE;
+    CLEAR_FIELD(incsearch_match);
     list.count = 0;
     list.ranges = NULL;
 
