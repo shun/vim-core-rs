@@ -10,7 +10,7 @@ index ac25fe3..cfe9f6f 100644
  
  static void add_msg_hist(char_u *s, int len, int attr);
  static void check_msg_hist(void);
-@@ -54,6 +55,39 @@ static struct msg_hist *last_msg_hist = NULL;
+@@ -54,6 +55,48 @@ static struct msg_hist *last_msg_hist = NULL;
  static int msg_hist_len = 0;
  static int msg_hist_max = 500;		// The default max value is 500
  
@@ -47,6 +47,15 @@ index ac25fe3..cfe9f6f 100644
 +    return TRUE;
 +}
 +
++    static void
++vim_core_enqueue_embedded_pager_prompt(vim_core_pager_prompt_kind_t kind)
++{
++    if (!vim_core_bridge_embedded_mode_active())
++	return;
++
++    vim_core_bridge_enqueue_pager_prompt_event(kind);
++}
++
  // flags obtained from the 'messagesopt' option
  #define MESSAGES_HIT_ENTER	0x001
  #define MESSAGES_WAIT		0x002
@@ -77,6 +86,40 @@ index ac25fe3..cfe9f6f 100644
  
      /*
       * Display the error message itself.
+@@ -1273,6 +1327,17 @@ wait_return(int redraw)
+ 	return;
+     }
+ 
++    if (vim_core_bridge_embedded_mode_active())
++    {
++	vim_core_enqueue_embedded_pager_prompt(VIM_CORE_PAGER_PROMPT_HIT_RETURN);
++	need_wait_return = FALSE;
++	did_wait_return = TRUE;
++	emsg_on_display = FALSE;
++	lines_left = -1;
++	reset_last_sourcing();
++	return;
++    }
++
+     redir_off = TRUE;		// don't redirect this message
+     oldState = State;
+     if (quit_more)
+@@ -3303,6 +3368,15 @@ do_more_prompt(int typed_char)
+ 	return FALSE;
+     entered = TRUE;
+ 
++    if (vim_core_bridge_embedded_mode_active())
++    {
++	vim_core_enqueue_embedded_pager_prompt(VIM_CORE_PAGER_PROMPT_MORE);
++	lines_left = Rows - 1;
++	State = oldState;
++	entered = FALSE;
++	return FALSE;
++    }
++
+     if (typed_char == 'G')
+     {
+ 	// "g<": Find first line on the last page.
 @@ -4165,6 +4210,12 @@ give_warning_with_source(char_u *message, int hl, int with_source)
  
      if (with_source)
@@ -98,6 +141,31 @@ index ac25fe3..cfe9f6f 100644
      }
      else if (msg_attr((char *)message, keep_msg_attr) && msg_scrolled == 0)
  	set_keep_msg(message, keep_msg_attr);
+diff --git a/src/option.c b/src/option.c
+index 9722eba..2e2f757 100644
+--- a/src/option.c
++++ b/src/option.c
+@@ -37,6 +37,7 @@
+ 
+ #define IN_OPTION_C
+ #include "vim.h"
++#include "vim_bridge.h"
+ #include "optiondefs.h"
+ 
+ static void set_options_default(int opt_flags);
+@@ -6225,6 +6226,12 @@ showoptions(
+ #define INC 20
+ #define GAP 3
+ 
++    if (vim_core_bridge_embedded_mode_active() && all != 0)
++    {
++	vim_core_bridge_enqueue_pager_prompt_event(VIM_CORE_PAGER_PROMPT_MORE);
++	return;
++    }
++
+     items = ALLOC_MULT(struct vimoption *, OPTION_COUNT);
+     if (items == NULL)
+ 	return;
 diff --git a/src/undo.c b/src/undo.c
 index 3b0a152..4070f28 100644
 --- a/src/undo.c

@@ -193,6 +193,7 @@ cmd_refresh() {
   local patch_targets=(
     src/ex_getln.c
     src/message.c
+    src/option.c
     src/undo.c
     src/eval.c
     src/vim9execute.c
